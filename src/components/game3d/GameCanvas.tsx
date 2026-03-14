@@ -15,14 +15,15 @@ import { SelectionRing } from "./SelectionRing";
 import { ForceField3D } from "./ForceField3D";
 import { Pipes3D } from "./Pipes3D";
 import { Environment3D } from "./Environment3D";
-import { BUILDINGS, CONVEYORS } from "./constants";
-import type { Worker } from "./types";
+import { BUILDINGS as DEFAULT_BUILDINGS, CONVEYORS } from "./constants";
+import type { Worker, Building } from "./types";
 
 interface GameCanvasProps {
   hoveredBuilding: string | null;
   selectedBuilding: string | null;
   selectedWorker: string | null;
   workers: Worker[];
+  buildings?: Building[];
   onHoverBuilding: (id: string | null) => void;
   onClickBuilding: (id: string) => void;
   onClickWorker: (id: string) => void;
@@ -39,11 +40,14 @@ export default function GameCanvas({
   selectedBuilding,
   selectedWorker,
   workers,
+  buildings: buildingsProp,
   onHoverBuilding,
   onClickBuilding,
   onClickWorker,
   isMobile,
 }: GameCanvasProps) {
+  const BUILDINGS = buildingsProp || DEFAULT_BUILDINGS;
+
   const handlePointerMissed = useCallback(() => {
     onClickBuilding("");
   }, [onClickBuilding]);

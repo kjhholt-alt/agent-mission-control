@@ -13,6 +13,7 @@ import {
   SPEECH_BUBBLES,
   WORKER_TYPE_CONFIG,
 } from "@/components/game3d/constants";
+import { useGameData } from "@/components/game3d/useGameData";
 
 // Dynamic import -- R3F cannot run on the server
 const GameCanvas = dynamic(
@@ -820,12 +821,23 @@ function HUDTopBar({
 
 // ─── RESOURCE BAR (StarCraft style) ──────────────────────────────────────────
 
-function ResourceBar({ isMobile }: { isMobile?: boolean }) {
-  const resources = [
-    { label: "API Tokens", value: "847K", max: "1M", pct: 84.7, color: "#e8a019", icon: "T" },
-    { label: "Session Cost", value: "$2.14", max: "$10", pct: 21.4, color: "#06b6d4", icon: "$" },
-    { label: "Uptime", value: "6d 14h", max: "", pct: 95, color: "#22c55e", icon: "^" },
-  ];
+function ResourceBar({ isMobile, budget }: { isMobile?: boolean; budget?: { apiSpent: number; apiLimit: number; minutesUsed: number; minutesLimit: number; tasksCompleted: number; tasksFailed: number } | null }) {
+  const apiPct = budget ? Math.min((budget.apiSpent / budget.apiLimit) * 100, 100) : 84.7;
+  const minPct = budget ? Math.min((budget.minutesUsed / budget.minutesLimit) * 100, 100) : 21.4;
+  const taskTotal = budget ? budget.tasksCompleted + budget.tasksFailed : 0;
+  const taskPct = budget && taskTotal > 0 ? (budget.tasksCompleted / taskTotal) * 100 : 95;
+
+  const resources = budget
+    ? [
+        { label: "API Spend", value: `$${(budget.apiSpent / 100).toFixed(2)}`, max: `$${(budget.apiLimit / 100).toFixed(0)}`, pct: apiPct, color: apiPct > 80 ? "#ef4444" : "#e8a019", icon: "$" },
+        { label: "CC Minutes", value: `${budget.minutesUsed}m`, max: `${budget.minutesLimit}m`, pct: minPct, color: minPct > 80 ? "#ef4444" : "#06b6d4", icon: "T" },
+        { label: "Success", value: `${budget.tasksCompleted}/${taskTotal}`, max: "", pct: taskPct, color: taskPct < 50 ? "#ef4444" : "#22c55e", icon: ">" },
+      ]
+    : [
+        { label: "API Tokens", value: "847K", max: "1M", pct: 84.7, color: "#e8a019", icon: "T" },
+        { label: "Session Cost", value: "$2.14", max: "$10", pct: 21.4, color: "#06b6d4", icon: "$" },
+        { label: "Uptime", value: "6d 14h", max: "", pct: 95, color: "#22c55e", icon: "^" },
+      ];
 
   return (
     <div
@@ -883,11 +895,17 @@ function ResourceBar({ isMobile }: { isMobile?: boolean }) {
 export default function GamePage() {
   const isMobile = useIsMobile();
   const [time, setTime] = useState(formatTime());
-  const [workers, setWorkers] = useState(INITIAL_WORKERS);
-  const [events, setEvents] = useState(INITIAL_EVENTS);
+  const gameData = useGameData();
+  const [demoWorkers, setDemoWorkers] = useState(INITIAL_WORKERS);
+  const [demoEvents, setDemoEvents] = useState(INITIAL_EVENTS);
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+
+  // Use live data when available, demo data as fallback
+  const workers = gameData.isDemo ? demoWorkers : gameData.workers;
+  const events = gameData.isDemo ? demoEvents : gameData.events;
+  const buildings = gameData.buildings;
 
   // Clock
   useEffect(() => {
@@ -895,10 +913,12 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Animate workers
+  // Animate demo workers ONLY when in demo mode
   useEffect(() => {
+    if (!gameData.isDemo) return;
+
     const interval = setInterval(() => {
-      setWorkers((prev) =>
+      setDemoWorkers((prev) =>
         prev.map((w) => {
           let newProgress = w.progress + (Math.random() * 3 + 1);
           let newStatus = w.status;
@@ -965,21 +985,24 @@ export default function GamePage() {
     }, 400);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [gameData.isDemo]);
 
-  // Clear evolving state
+  // Clear evolving state (demo mode only)
   useEffect(() => {
-    const evolvingWorkers = workers.filter((w) => w.evolving);
+    if (!gameData.isDemo) return;
+    const evolvingWorkers = demoWorkers.filter((w) => w.evolving);
     if (evolvingWorkers.length > 0) {
       const timeout = setTimeout(() => {
-        setWorkers((prev) => prev.map((w) => ({ ...w, evolving: false })));
+        setDemoWorkers((prev) => prev.map((w) => ({ ...w, evolving: false })));
       }, 2000);
       return () => clearTimeout(timeout);
     }
-  }, [workers]);
+  }, [demoWorkers, gameData.isDemo]);
 
-  // New events
+  // Demo events (only when in demo mode)
   useEffect(() => {
+    if (!gameData.isDemo) return;
+
     const interval = setInterval(() => {
       if (Math.random() < 0.4) {
         const msg =
@@ -992,12 +1015,12 @@ export default function GamePage() {
           message: msg.message,
           type: msg.type,
         };
-        setEvents((prev) => [newEvent, ...prev].slice(0, 20));
+        setDemoEvents((prev) => [newEvent, ...prev].slice(0, 20));
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [gameData.isDemo]);
 
   // Keyboard
   useEffect(() => {
@@ -1011,7 +1034,7 @@ export default function GamePage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const selectedBuildingData = BUILDINGS.find(
+  const selectedBuildingData = buildings.find(
     (b) => b.id === selectedBuilding
   );
   const selectedWorkerData = workers.find((w) => w.id === selectedWorker);
@@ -1020,7 +1043,10 @@ export default function GamePage() {
     (w) => w.status === "moving" || w.status === "working"
   ).length;
 
-  const hoveredBuildingData = BUILDINGS.find((b) => b.id === hoveredBuilding);
+  const completedCount = gameData.budget?.tasksCompleted ?? 47;
+  const tasksFailed = gameData.budget?.tasksFailed ?? 0;
+
+  const hoveredBuildingData = buildings.find((b) => b.id === hoveredBuilding);
 
   const handleClickBuilding = useCallback((id: string) => {
     if (id === "") {
@@ -1095,11 +1121,11 @@ export default function GamePage() {
       <HUDTopBar
         time={time}
         activeCount={activeCount}
-        completedCount={47}
-        testCount={872}
+        completedCount={completedCount}
+        testCount={gameData.isDemo ? 872 : completedCount + tasksFailed}
         isMobile={isMobile}
       />
-      <ResourceBar isMobile={isMobile} />
+      <ResourceBar isMobile={isMobile} budget={gameData.budget} />
 
       {/* 3D Viewport -- React Three Fiber Canvas */}
       <div className="absolute inset-0 z-10">
@@ -1108,6 +1134,7 @@ export default function GamePage() {
           selectedBuilding={selectedBuilding}
           selectedWorker={selectedWorker}
           workers={workers}
+          buildings={buildings}
           onHoverBuilding={setHoveredBuilding}
           onClickBuilding={handleClickBuilding}
           onClickWorker={handleClickWorker}
@@ -1170,15 +1197,30 @@ export default function GamePage() {
         {selectedWorkerData && (
           <WorkerPanel
             worker={selectedWorkerData}
-            buildings={BUILDINGS}
+            buildings={buildings}
             onClose={() => setSelectedWorker(null)}
             isMobile={isMobile}
           />
         )}
       </AnimatePresence>
 
+      {/* Demo mode badge */}
+      {gameData.isDemo && (
+        <div
+          className="absolute top-16 left-4 z-40 px-2 py-1 text-[9px] uppercase tracking-[0.2em] font-bold"
+          style={{
+            color: "#f59e0b",
+            background: "rgba(245, 158, 11, 0.1)",
+            border: "1px solid rgba(245, 158, 11, 0.3)",
+            borderRadius: 3,
+          }}
+        >
+          DEMO
+        </div>
+      )}
+
       {/* Minimap */}
-      <Minimap buildings={BUILDINGS} workers={workers} hidden={isMobile} />
+      <Minimap buildings={buildings} workers={workers} hidden={isMobile} />
 
       {/* Alert feed */}
       <AlertFeed events={events} isMobile={isMobile} />
