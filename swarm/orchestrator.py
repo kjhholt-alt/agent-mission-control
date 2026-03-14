@@ -48,6 +48,14 @@ def _run_heavy_worker():
     worker.run_loop()
 
 
+def _run_browser_worker():
+    """Entry point for browser worker subprocess."""
+    from swarm.workers.browser_worker import BrowserWorker
+
+    worker = BrowserWorker()
+    worker.run_loop()
+
+
 class SwarmOrchestrator:
     """Main daemon that orchestrates the swarm."""
 
@@ -169,12 +177,14 @@ class SwarmOrchestrator:
         light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "light")
         cc_light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "cc_light")
         heavy_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "heavy")
+        browser_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "browser")
 
         # Only count active workers (filters out dead and stale heartbeats)
         active_workers = self._get_active_workers()
         active_light = sum(1 for w in active_workers if w.get("tier") == "light")
         active_cc_light = sum(1 for w in active_workers if w.get("tier") == "cc_light")
         active_heavy = sum(1 for w in active_workers if w.get("tier") == "heavy")
+        active_browser = sum(1 for w in active_workers if w.get("tier") == "browser")
 
         # Scale light workers — spawn at least 1 if there are queued tasks
         if light_count > 0:
