@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { motion, AnimatePresence, useAnimationControls } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
-// ─── DATA ───────────────────────────────────────────────────────────────────
+// ─── TYPES ───────────────────────────────────────────────────────────────────
 
 interface Building {
   id: string;
@@ -14,7 +14,7 @@ interface Building {
   topColor: string;
   leftColor: string;
   rightColor: string;
-  size: number; // multiplier
+  size: number;
   gridX: number;
   gridY: number;
   status: "active" | "idle" | "warning";
@@ -22,16 +22,22 @@ interface Building {
   stats: { tests: number; deploys: number; uptime: string };
 }
 
+type WorkerType = "builder" | "inspector" | "miner" | "scout" | "deployer" | "messenger";
+
 interface Worker {
   id: string;
   name: string;
+  type: WorkerType;
   color: string;
+  level: number;
+  xp: number;
   currentBuildingId: string;
   targetBuildingId: string;
   task: string;
   progress: number;
   speechBubble: string | null;
   status: "moving" | "working" | "idle";
+  evolving: boolean;
 }
 
 interface ConveyorBelt {
@@ -39,8 +45,9 @@ interface ConveyorBelt {
   fromBuildingId: string;
   toBuildingId: string;
   color: string;
-  dataType: string;
+  dataType: "code" | "tests" | "revenue" | "errors" | "config" | "data" | "deploy" | "alerts";
   active: boolean;
+  throughput: number;
 }
 
 interface AlertEvent {
@@ -50,8 +57,36 @@ interface AlertEvent {
   type: "success" | "info" | "warning" | "error";
 }
 
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+
 const TILE_W = 80;
 const TILE_H = 40;
+
+const WORKER_TYPE_CONFIG: Record<WorkerType, {
+  color: string;
+  icon: string;
+  shape: "square" | "diamond" | "circle" | "triangle" | "hexagon" | "bolt";
+  trailColor: string;
+  label: string;
+}> = {
+  builder:   { color: "#06b6d4", icon: "H", shape: "square",   trailColor: "#06b6d4", label: "Builder" },
+  inspector: { color: "#eab308", icon: "Q", shape: "diamond",  trailColor: "#eab308", label: "Inspector" },
+  miner:     { color: "#22c55e", icon: "P", shape: "circle",   trailColor: "#22c55e", label: "Miner" },
+  scout:     { color: "#a855f7", icon: "W", shape: "triangle", trailColor: "#a855f7", label: "Scout" },
+  deployer:  { color: "#f97316", icon: "R", shape: "hexagon",  trailColor: "#f97316", label: "Deployer" },
+  messenger: { color: "#3b82f6", icon: "Z", shape: "bolt",     trailColor: "#3b82f6", label: "Messenger" },
+};
+
+const DATA_TYPE_COLORS: Record<string, string> = {
+  code:    "#3b82f6",
+  tests:   "#22c55e",
+  revenue: "#eab308",
+  errors:  "#ef4444",
+  config:  "#06b6d4",
+  data:    "#a855f7",
+  deploy:  "#f97316",
+  alerts:  "#e8a019",
+};
 
 const BUILDINGS: Building[] = [
   {
@@ -67,7 +102,7 @@ const BUILDINGS: Building[] = [
     gridX: 5,
     gridY: 5,
     status: "active",
-    description: "ClawBot / Admin Dashboard — Central AI orchestration hub",
+    description: "ClawBot / Admin Dashboard -- Central AI orchestration hub",
     stats: { tests: 142, deploys: 38, uptime: "99.7%" },
   },
   {
@@ -83,7 +118,7 @@ const BUILDINGS: Building[] = [
     gridX: 1,
     gridY: 2,
     status: "active",
-    description: "Polymarket whale-copy trading bot — Live and printing",
+    description: "Polymarket whale-copy trading bot -- Live and printing",
     stats: { tests: 89, deploys: 67, uptime: "98.2%" },
   },
   {
@@ -99,7 +134,7 @@ const BUILDINGS: Building[] = [
     gridX: 9,
     gridY: 2,
     status: "active",
-    description: "Infrastructure hub — DNS, deployments, monitoring",
+    description: "Infrastructure hub -- DNS, deployments, monitoring",
     stats: { tests: 56, deploys: 24, uptime: "99.9%" },
   },
   {
@@ -115,7 +150,7 @@ const BUILDINGS: Building[] = [
     gridX: 2,
     gridY: 8,
     status: "idle",
-    description: "Lead enrichment — Email discovery and validation",
+    description: "Lead enrichment -- Email discovery and validation",
     stats: { tests: 34, deploys: 12, uptime: "97.5%" },
   },
   {
@@ -131,7 +166,7 @@ const BUILDINGS: Building[] = [
     gridX: 8,
     gridY: 8,
     status: "active",
-    description: "Franchise CRM — Phase 2 complete, client demo ready",
+    description: "Franchise CRM -- Phase 2 complete, client demo ready",
     stats: { tests: 178, deploys: 45, uptime: "99.1%" },
   },
   {
@@ -147,7 +182,7 @@ const BUILDINGS: Building[] = [
     gridX: 12,
     gridY: 5,
     status: "active",
-    description: "Flagship product — pcbottleneck.buildkit.store, Amazon affiliate",
+    description: "Flagship product -- pcbottleneck.buildkit.store, Amazon affiliate",
     stats: { tests: 203, deploys: 52, uptime: "99.8%" },
   },
   {
@@ -163,7 +198,7 @@ const BUILDINGS: Building[] = [
     gridX: 0,
     gridY: 5,
     status: "idle",
-    description: "AATOS Outdoor CRM — React + Django, proposal sent",
+    description: "AATOS Outdoor CRM -- React + Django, proposal sent",
     stats: { tests: 267, deploys: 31, uptime: "99.4%" },
   },
   {
@@ -179,7 +214,7 @@ const BUILDINGS: Building[] = [
     gridX: 5,
     gridY: 1,
     status: "idle",
-    description: "AI Chess Coach — Lichess integration, analysis engine",
+    description: "AI Chess Coach -- Lichess integration, analysis engine",
     stats: { tests: 45, deploys: 8, uptime: "99.0%" },
   },
   {
@@ -195,7 +230,7 @@ const BUILDINGS: Building[] = [
     gridX: 11,
     gridY: 1,
     status: "active",
-    description: "AI Finance Brief — Daily market digest, SEO autopilot",
+    description: "AI Finance Brief -- Daily market digest, SEO autopilot",
     stats: { tests: 78, deploys: 41, uptime: "99.6%" },
   },
   {
@@ -211,7 +246,7 @@ const BUILDINGS: Building[] = [
     gridX: 3,
     gridY: 10,
     status: "active",
-    description: "n8n workflow hub — 6 active workflows, Railway hosted",
+    description: "n8n workflow hub -- 6 active workflows, Railway hosted",
     stats: { tests: 12, deploys: 19, uptime: "98.8%" },
   },
   {
@@ -227,7 +262,7 @@ const BUILDINGS: Building[] = [
     gridX: 7,
     gridY: 11,
     status: "warning",
-    description: "P&L Engine — Archived, data still accessible",
+    description: "P&L Engine -- Archived, data still accessible",
     stats: { tests: 156, deploys: 28, uptime: "0%" },
   },
   {
@@ -243,7 +278,7 @@ const BUILDINGS: Building[] = [
     gridX: 12,
     gridY: 9,
     status: "active",
-    description: "MCP server infrastructure — 12 servers configured",
+    description: "MCP server infrastructure -- 12 servers configured",
     stats: { tests: 0, deploys: 12, uptime: "99.5%" },
   },
 ];
@@ -268,94 +303,129 @@ const SPEECH_BUBBLES = [
 const INITIAL_WORKERS: Worker[] = [
   {
     id: "w1",
-    name: "Alpha-7",
-    color: "#e8a019",
+    name: "Hammerhead",
+    type: "builder",
+    color: "#06b6d4",
+    level: 5,
+    xp: 47,
     currentBuildingId: "command-center",
     targetBuildingId: "moneyprinter",
-    task: "Deploying whale-watch update",
+    task: "Building whale-watch update",
     progress: 65,
     speechBubble: null,
     status: "moving",
+    evolving: false,
   },
   {
     id: "w2",
-    name: "Beta-3",
-    color: "#3b82f6",
+    name: "Lens",
+    type: "inspector",
+    color: "#eab308",
+    level: 3,
+    xp: 28,
     currentBuildingId: "moneyprinter",
     targetBuildingId: "automation-hub",
-    task: "Syncing P&L data to n8n",
+    task: "Auditing P&L data pipeline",
     progress: 30,
     speechBubble: null,
     status: "working",
+    evolving: false,
   },
   {
     id: "w3",
-    name: "Gamma-9",
+    name: "Digger",
+    type: "miner",
     color: "#22c55e",
+    level: 7,
+    xp: 63,
     currentBuildingId: "pc-bottleneck",
     targetBuildingId: "finance-brief",
-    task: "Running SEO autopilot cycle",
+    task: "Mining SEO keyword data",
     progress: 82,
     speechBubble: null,
     status: "moving",
+    evolving: false,
   },
   {
     id: "w4",
-    name: "Delta-1",
-    color: "#8b5cf6",
+    name: "Windrider",
+    type: "scout",
+    color: "#a855f7",
+    level: 2,
+    xp: 15,
     currentBuildingId: "barrelhouse",
     targetBuildingId: "buildkit",
-    task: "Deploying CRM Phase 2 update",
+    task: "Scouting CRM Phase 3 features",
     progress: 45,
     speechBubble: null,
     status: "working",
+    evolving: false,
   },
   {
     id: "w5",
-    name: "Epsilon-5",
-    color: "#ef4444",
+    name: "Igniter",
+    type: "deployer",
+    color: "#f97316",
+    level: 4,
+    xp: 38,
     currentBuildingId: "automation-hub",
     targetBuildingId: "command-center",
-    task: "Health check sweep",
+    task: "Deploying health check sweep",
     progress: 90,
     speechBubble: null,
     status: "moving",
+    evolving: false,
+  },
+  {
+    id: "w6",
+    name: "Sparky",
+    type: "messenger",
+    color: "#3b82f6",
+    level: 6,
+    xp: 55,
+    currentBuildingId: "command-center",
+    targetBuildingId: "barrelhouse",
+    task: "Sending deploy notifications",
+    progress: 20,
+    speechBubble: null,
+    status: "moving",
+    evolving: false,
   },
 ];
 
 const CONVEYORS: ConveyorBelt[] = [
-  { id: "c1", fromBuildingId: "command-center", toBuildingId: "moneyprinter", color: "#3b82f6", dataType: "code", active: true },
-  { id: "c2", fromBuildingId: "command-center", toBuildingId: "buildkit", color: "#06b6d4", dataType: "config", active: true },
-  { id: "c3", fromBuildingId: "moneyprinter", toBuildingId: "automation-hub", color: "#a855f7", dataType: "data", active: true },
-  { id: "c4", fromBuildingId: "automation-hub", toBuildingId: "command-center", color: "#e8a019", dataType: "alerts", active: true },
-  { id: "c5", fromBuildingId: "pc-bottleneck", toBuildingId: "finance-brief", color: "#10b981", dataType: "revenue", active: true },
-  { id: "c6", fromBuildingId: "buildkit", toBuildingId: "barrelhouse", color: "#f59e0b", dataType: "deploy", active: true },
-  { id: "c7", fromBuildingId: "barrelhouse", toBuildingId: "pc-bottleneck", color: "#f97316", dataType: "tests", active: false },
-  { id: "c8", fromBuildingId: "command-center", toBuildingId: "chess-academy", color: "#14b8a6", dataType: "code", active: false },
-  { id: "c9", fromBuildingId: "finance-brief", toBuildingId: "automation-hub", color: "#a855f7", dataType: "data", active: true },
-  { id: "c10", fromBuildingId: "mcp-array", toBuildingId: "command-center", color: "#e2e8f0", dataType: "config", active: true },
+  { id: "c1", fromBuildingId: "command-center", toBuildingId: "moneyprinter", color: "#3b82f6", dataType: "code", active: true, throughput: 24 },
+  { id: "c2", fromBuildingId: "command-center", toBuildingId: "buildkit", color: "#06b6d4", dataType: "config", active: true, throughput: 18 },
+  { id: "c3", fromBuildingId: "moneyprinter", toBuildingId: "automation-hub", color: "#a855f7", dataType: "data", active: true, throughput: 42 },
+  { id: "c4", fromBuildingId: "automation-hub", toBuildingId: "command-center", color: "#e8a019", dataType: "alerts", active: true, throughput: 8 },
+  { id: "c5", fromBuildingId: "pc-bottleneck", toBuildingId: "finance-brief", color: "#eab308", dataType: "revenue", active: true, throughput: 15 },
+  { id: "c6", fromBuildingId: "buildkit", toBuildingId: "barrelhouse", color: "#f59e0b", dataType: "deploy", active: true, throughput: 6 },
+  { id: "c7", fromBuildingId: "barrelhouse", toBuildingId: "pc-bottleneck", color: "#22c55e", dataType: "tests", active: false, throughput: 0 },
+  { id: "c8", fromBuildingId: "command-center", toBuildingId: "chess-academy", color: "#14b8a6", dataType: "code", active: false, throughput: 0 },
+  { id: "c9", fromBuildingId: "finance-brief", toBuildingId: "automation-hub", color: "#a855f7", dataType: "data", active: true, throughput: 31 },
+  { id: "c10", fromBuildingId: "mcp-array", toBuildingId: "command-center", color: "#e2e8f0", dataType: "config", active: true, throughput: 12 },
 ];
 
 const INITIAL_EVENTS: AlertEvent[] = [
-  { id: "e1", time: "14:32:01", message: "MoneyPrinter: Whale copy executed — $42.50 USDC.e", type: "success" },
+  { id: "e1", time: "14:32:01", message: "MoneyPrinter: Whale copy executed -- $42.50 USDC.e", type: "success" },
   { id: "e2", time: "14:31:45", message: "Autopilot SEO: Published 'Best GPUs for AI Training 2026'", type: "info" },
   { id: "e3", time: "14:30:12", message: "BarrelHouse CRM: Phase 2 deploy successful", type: "success" },
   { id: "e4", time: "14:28:55", message: "n8n Workflow: Daily P&L digest sent to Discord", type: "info" },
-  { id: "e5", time: "14:27:30", message: "PL Engine: Service archived — no heartbeat", type: "warning" },
+  { id: "e5", time: "14:27:30", message: "PL Engine: Service archived -- no heartbeat", type: "warning" },
   { id: "e6", time: "14:25:01", message: "PC Bottleneck: 12 new Amazon clicks today", type: "success" },
   { id: "e7", time: "14:22:18", message: "Health Check: All 6 services responding", type: "info" },
-  { id: "e8", time: "14:20:00", message: "Finance Brief: Market brief delivered — 3 recipients", type: "success" },
+  { id: "e8", time: "14:20:00", message: "Finance Brief: Market brief delivered -- 3 recipients", type: "success" },
 ];
 
 const NEW_EVENT_MESSAGES = [
   { message: "MoneyPrinter: Position opened on 'Will ETH hit $5k?'", type: "info" as const },
-  { message: "Worker Alpha-7 completed deployment task", type: "success" as const },
+  { message: "Worker Hammerhead completed build task", type: "success" as const },
   { message: "Autopilot: New blog post queued for review", type: "info" as const },
   { message: "MCP Array: 12 servers healthy, 0 degraded", type: "success" as const },
   { message: "Chess Academy: Lichess API rate limit warning", type: "warning" as const },
   { message: "BuildKit: SSL certificate renewed for buildkit.store", type: "success" as const },
   { message: "n8n: Whale performance report generated", type: "info" as const },
-  { message: "MoneyPrinter: Stale position timeout — auto-exited", type: "warning" as const },
+  { message: "MoneyPrinter: Stale position timeout -- auto-exited", type: "warning" as const },
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -371,7 +441,136 @@ function formatTime(): string {
   return new Date().toLocaleTimeString("en-US", { hour12: false });
 }
 
-// ─── COMPONENTS ─────────────────────────────────────────────────────────────
+// ─── SVG DEFS (filters, gradients, patterns) ────────────────────────────────
+
+function SvgDefs() {
+  return (
+    <defs>
+      {/* Holographic edge glow filter */}
+      <filter id="holoGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+        <feColorMatrix in="blur" type="saturate" values="3" result="saturated" />
+        <feMerge>
+          <feMergeNode in="saturated" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      {/* Energy core glow */}
+      <filter id="energyCore" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+        <feColorMatrix in="blur" type="saturate" values="5" result="saturated" />
+        <feMerge>
+          <feMergeNode in="saturated" />
+          <feMergeNode in="saturated" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      {/* Selection ring glow */}
+      <filter id="selectionGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      {/* Worker aura */}
+      <filter id="workerAura" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      {/* Force field dome gradient */}
+      <radialGradient id="forceFieldGrad" cx="50%" cy="40%" r="50%">
+        <stop offset="0%" stopColor="rgba(6, 182, 212, 0.02)" />
+        <stop offset="70%" stopColor="rgba(6, 182, 212, 0.04)" />
+        <stop offset="95%" stopColor="rgba(6, 182, 212, 0.08)" />
+        <stop offset="100%" stopColor="rgba(6, 182, 212, 0.15)" />
+      </radialGradient>
+
+      {/* Conveyor belt pattern */}
+      <pattern id="beltPattern" x="0" y="0" width="12" height="6" patternUnits="userSpaceOnUse">
+        <rect width="12" height="6" fill="rgba(255,255,255,0.03)" />
+        <rect x="1" y="1" width="10" height="4" rx="1" fill="rgba(255,255,255,0.06)" />
+      </pattern>
+
+      {/* Fog gradient for minimap */}
+      <radialGradient id="fogOfWar" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="transparent" />
+        <stop offset="60%" stopColor="transparent" />
+        <stop offset="100%" stopColor="rgba(5, 5, 8, 0.9)" />
+      </radialGradient>
+    </defs>
+  );
+}
+
+// ─── FORCE FIELD DOME ────────────────────────────────────────────────────────
+
+function ForceFieldDome() {
+  return (
+    <g>
+      {/* Large elliptical dome over the base */}
+      <ellipse
+        cx={0}
+        cy={220}
+        rx={560}
+        ry={340}
+        fill="url(#forceFieldGrad)"
+        stroke="rgba(6, 182, 212, 0.06)"
+        strokeWidth={1.5}
+        strokeDasharray="4 8"
+      >
+        <animate
+          attributeName="stroke-opacity"
+          values="0.03;0.12;0.03"
+          dur="4s"
+          repeatCount="indefinite"
+        />
+      </ellipse>
+      {/* Dome hex grid lines (subtle) */}
+      {[0, 60, 120].map((angle) => (
+        <line
+          key={angle}
+          x1={-500 * Math.cos((angle * Math.PI) / 180)}
+          y1={220 - 300 * Math.sin((angle * Math.PI) / 180)}
+          x2={500 * Math.cos((angle * Math.PI) / 180)}
+          y2={220 + 300 * Math.sin((angle * Math.PI) / 180)}
+          stroke="rgba(6, 182, 212, 0.02)"
+          strokeWidth={0.5}
+        />
+      ))}
+      {/* Dome shimmer rings */}
+      {[0.6, 0.8, 1.0].map((scale, i) => (
+        <ellipse
+          key={i}
+          cx={0}
+          cy={220}
+          rx={560 * scale}
+          ry={340 * scale}
+          fill="none"
+          stroke="rgba(6, 182, 212, 0.04)"
+          strokeWidth={0.5}
+        >
+          <animate
+            attributeName="stroke-opacity"
+            values="0.02;0.08;0.02"
+            dur={`${3 + i}s`}
+            repeatCount="indefinite"
+            begin={`${i * 0.7}s`}
+          />
+        </ellipse>
+      ))}
+    </g>
+  );
+}
+
+// ─── ISOMETRIC BUILDING (StarCraft 2 style) ─────────────────────────────────
 
 function IsometricBuilding({
   building,
@@ -390,6 +589,12 @@ function IsometricBuilding({
   const w = 60 * building.size;
   const h = 35 * building.size;
   const depth = 30 * building.size;
+  const isCmd = building.id === "command-center";
+
+  // Command center gets extra depth and size boost
+  const actualDepth = isCmd ? depth * 1.4 : depth;
+  const actualW = isCmd ? w * 1.15 : w;
+  const actualH = isCmd ? h * 1.15 : h;
 
   return (
     <motion.g
@@ -401,12 +606,58 @@ function IsometricBuilding({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: Math.random() * 0.5 }}
     >
+      {/* Selection ring (StarCraft style) */}
+      {isSelected && (
+        <g filter="url(#selectionGlow)">
+          <ellipse
+            cx={x}
+            cy={y + actualDepth + 8}
+            rx={actualW * 0.8}
+            ry={actualH * 0.45}
+            fill="none"
+            stroke={building.color}
+            strokeWidth={2}
+            strokeDasharray="6 3"
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              values="0;-18"
+              dur="1s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="stroke-opacity"
+              values="0.6;1;0.6"
+              dur="1.5s"
+              repeatCount="indefinite"
+            />
+          </ellipse>
+          <ellipse
+            cx={x}
+            cy={y + actualDepth + 8}
+            rx={actualW * 0.85}
+            ry={actualH * 0.5}
+            fill="none"
+            stroke={building.color}
+            strokeWidth={0.5}
+            opacity={0.3}
+          >
+            <animate
+              attributeName="rx"
+              values={`${actualW * 0.82};${actualW * 0.88};${actualW * 0.82}`}
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </ellipse>
+        </g>
+      )}
+
       {/* Glow shadow */}
       <ellipse
         cx={x}
-        cy={y + depth + 5}
-        rx={w * 0.7}
-        ry={h * 0.4}
+        cy={y + actualDepth + 5}
+        rx={actualW * 0.7}
+        ry={actualH * 0.4}
         fill={building.glowColor}
         opacity={building.status === "active" ? 0.6 : 0.2}
       >
@@ -420,9 +671,66 @@ function IsometricBuilding({
         )}
       </ellipse>
 
+      {/* Holographic edge glow (animated color cycling) */}
+      {building.status === "active" && (
+        <g filter="url(#holoGlow)">
+          {/* Right edge glow */}
+          <line
+            x1={x + actualW / 2}
+            y1={y + actualH / 2}
+            x2={x + actualW / 2}
+            y2={y + actualH / 2 + actualDepth}
+            stroke={building.color}
+            strokeWidth={2}
+            opacity={0.4}
+          >
+            <animate
+              attributeName="opacity"
+              values="0.2;0.6;0.2"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </line>
+          {/* Left edge glow */}
+          <line
+            x1={x - actualW / 2}
+            y1={y + actualH / 2}
+            x2={x - actualW / 2}
+            y2={y + actualH / 2 + actualDepth}
+            stroke={building.color}
+            strokeWidth={2}
+            opacity={0.4}
+          >
+            <animate
+              attributeName="opacity"
+              values="0.2;0.6;0.2"
+              dur="2.3s"
+              repeatCount="indefinite"
+              begin="0.5s"
+            />
+          </line>
+          {/* Top edges glow */}
+          <polygon
+            points={`${x},${y - actualH} ${x + actualW / 2},${y - actualH / 2} ${x},${y} ${x - actualW / 2},${y - actualH / 2}`}
+            fill="none"
+            stroke={building.color}
+            strokeWidth={1.5}
+            opacity={0.3}
+          >
+            <animate
+              attributeName="opacity"
+              values="0.15;0.45;0.15"
+              dur="2.7s"
+              repeatCount="indefinite"
+              begin="0.3s"
+            />
+          </polygon>
+        </g>
+      )}
+
       {/* Right face */}
       <polygon
-        points={`${x},${y} ${x + w / 2},${y + h / 2} ${x + w / 2},${y + h / 2 + depth} ${x},${y + depth}`}
+        points={`${x},${y} ${x + actualW / 2},${y + actualH / 2} ${x + actualW / 2},${y + actualH / 2 + actualDepth} ${x},${y + actualDepth}`}
         fill={building.rightColor}
         stroke={isHovered || isSelected ? "#fff" : "rgba(255,255,255,0.1)"}
         strokeWidth={isHovered || isSelected ? 1.5 : 0.5}
@@ -430,7 +738,7 @@ function IsometricBuilding({
 
       {/* Left face */}
       <polygon
-        points={`${x},${y} ${x - w / 2},${y + h / 2} ${x - w / 2},${y + h / 2 + depth} ${x},${y + depth}`}
+        points={`${x},${y} ${x - actualW / 2},${y + actualH / 2} ${x - actualW / 2},${y + actualH / 2 + actualDepth} ${x},${y + actualDepth}`}
         fill={building.leftColor}
         stroke={isHovered || isSelected ? "#fff" : "rgba(255,255,255,0.1)"}
         strokeWidth={isHovered || isSelected ? 1.5 : 0.5}
@@ -438,7 +746,7 @@ function IsometricBuilding({
 
       {/* Top face */}
       <polygon
-        points={`${x},${y - h} ${x + w / 2},${y - h / 2} ${x},${y} ${x - w / 2},${y - h / 2}`}
+        points={`${x},${y - actualH} ${x + actualW / 2},${y - actualH / 2} ${x},${y} ${x - actualW / 2},${y - actualH / 2}`}
         fill={building.topColor}
         stroke={isHovered || isSelected ? "#fff" : "rgba(255,255,255,0.15)"}
         strokeWidth={isHovered || isSelected ? 1.5 : 0.5}
@@ -450,15 +758,220 @@ function IsometricBuilding({
         x1={x}
         y1={y}
         x2={x}
-        y2={y + depth}
+        y2={y + actualDepth}
         stroke="rgba(255,255,255,0.3)"
         strokeWidth={1}
       />
 
+      {/* Active machinery — spinning element on top */}
+      {building.status === "active" && (
+        <g>
+          {/* Pulsing energy core (center of top face) */}
+          <circle
+            cx={x}
+            cy={y - actualH / 2}
+            r={building.size * 3}
+            fill={building.color}
+            opacity={0.15}
+          >
+            <animate
+              attributeName="r"
+              values={`${building.size * 2};${building.size * 4};${building.size * 2}`}
+              dur="2s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.1;0.3;0.1"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
+          <circle
+            cx={x}
+            cy={y - actualH / 2}
+            r={building.size * 1.5}
+            fill={building.color}
+            opacity={0.5}
+          >
+            <animate
+              attributeName="opacity"
+              values="0.3;0.7;0.3"
+              dur="1.5s"
+              repeatCount="indefinite"
+            />
+          </circle>
+
+          {/* Spinning ring (machinery feel) */}
+          <circle
+            cx={x}
+            cy={y - actualH / 2}
+            r={building.size * 5}
+            fill="none"
+            stroke={building.color}
+            strokeWidth={0.5}
+            strokeDasharray="3 5"
+            opacity={0.3}
+          >
+            <animateTransform
+              attributeName="transform"
+              type="rotate"
+              from={`0 ${x} ${y - actualH / 2}`}
+              to={`360 ${x} ${y - actualH / 2}`}
+              dur="8s"
+              repeatCount="indefinite"
+            />
+          </circle>
+        </g>
+      )}
+
+      {/* Shield generator dots on top (3 small pulsing circles) */}
+      {[
+        { dx: -actualW * 0.2, dy: -actualH * 0.65 },
+        { dx: actualW * 0.2, dy: -actualH * 0.65 },
+        { dx: 0, dy: -actualH * 0.85 },
+      ].map((pos, i) => (
+        <circle
+          key={`shield-${i}`}
+          cx={x + pos.dx}
+          cy={y + pos.dy}
+          r={1.5}
+          fill={building.status === "active" ? "#22c55e" : "#6b7280"}
+          opacity={building.status === "active" ? 0.8 : 0.3}
+        >
+          {building.status === "active" && (
+            <animate
+              attributeName="opacity"
+              values="0.4;1;0.4"
+              dur={`${1.5 + i * 0.3}s`}
+              repeatCount="indefinite"
+              begin={`${i * 0.4}s`}
+            />
+          )}
+        </circle>
+      ))}
+
+      {/* Command Center extras — antenna arrays + bigger energy core */}
+      {isCmd && (
+        <g>
+          {/* Left antenna */}
+          <line
+            x1={x - actualW * 0.3}
+            y1={y - actualH}
+            x2={x - actualW * 0.35}
+            y2={y - actualH - 25}
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth={1}
+          />
+          <circle
+            cx={x - actualW * 0.35}
+            cy={y - actualH - 25}
+            r={2}
+            fill="#ef4444"
+          >
+            <animate
+              attributeName="opacity"
+              values="0.3;1;0.3"
+              dur="1s"
+              repeatCount="indefinite"
+            />
+          </circle>
+
+          {/* Right antenna */}
+          <line
+            x1={x + actualW * 0.3}
+            y1={y - actualH}
+            x2={x + actualW * 0.35}
+            y2={y - actualH - 20}
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth={1}
+          />
+          <circle
+            cx={x + actualW * 0.35}
+            cy={y - actualH - 20}
+            r={2}
+            fill="#22c55e"
+          >
+            <animate
+              attributeName="opacity"
+              values="0.3;1;0.3"
+              dur="1.3s"
+              repeatCount="indefinite"
+              begin="0.2s"
+            />
+          </circle>
+
+          {/* Center spire */}
+          <line
+            x1={x}
+            y1={y - actualH}
+            x2={x}
+            y2={y - actualH - 35}
+            stroke="rgba(232, 160, 25, 0.6)"
+            strokeWidth={1.5}
+          />
+          <circle
+            cx={x}
+            cy={y - actualH - 35}
+            r={3}
+            fill="#e8a019"
+            filter="url(#energyCore)"
+          >
+            <animate
+              attributeName="r"
+              values="2;4;2"
+              dur="1.5s"
+              repeatCount="indefinite"
+            />
+          </circle>
+
+          {/* Energy arc between antennas */}
+          <path
+            d={`M${x - actualW * 0.35},${y - actualH - 25} Q${x},${y - actualH - 40} ${x + actualW * 0.35},${y - actualH - 20}`}
+            fill="none"
+            stroke="#e8a019"
+            strokeWidth={0.5}
+            opacity={0.3}
+          >
+            <animate
+              attributeName="opacity"
+              values="0.1;0.5;0.1"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </path>
+
+          {/* Pulsing ground energy ring */}
+          <ellipse
+            cx={x}
+            cy={y + actualDepth + 5}
+            rx={actualW * 0.9}
+            ry={actualH * 0.55}
+            fill="none"
+            stroke="#e8a019"
+            strokeWidth={1}
+            opacity={0.15}
+          >
+            <animate
+              attributeName="rx"
+              values={`${actualW * 0.85};${actualW * 0.95};${actualW * 0.85}`}
+              dur="3s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.1;0.25;0.1"
+              dur="3s"
+              repeatCount="indefinite"
+            />
+          </ellipse>
+        </g>
+      )}
+
       {/* Status indicator dot */}
       <circle
         cx={x}
-        cy={y - h - 8}
+        cy={y - actualH - (isCmd ? 45 : 8)}
         r={3}
         fill={
           building.status === "active"
@@ -481,7 +994,7 @@ function IsometricBuilding({
       {/* Label */}
       <text
         x={x}
-        y={y - h - 16}
+        y={y - actualH - (isCmd ? 52 : 16)}
         textAnchor="middle"
         fill={isHovered || isSelected ? "#fff" : "rgba(255,255,255,0.7)"}
         fontSize={isHovered || isSelected ? 11 : 9}
@@ -498,6 +1011,8 @@ function IsometricBuilding({
   );
 }
 
+// ─── CONVEYOR BELT (Factorio style) ─────────────────────────────────────────
+
 function ConveyorBeltLine({
   conveyor,
   buildings,
@@ -512,18 +1027,60 @@ function ConveyorBeltLine({
   const p1 = gridToIso(from.gridX, from.gridY);
   const p2 = gridToIso(to.gridX, to.gridY);
 
-  const pathId = `conveyor-${conveyor.id}`;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+  // Midpoint for throughput label
+  const mx = (p1.x + p2.x) / 2;
+  const my = (p1.y + p2.y) / 2;
+
+  // Data type color
+  const packetColor = DATA_TYPE_COLORS[conveyor.dataType] || conveyor.color;
+
+  // Direction arrow positions (along the belt)
+  const arrowCount = Math.max(2, Math.floor(len / 80));
 
   return (
-    <g opacity={conveyor.active ? 0.7 : 0.2}>
-      {/* Conveyor line */}
+    <g opacity={conveyor.active ? 0.85 : 0.15}>
+      {/* Belt background (wider, more visible) */}
+      <line
+        x1={p1.x}
+        y1={p1.y}
+        x2={p2.x}
+        y2={p2.y}
+        stroke="rgba(255,255,255,0.06)"
+        strokeWidth={conveyor.active ? 8 : 3}
+        strokeLinecap="round"
+      />
+
+      {/* Belt track lines (Factorio style rails) */}
+      {[-3, 3].map((offset, i) => {
+        const perpX = (-dy / len) * offset;
+        const perpY = (dx / len) * offset;
+        return (
+          <line
+            key={i}
+            x1={p1.x + perpX}
+            y1={p1.y + perpY}
+            x2={p2.x + perpX}
+            y2={p2.y + perpY}
+            stroke={conveyor.active ? conveyor.color : "rgba(255,255,255,0.1)"}
+            strokeWidth={0.5}
+            opacity={conveyor.active ? 0.4 : 0.2}
+          />
+        );
+      })}
+
+      {/* Animated dashed center line */}
       <line
         x1={p1.x}
         y1={p1.y}
         x2={p2.x}
         y2={p2.y}
         stroke={conveyor.color}
-        strokeWidth={conveyor.active ? 2 : 1}
+        strokeWidth={conveyor.active ? 1.5 : 0.5}
         strokeDasharray="8 6"
         opacity={0.5}
       >
@@ -537,36 +1094,188 @@ function ConveyorBeltLine({
         )}
       </line>
 
-      {/* Data packets flowing along */}
+      {/* Directional arrows on belt */}
+      {conveyor.active &&
+        Array.from({ length: arrowCount }, (_, i) => {
+          const t = (i + 1) / (arrowCount + 1);
+          const ax = p1.x + dx * t;
+          const ay = p1.y + dy * t;
+          const arrowSize = 4;
+          // Arrow pointing in direction of flow
+          const normX = dx / len;
+          const normY = dy / len;
+          const perpNx = -normY;
+          const perpNy = normX;
+          return (
+            <polygon
+              key={`arrow-${i}`}
+              points={`
+                ${ax + normX * arrowSize},${ay + normY * arrowSize}
+                ${ax + perpNx * arrowSize * 0.5 - normX * arrowSize * 0.5},${ay + perpNy * arrowSize * 0.5 - normY * arrowSize * 0.5}
+                ${ax - perpNx * arrowSize * 0.5 - normX * arrowSize * 0.5},${ay - perpNy * arrowSize * 0.5 - normY * arrowSize * 0.5}
+              `}
+              fill={conveyor.color}
+              opacity={0.25}
+            >
+              <animate
+                attributeName="opacity"
+                values="0.15;0.35;0.15"
+                dur="2s"
+                repeatCount="indefinite"
+                begin={`${i * 0.3}s`}
+              />
+            </polygon>
+          );
+        })}
+
+      {/* Data packets flowing along (colored by type) */}
       {conveyor.active && (
         <>
-          <path
-            id={pathId}
-            d={`M${p1.x},${p1.y} L${p2.x},${p2.y}`}
-            fill="none"
-            stroke="none"
-          />
-          {[0, 0.33, 0.66].map((offset, i) => (
-            <circle key={i} r={2.5} fill={conveyor.color} opacity={0.9}>
-              <animateMotion
-                dur="3s"
+          {[0, 0.25, 0.5, 0.75].map((offset, i) => (
+            <g key={i}>
+              {/* Packet body */}
+              <rect
+                width={6}
+                height={4}
+                rx={1}
+                fill={packetColor}
+                opacity={0.9}
+              >
+                <animateMotion
+                  dur="2.5s"
+                  repeatCount="indefinite"
+                  begin={`${offset * 2.5}s`}
+                  path={`M${p1.x - 3},${p1.y - 2} L${p2.x - 3},${p2.y - 2}`}
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0.6;1;0.6"
+                  dur="1s"
+                  repeatCount="indefinite"
+                />
+              </rect>
+              {/* Packet glow */}
+              <circle r={3} fill={packetColor} opacity={0.2}>
+                <animateMotion
+                  dur="2.5s"
+                  repeatCount="indefinite"
+                  begin={`${offset * 2.5}s`}
+                  path={`M${p1.x},${p1.y} L${p2.x},${p2.y}`}
+                />
+              </circle>
+            </g>
+          ))}
+        </>
+      )}
+
+      {/* Inserter arms at endpoints (small animated SVG arms) */}
+      {conveyor.active && (
+        <>
+          {/* Source inserter */}
+          <g>
+            <line
+              x1={p1.x}
+              y1={p1.y}
+              x2={p1.x + (dx / len) * 12}
+              y2={p1.y + (dy / len) * 12}
+              stroke={conveyor.color}
+              strokeWidth={2}
+              strokeLinecap="round"
+              opacity={0.6}
+            >
+              <animate
+                attributeName="opacity"
+                values="0.3;0.8;0.3"
+                dur="1.5s"
                 repeatCount="indefinite"
-                begin={`${offset * 3}s`}
-                path={`M${p1.x},${p1.y} L${p2.x},${p2.y}`}
               />
+            </line>
+            <circle
+              cx={p1.x + (dx / len) * 12}
+              cy={p1.y + (dy / len) * 12}
+              r={2}
+              fill={conveyor.color}
+              opacity={0.7}
+            >
               <animate
                 attributeName="r"
-                values="1.5;3;1.5"
+                values="1.5;2.5;1.5"
                 dur="1.5s"
                 repeatCount="indefinite"
               />
             </circle>
-          ))}
+          </g>
+          {/* Destination inserter */}
+          <g>
+            <line
+              x1={p2.x}
+              y1={p2.y}
+              x2={p2.x - (dx / len) * 12}
+              y2={p2.y - (dy / len) * 12}
+              stroke={conveyor.color}
+              strokeWidth={2}
+              strokeLinecap="round"
+              opacity={0.6}
+            >
+              <animate
+                attributeName="opacity"
+                values="0.3;0.8;0.3"
+                dur="1.5s"
+                repeatCount="indefinite"
+                begin="0.75s"
+              />
+            </line>
+            <circle
+              cx={p2.x - (dx / len) * 12}
+              cy={p2.y - (dy / len) * 12}
+              r={2}
+              fill={conveyor.color}
+              opacity={0.7}
+            >
+              <animate
+                attributeName="r"
+                values="1.5;2.5;1.5"
+                dur="1.5s"
+                repeatCount="indefinite"
+                begin="0.75s"
+              />
+            </circle>
+          </g>
         </>
+      )}
+
+      {/* Throughput counter label */}
+      {conveyor.active && conveyor.throughput > 0 && (
+        <g>
+          <rect
+            x={mx - 16}
+            y={my - 14}
+            width={32}
+            height={12}
+            rx={3}
+            fill="rgba(0,0,0,0.75)"
+            stroke={conveyor.color}
+            strokeWidth={0.5}
+            opacity={0.8}
+          />
+          <text
+            x={mx}
+            y={my - 5}
+            textAnchor="middle"
+            fill={conveyor.color}
+            fontSize={7}
+            fontFamily="var(--font-mono), monospace"
+            fontWeight="bold"
+          >
+            {conveyor.throughput}/min
+          </text>
+        </g>
       )}
     </g>
   );
 }
+
+// ─── WORKER SPRITE (Pokemon style) ──────────────────────────────────────────
 
 function WorkerSprite({
   worker,
@@ -588,10 +1297,123 @@ function WorkerSprite({
   const p1 = gridToIso(current.gridX, current.gridY);
   const p2 = gridToIso(target.gridX, target.gridY);
 
-  // Lerp position based on progress
   const t = worker.progress / 100;
   const cx = p1.x + (p2.x - p1.x) * t;
-  const cy = p1.y + (p2.y - p1.y) * t - 10; // float above ground
+  const cy = p1.y + (p2.y - p1.y) * t - 10;
+
+  const config = WORKER_TYPE_CONFIG[worker.type];
+  const workerColor = config.color;
+
+  // Bounce animation parameters
+  const bounceSpeed = worker.status === "working" ? "0.8s" : worker.status === "idle" ? "2s" : "1.2s";
+  const bounceAmount = worker.status === "working" ? 3 : worker.status === "idle" ? 1.5 : 2;
+
+  // Worker body shape based on type
+  const renderWorkerShape = () => {
+    const size = 7;
+    switch (config.shape) {
+      case "square": // Builder — sturdy
+        return (
+          <rect
+            x={cx - size}
+            y={cy - size}
+            width={size * 2}
+            height={size * 2}
+            rx={2}
+            fill={workerColor}
+            stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
+            strokeWidth={isSelected ? 2 : 1}
+          />
+        );
+      case "diamond": // Inspector — floating
+        return (
+          <polygon
+            points={`${cx},${cy - size * 1.2} ${cx + size},${cy} ${cx},${cy + size * 1.2} ${cx - size},${cy}`}
+            fill={workerColor}
+            stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
+            strokeWidth={isSelected ? 2 : 1}
+          />
+        );
+      case "triangle": // Scout — wing shapes
+        return (
+          <g>
+            <polygon
+              points={`${cx},${cy - size * 1.3} ${cx + size * 1.2},${cy + size * 0.8} ${cx - size * 1.2},${cy + size * 0.8}`}
+              fill={workerColor}
+              stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
+              strokeWidth={isSelected ? 2 : 1}
+            />
+            {/* Wing accents */}
+            <line x1={cx - size * 1.2} y1={cy + size * 0.3} x2={cx - size * 1.8} y2={cy - size * 0.2} stroke={workerColor} strokeWidth={1.5} opacity={0.6} />
+            <line x1={cx + size * 1.2} y1={cy + size * 0.3} x2={cx + size * 1.8} y2={cy - size * 0.2} stroke={workerColor} strokeWidth={1.5} opacity={0.6} />
+          </g>
+        );
+      case "hexagon": // Deployer — rocket
+        return (
+          <g>
+            <polygon
+              points={`${cx},${cy - size * 1.2} ${cx + size},${cy - size * 0.4} ${cx + size},${cy + size * 0.4} ${cx},${cy + size * 1.2} ${cx - size},${cy + size * 0.4} ${cx - size},${cy - size * 0.4}`}
+              fill={workerColor}
+              stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
+              strokeWidth={isSelected ? 2 : 1}
+            />
+            {/* Rocket trail */}
+            {worker.status === "moving" && (
+              <g>
+                <line x1={cx} y1={cy + size * 1.2} x2={cx} y2={cy + size * 2.5} stroke={workerColor} strokeWidth={2} opacity={0.4}>
+                  <animate attributeName="y2" values={`${cy + size * 2};${cy + size * 3};${cy + size * 2}`} dur="0.5s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.2;0.5;0.2" dur="0.5s" repeatCount="indefinite" />
+                </line>
+                <line x1={cx - 2} y1={cy + size * 1.2} x2={cx - 3} y2={cy + size * 2} stroke="#f97316" strokeWidth={1} opacity={0.3}>
+                  <animate attributeName="opacity" values="0.1;0.4;0.1" dur="0.4s" repeatCount="indefinite" />
+                </line>
+                <line x1={cx + 2} y1={cy + size * 1.2} x2={cx + 3} y2={cy + size * 2} stroke="#f97316" strokeWidth={1} opacity={0.3}>
+                  <animate attributeName="opacity" values="0.1;0.4;0.1" dur="0.4s" repeatCount="indefinite" begin="0.2s" />
+                </line>
+              </g>
+            )}
+          </g>
+        );
+      case "bolt": // Messenger — lightning
+        return (
+          <g>
+            <polygon
+              points={`${cx - 2},${cy - size * 1.2} ${cx + size * 0.8},${cy - size * 0.2} ${cx + 1},${cy} ${cx + 3},${cy} ${cx - size * 0.6},${cy + size * 1.2} ${cx},${cy + size * 0.2} ${cx - 3},${cy + size * 0.2}`}
+              fill={workerColor}
+              stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
+              strokeWidth={isSelected ? 2 : 1}
+            />
+            {/* Lightning trails */}
+            {worker.status === "moving" && (
+              <g>
+                <line x1={cx - size} y1={cy} x2={cx - size * 2} y2={cy + 2} stroke={workerColor} strokeWidth={1} opacity={0.3}>
+                  <animate attributeName="opacity" values="0;0.5;0" dur="0.6s" repeatCount="indefinite" />
+                </line>
+                <line x1={cx + size} y1={cy} x2={cx + size * 2} y2={cy - 2} stroke={workerColor} strokeWidth={1} opacity={0.3}>
+                  <animate attributeName="opacity" values="0;0.5;0" dur="0.6s" repeatCount="indefinite" begin="0.3s" />
+                </line>
+              </g>
+            )}
+          </g>
+        );
+      default: // Miner — circle, earthy
+        return (
+          <g>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={size}
+              fill={workerColor}
+              stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
+              strokeWidth={isSelected ? 2 : 1}
+            />
+            {/* Pickaxe accent */}
+            <line x1={cx + size * 0.5} y1={cy - size * 0.8} x2={cx + size * 1.3} y2={cy - size * 1.5} stroke="rgba(255,255,255,0.6)" strokeWidth={1.5} />
+            <line x1={cx + size * 1.1} y1={cy - size * 1.7} x2={cx + size * 1.5} y2={cy - size * 1.3} stroke="rgba(255,255,255,0.6)" strokeWidth={1.5} />
+          </g>
+        );
+    }
+  };
 
   return (
     <g
@@ -600,6 +1422,29 @@ function WorkerSprite({
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick(worker.id)}
     >
+      {/* Selection ring (StarCraft style) */}
+      {isSelected && (
+        <g filter="url(#selectionGlow)">
+          <ellipse
+            cx={cx}
+            cy={cy + 12}
+            rx={14}
+            ry={6}
+            fill="none"
+            stroke={workerColor}
+            strokeWidth={1.5}
+            strokeDasharray="4 2"
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              values="0;-12"
+              dur="0.8s"
+              repeatCount="indefinite"
+            />
+          </ellipse>
+        </g>
+      )}
+
       {/* Trail */}
       {worker.status === "moving" && (
         <line
@@ -607,70 +1452,157 @@ function WorkerSprite({
           y1={p1.y - 10}
           x2={cx}
           y2={cy}
-          stroke={worker.color}
+          stroke={workerColor}
           strokeWidth={1}
-          opacity={0.15}
+          opacity={0.1}
           strokeDasharray="3 3"
         />
       )}
 
-      {/* Worker glow */}
-      <circle cx={cx} cy={cy} r={8} fill={worker.color} opacity={0.15}>
+      {/* Aura glow (inspector gets floating aura, all get type-colored) */}
+      <circle cx={cx} cy={cy} r={worker.type === "inspector" ? 14 : 10} fill={workerColor} opacity={0.1} filter="url(#workerAura)">
         <animate
           attributeName="r"
-          values="6;10;6"
-          dur="2s"
+          values={`${worker.type === "inspector" ? 12 : 8};${worker.type === "inspector" ? 16 : 12};${worker.type === "inspector" ? 12 : 8}`}
+          dur={bounceSpeed}
           repeatCount="indefinite"
         />
       </circle>
 
-      {/* Worker body */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={5}
-        fill={worker.color}
-        stroke={isSelected ? "#fff" : "rgba(255,255,255,0.5)"}
-        strokeWidth={isSelected ? 2 : 1}
-      />
+      {/* Evolution glow (golden particle burst) */}
+      {worker.evolving && (
+        <g>
+          {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => (
+            <circle
+              key={`evo-${i}`}
+              cx={cx + Math.cos((angle * Math.PI) / 180) * 15}
+              cy={cy + Math.sin((angle * Math.PI) / 180) * 15}
+              r={2}
+              fill="#eab308"
+              opacity={0.8}
+            >
+              <animate
+                attributeName="r"
+                values="1;3;0"
+                dur="1s"
+                repeatCount="indefinite"
+                begin={`${i * 0.125}s`}
+              />
+              <animate
+                attributeName="opacity"
+                values="0.8;0;0.8"
+                dur="1s"
+                repeatCount="indefinite"
+                begin={`${i * 0.125}s`}
+              />
+            </circle>
+          ))}
+          <circle cx={cx} cy={cy} r={18} fill="none" stroke="#eab308" strokeWidth={2} opacity={0.5}>
+            <animate attributeName="r" values="10;20;10" dur="0.8s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.6;0;0.6" dur="0.8s" repeatCount="indefinite" />
+          </circle>
+        </g>
+      )}
 
-      {/* Inner dot */}
-      <circle cx={cx} cy={cy} r={2} fill="#fff" opacity={0.8} />
+      {/* Bounce wrapper — worker body bounces */}
+      <g>
+        <animateTransform
+          attributeName="transform"
+          type="translate"
+          values={`0,0; 0,${-bounceAmount}; 0,0`}
+          dur={bounceSpeed}
+          repeatCount="indefinite"
+        />
+        {renderWorkerShape()}
 
-      {/* Name label */}
-      <text
-        x={cx}
-        y={cy - 14}
-        textAnchor="middle"
-        fill="rgba(255,255,255,0.6)"
-        fontSize={7}
-        fontFamily="var(--font-mono), monospace"
-      >
-        {worker.name}
-      </text>
+        {/* Inner icon/emblem */}
+        <text
+          x={cx}
+          y={cy + 3}
+          textAnchor="middle"
+          fill="#fff"
+          fontSize={8}
+          fontFamily="var(--font-mono), monospace"
+          fontWeight="bold"
+          opacity={0.9}
+        >
+          {config.icon}
+        </text>
+      </g>
+
+      {/* Name label + Level badge */}
+      <g>
+        {/* Level badge background */}
+        <rect
+          x={cx + 8}
+          y={cy - 22}
+          width={22}
+          height={10}
+          rx={3}
+          fill="rgba(0,0,0,0.8)"
+          stroke={workerColor}
+          strokeWidth={0.5}
+        />
+        <text
+          x={cx + 19}
+          y={cy - 14}
+          textAnchor="middle"
+          fill={workerColor}
+          fontSize={6}
+          fontFamily="var(--font-mono), monospace"
+          fontWeight="bold"
+        >
+          Lv.{worker.level}
+        </text>
+
+        {/* Name */}
+        <text
+          x={cx - 2}
+          y={cy - 18}
+          textAnchor="end"
+          fill="rgba(255,255,255,0.7)"
+          fontSize={7}
+          fontFamily="var(--font-mono), monospace"
+        >
+          {worker.name}
+        </text>
+
+        {/* Type label */}
+        <text
+          x={cx}
+          y={cy + 18}
+          textAnchor="middle"
+          fill={workerColor}
+          fontSize={6}
+          fontFamily="var(--font-mono), monospace"
+          opacity={0.5}
+        >
+          {config.label}
+        </text>
+      </g>
 
       {/* Speech bubble */}
       {worker.speechBubble && (
         <g>
           <rect
-            x={cx - 40}
-            y={cy - 38}
-            width={80}
+            x={cx - 42}
+            y={cy - 42}
+            width={84}
             height={18}
-            rx={4}
-            fill="rgba(0,0,0,0.85)"
-            stroke={worker.color}
-            strokeWidth={0.5}
+            rx={5}
+            fill="rgba(0,0,0,0.9)"
+            stroke={workerColor}
+            strokeWidth={0.8}
           />
           <polygon
-            points={`${cx - 4},${cy - 20} ${cx + 4},${cy - 20} ${cx},${cy - 15}`}
-            fill="rgba(0,0,0,0.85)"
+            points={`${cx - 4},${cy - 24} ${cx + 4},${cy - 24} ${cx},${cy - 19}`}
+            fill="rgba(0,0,0,0.9)"
           />
           <text
             x={cx}
-            y={cy - 26}
+            y={cy - 30}
             textAnchor="middle"
-            fill={worker.color}
+            fill={workerColor}
             fontSize={7}
             fontFamily="var(--font-mono), monospace"
           >
@@ -682,10 +1614,12 @@ function WorkerSprite({
   );
 }
 
+// ─── BACKGROUND ──────────────────────────────────────────────────────────────
+
 function BackgroundParticles() {
   const particles = useMemo(
     () =>
-      Array.from({ length: 40 }, (_, i) => ({
+      Array.from({ length: 60 }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
         y: Math.random() * 100,
@@ -693,6 +1627,7 @@ function BackgroundParticles() {
         duration: Math.random() * 20 + 15,
         delay: Math.random() * 10,
         opacity: Math.random() * 0.3 + 0.05,
+        color: i % 3 === 0 ? "#06b6d4" : i % 3 === 1 ? "#e8a019" : "#22c55e",
       })),
     []
   );
@@ -708,8 +1643,9 @@ function BackgroundParticles() {
             height: p.size,
             left: `${p.x}%`,
             top: `${p.y}%`,
-            background: `rgba(6, 182, 212, ${p.opacity})`,
-            boxShadow: `0 0 ${p.size * 3}px rgba(6, 182, 212, ${p.opacity})`,
+            background: `${p.color}`,
+            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+            opacity: p.opacity,
           }}
           animate={{
             y: [0, -30, 0],
@@ -728,6 +1664,8 @@ function BackgroundParticles() {
   );
 }
 
+// ─── MINIMAP with fog of war ─────────────────────────────────────────────────
+
 function Minimap({
   buildings,
   workers,
@@ -737,22 +1675,30 @@ function Minimap({
 }) {
   return (
     <div
-      className="absolute bottom-4 left-4 z-30 border rounded-lg overflow-hidden"
+      className="absolute bottom-4 left-4 z-30 overflow-hidden"
       style={{
-        width: 180,
-        height: 120,
-        background: "rgba(5, 5, 8, 0.85)",
-        borderColor: "rgba(6, 182, 212, 0.3)",
-        backdropFilter: "blur(8px)",
+        width: 200,
+        height: 140,
+        background: "rgba(5, 5, 8, 0.9)",
+        border: "2px solid rgba(6, 182, 212, 0.3)",
+        borderRadius: 4,
+        boxShadow: "0 0 15px rgba(6, 182, 212, 0.1), inset 0 0 30px rgba(0,0,0,0.5)",
       }}
     >
+      {/* Metallic top border (StarCraft style) */}
       <div
-        className="absolute top-0 left-0 px-2 py-0.5 text-[8px] uppercase tracking-widest"
-        style={{ color: "rgba(6, 182, 212, 0.7)" }}
+        style={{
+          height: 2,
+          background: "linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent)",
+        }}
+      />
+      <div
+        className="absolute top-1 left-2 text-[7px] uppercase tracking-[0.2em] font-bold"
+        style={{ color: "rgba(6, 182, 212, 0.6)" }}
       >
-        MINIMAP
+        TACTICAL MAP
       </div>
-      <svg viewBox="-120 -20 600 340" width={180} height={120}>
+      <svg viewBox="-120 -20 600 340" width={200} height={140}>
         {/* Grid dots */}
         {Array.from({ length: 14 }, (_, x) =>
           Array.from({ length: 14 }, (_, y) => {
@@ -763,7 +1709,7 @@ function Minimap({
                 cx={pos.x}
                 cy={pos.y}
                 r={0.5}
-                fill="rgba(255,255,255,0.1)"
+                fill="rgba(6, 182, 212, 0.08)"
               />
             );
           })
@@ -773,36 +1719,49 @@ function Minimap({
         {buildings.map((b) => {
           const pos = gridToIso(b.gridX, b.gridY);
           return (
-            <rect
-              key={b.id}
-              x={pos.x - 3 * b.size}
-              y={pos.y - 2 * b.size}
-              width={6 * b.size}
-              height={4 * b.size}
-              fill={b.color}
-              opacity={0.8}
-              rx={1}
-            />
+            <g key={b.id}>
+              <rect
+                x={pos.x - 3 * b.size}
+                y={pos.y - 2 * b.size}
+                width={6 * b.size}
+                height={4 * b.size}
+                fill={b.color}
+                opacity={b.status === "active" ? 0.9 : 0.3}
+                rx={1}
+              />
+              {/* Active glow on minimap */}
+              {b.status === "active" && (
+                <rect
+                  x={pos.x - 4 * b.size}
+                  y={pos.y - 3 * b.size}
+                  width={8 * b.size}
+                  height={6 * b.size}
+                  fill={b.color}
+                  opacity={0.15}
+                  rx={2}
+                >
+                  <animate attributeName="opacity" values="0.1;0.25;0.1" dur="2s" repeatCount="indefinite" />
+                </rect>
+              )}
+            </g>
           );
         })}
 
         {/* Worker dots */}
         {workers.map((w) => {
-          const current = buildings.find(
-            (b) => b.id === w.currentBuildingId
-          );
-          const target = buildings.find((b) => b.id === w.targetBuildingId);
-          if (!current || !target) return null;
-          const p1 = gridToIso(current.gridX, current.gridY);
-          const p2 = gridToIso(target.gridX, target.gridY);
-          const t = w.progress / 100;
+          const cur = buildings.find((b) => b.id === w.currentBuildingId);
+          const tgt = buildings.find((b) => b.id === w.targetBuildingId);
+          if (!cur || !tgt) return null;
+          const pp1 = gridToIso(cur.gridX, cur.gridY);
+          const pp2 = gridToIso(tgt.gridX, tgt.gridY);
+          const tt = w.progress / 100;
           return (
             <circle
               key={w.id}
-              cx={p1.x + (p2.x - p1.x) * t}
-              cy={p1.y + (p2.y - p1.y) * t}
+              cx={pp1.x + (pp2.x - pp1.x) * tt}
+              cy={pp1.y + (pp2.y - pp1.y) * tt}
               r={2}
-              fill="#fff"
+              fill={WORKER_TYPE_CONFIG[w.type].color}
             >
               <animate
                 attributeName="opacity"
@@ -813,10 +1772,15 @@ function Minimap({
             </circle>
           );
         })}
+
+        {/* Fog of war overlay - darken inactive areas */}
+        <rect x="-120" y="-20" width="600" height="340" fill="url(#fogOfWar)" />
       </svg>
     </div>
   );
 }
+
+// ─── ALERT FEED ──────────────────────────────────────────────────────────────
 
 function AlertFeed({ events }: { events: AlertEvent[] }) {
   const typeColors: Record<string, string> = {
@@ -828,25 +1792,34 @@ function AlertFeed({ events }: { events: AlertEvent[] }) {
 
   return (
     <div
-      className="absolute bottom-4 right-4 z-30 border rounded-lg overflow-hidden"
+      className="absolute bottom-4 right-4 z-30 overflow-hidden"
       style={{
-        width: 360,
-        maxHeight: 200,
-        background: "rgba(5, 5, 8, 0.85)",
-        borderColor: "rgba(6, 182, 212, 0.3)",
-        backdropFilter: "blur(8px)",
+        width: 370,
+        maxHeight: 210,
+        background: "rgba(5, 5, 8, 0.9)",
+        border: "2px solid rgba(6, 182, 212, 0.2)",
+        borderRadius: 4,
+        boxShadow: "0 0 15px rgba(6, 182, 212, 0.05), inset 0 0 30px rgba(0,0,0,0.5)",
       }}
     >
+      {/* Metallic border top */}
       <div
-        className="px-3 py-1.5 text-[9px] uppercase tracking-widest border-b flex items-center gap-2"
         style={{
-          color: "rgba(6, 182, 212, 0.7)",
-          borderColor: "rgba(6, 182, 212, 0.15)",
+          height: 2,
+          background: "linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.4), transparent)",
+        }}
+      />
+      <div
+        className="px-3 py-1.5 text-[8px] uppercase tracking-[0.2em] font-bold flex items-center gap-2"
+        style={{
+          color: "rgba(6, 182, 212, 0.6)",
+          borderBottom: "1px solid rgba(6, 182, 212, 0.1)",
+          background: "rgba(6, 182, 212, 0.02)",
         }}
       >
         <span
           className="inline-block w-1.5 h-1.5 rounded-full"
-          style={{ background: "#22c55e" }}
+          style={{ background: "#22c55e", boxShadow: "0 0 4px #22c55e" }}
         />
         LIVE FEED
       </div>
@@ -864,8 +1837,8 @@ function AlertFeed({ events }: { events: AlertEvent[] }) {
             >
               <span style={{ color: "rgba(255,255,255,0.3)" }}>{evt.time}</span>
               <span
-                className="inline-block w-1 h-1 rounded-full mt-1.5 flex-shrink-0"
-                style={{ background: typeColors[evt.type] }}
+                className="inline-block w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0"
+                style={{ background: typeColors[evt.type], boxShadow: `0 0 3px ${typeColors[evt.type]}` }}
               />
               <span style={{ color: typeColors[evt.type], opacity: 0.9 }}>
                 {evt.message}
@@ -877,6 +1850,8 @@ function AlertFeed({ events }: { events: AlertEvent[] }) {
     </div>
   );
 }
+
+// ─── BUILDING PANEL (StarCraft info panel style) ─────────────────────────────
 
 function BuildingPanel({
   building,
@@ -891,19 +1866,32 @@ function BuildingPanel({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 400, opacity: 0 }}
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="absolute top-16 right-4 z-40 border rounded-xl overflow-hidden"
+      className="absolute top-16 right-4 z-40 overflow-hidden"
       style={{
-        width: 320,
-        background: "rgba(5, 5, 8, 0.92)",
-        borderColor: building.color + "55",
-        backdropFilter: "blur(12px)",
-        boxShadow: `0 0 30px ${building.glowColor}, inset 0 1px 0 rgba(255,255,255,0.05)`,
+        width: 340,
+        background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
+        border: `2px solid ${building.color}44`,
+        borderRadius: 4,
+        boxShadow: `0 0 30px ${building.glowColor}, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}
     >
+      {/* Metallic top border */}
+      <div
+        style={{
+          height: 3,
+          background: `linear-gradient(90deg, transparent, ${building.color}, transparent)`,
+          opacity: 0.6,
+        }}
+      />
+
+      {/* Beveled corner accents */}
+      <div className="absolute top-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${building.color}66`, borderTop: `2px solid ${building.color}66` }} />
+      <div className="absolute top-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${building.color}66`, borderTop: `2px solid ${building.color}66` }} />
+
       {/* Header */}
       <div
-        className="p-4 border-b"
-        style={{ borderColor: building.color + "22" }}
+        className="p-4"
+        style={{ borderBottom: `1px solid ${building.color}22`, background: `linear-gradient(180deg, ${building.color}08, transparent)` }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -911,11 +1899,11 @@ function BuildingPanel({
               className="w-3 h-3 rounded-full"
               style={{
                 background: building.color,
-                boxShadow: `0 0 8px ${building.glowColor}`,
+                boxShadow: `0 0 8px ${building.glowColor}, 0 0 16px ${building.glowColor}`,
               }}
             />
             <span
-              className="text-sm font-bold"
+              className="text-sm font-bold uppercase tracking-wider"
               style={{
                 color: building.color,
                 textShadow: `0 0 10px ${building.glowColor}`,
@@ -926,8 +1914,8 @@ function BuildingPanel({
           </div>
           <button
             onClick={onClose}
-            className="text-xs opacity-40 hover:opacity-100 transition-opacity px-2 py-1"
-            style={{ color: "#fff" }}
+            className="text-[9px] uppercase tracking-wider opacity-40 hover:opacity-100 transition-opacity px-2 py-1"
+            style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2 }}
           >
             ESC
           </button>
@@ -940,16 +1928,19 @@ function BuildingPanel({
         </p>
       </div>
 
-      {/* Stats */}
+      {/* Stats (StarCraft resource counter style) */}
       <div className="p-4 grid grid-cols-3 gap-3">
         {[
-          { label: "Tests", value: building.stats.tests, color: "#22c55e" },
-          { label: "Deploys", value: building.stats.deploys, color: "#3b82f6" },
-          { label: "Uptime", value: building.stats.uptime, color: "#e8a019" },
+          { label: "Tests", value: building.stats.tests, color: "#22c55e", icon: ">" },
+          { label: "Deploys", value: building.stats.deploys, color: "#3b82f6", icon: "^" },
+          { label: "Uptime", value: building.stats.uptime, color: "#e8a019", icon: "~" },
         ].map((stat) => (
-          <div key={stat.label} className="text-center">
+          <div key={stat.label} className="text-center p-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 3 }}>
+            <div className="text-[8px] uppercase tracking-wider mb-1" style={{ color: stat.color, opacity: 0.7 }}>
+              {stat.icon} {stat.label}
+            </div>
             <div
-              className="text-lg font-bold"
+              className="text-lg font-bold tabular-nums"
               style={{
                 color: stat.color,
                 textShadow: `0 0 8px ${stat.color}44`,
@@ -957,22 +1948,14 @@ function BuildingPanel({
             >
               {stat.value}
             </div>
-            <div
-              className="text-[9px] uppercase tracking-wider"
-              style={{ color: "rgba(255,255,255,0.35)" }}
-            >
-              {stat.label}
-            </div>
           </div>
         ))}
       </div>
 
       {/* Status */}
-      <div
-        className="px-4 pb-4 flex items-center gap-2"
-      >
+      <div className="px-4 pb-4 flex items-center gap-2">
         <div
-          className="px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold"
+          className="px-3 py-1 text-[9px] uppercase tracking-wider font-bold"
           style={{
             background:
               building.status === "active"
@@ -993,17 +1976,24 @@ function BuildingPanel({
                 ? "rgba(245, 158, 11, 0.3)"
                 : "rgba(107, 114, 128, 0.3)"
             }`,
+            borderRadius: 2,
           }}
         >
           {building.status}
         </div>
         <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.3)" }}>
-          Grid [{building.gridX}, {building.gridY}]
+          Sector [{building.gridX}, {building.gridY}]
         </span>
       </div>
+
+      {/* Bottom metallic border */}
+      <div className="absolute bottom-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${building.color}44`, borderBottom: `2px solid ${building.color}44` }} />
+      <div className="absolute bottom-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${building.color}44`, borderBottom: `2px solid ${building.color}44` }} />
     </motion.div>
   );
 }
+
+// ─── WORKER PANEL (Pokemon-style info card) ──────────────────────────────────
 
 function WorkerPanel({
   worker,
@@ -1016,6 +2006,7 @@ function WorkerPanel({
 }) {
   const current = buildings.find((b) => b.id === worker.currentBuildingId);
   const target = buildings.find((b) => b.id === worker.targetBuildingId);
+  const config = WORKER_TYPE_CONFIG[worker.type];
 
   return (
     <motion.div
@@ -1023,46 +2014,94 @@ function WorkerPanel({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 400, opacity: 0 }}
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="absolute top-16 right-4 z-40 border rounded-xl overflow-hidden"
+      className="absolute top-16 right-4 z-40 overflow-hidden"
       style={{
-        width: 320,
-        background: "rgba(5, 5, 8, 0.92)",
-        borderColor: worker.color + "55",
-        backdropFilter: "blur(12px)",
-        boxShadow: `0 0 30px ${worker.color}33, inset 0 1px 0 rgba(255,255,255,0.05)`,
+        width: 340,
+        background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
+        border: `2px solid ${config.color}44`,
+        borderRadius: 4,
+        boxShadow: `0 0 30px ${config.color}33, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}
     >
+      {/* Metallic top border */}
+      <div
+        style={{
+          height: 3,
+          background: `linear-gradient(90deg, transparent, ${config.color}, transparent)`,
+          opacity: 0.6,
+        }}
+      />
+
+      {/* Corner accents */}
+      <div className="absolute top-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${config.color}66`, borderTop: `2px solid ${config.color}66` }} />
+      <div className="absolute top-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${config.color}66`, borderTop: `2px solid ${config.color}66` }} />
+
       {/* Header */}
       <div
-        className="p-4 border-b"
-        style={{ borderColor: worker.color + "22" }}
+        className="p-4"
+        style={{ borderBottom: `1px solid ${config.color}22`, background: `linear-gradient(180deg, ${config.color}08, transparent)` }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className="w-3 h-3 rounded-full"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
               style={{
-                background: worker.color,
-                boxShadow: `0 0 8px ${worker.color}88`,
-              }}
-            />
-            <span
-              className="text-sm font-bold"
-              style={{
-                color: worker.color,
-                textShadow: `0 0 10px ${worker.color}55`,
+                background: `${config.color}20`,
+                color: config.color,
+                border: `1px solid ${config.color}44`,
+                boxShadow: `0 0 12px ${config.color}33`,
               }}
             >
-              Worker {worker.name}
-            </span>
+              {config.icon}
+            </div>
+            <div>
+              <div
+                className="text-sm font-bold"
+                style={{
+                  color: config.color,
+                  textShadow: `0 0 10px ${config.color}55`,
+                }}
+              >
+                {worker.name}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[9px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  {config.label}
+                </span>
+                <span className="text-[9px] font-bold px-1.5 py-0.5" style={{ background: `${config.color}15`, color: config.color, borderRadius: 3, border: `1px solid ${config.color}33` }}>
+                  Lv.{worker.level}
+                </span>
+              </div>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-xs opacity-40 hover:opacity-100 transition-opacity px-2 py-1"
-            style={{ color: "#fff" }}
+            className="text-[9px] uppercase tracking-wider opacity-40 hover:opacity-100 transition-opacity px-2 py-1"
+            style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2 }}
           >
             ESC
           </button>
+        </div>
+      </div>
+
+      {/* XP bar */}
+      <div className="px-4 pt-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
+            XP
+          </span>
+          <span className="text-[9px]" style={{ color: "#eab308" }}>
+            {worker.xp}/100
+          </span>
+        </div>
+        <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: "linear-gradient(90deg, #eab308, #f59e0b)", boxShadow: "0 0 6px #eab30866" }}
+            initial={{ width: 0 }}
+            animate={{ width: `${worker.xp}%` }}
+            transition={{ duration: 0.5 }}
+          />
         </div>
       </div>
 
@@ -1081,25 +2120,19 @@ function WorkerPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div
-              className="text-[9px] uppercase tracking-wider mb-1"
-              style={{ color: "rgba(255,255,255,0.35)" }}
-            >
+          <div className="p-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 3 }}>
+            <div className="text-[8px] uppercase tracking-wider mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>
               From
             </div>
-            <div className="text-[11px]" style={{ color: current?.color }}>
+            <div className="text-[11px] font-bold" style={{ color: current?.color }}>
               {current?.shortName}
             </div>
           </div>
-          <div>
-            <div
-              className="text-[9px] uppercase tracking-wider mb-1"
-              style={{ color: "rgba(255,255,255,0.35)" }}
-            >
+          <div className="p-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 3 }}>
+            <div className="text-[8px] uppercase tracking-wider mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>
               To
             </div>
-            <div className="text-[11px]" style={{ color: target?.color }}>
+            <div className="text-[11px] font-bold" style={{ color: target?.color }}>
               {target?.shortName}
             </div>
           </div>
@@ -1108,26 +2141,17 @@ function WorkerPanel({
         {/* Progress bar */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span
-              className="text-[9px] uppercase tracking-wider"
-              style={{ color: "rgba(255,255,255,0.35)" }}
-            >
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>
               Progress
             </span>
-            <span
-              className="text-[10px] font-bold"
-              style={{ color: worker.color }}
-            >
-              {worker.progress}%
+            <span className="text-[10px] font-bold tabular-nums" style={{ color: config.color }}>
+              {Math.round(worker.progress)}%
             </span>
           </div>
-          <div
-            className="h-1.5 rounded-full overflow-hidden"
-            style={{ background: "rgba(255,255,255,0.05)" }}
-          >
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
             <motion.div
               className="h-full rounded-full"
-              style={{ background: worker.color }}
+              style={{ background: config.color, boxShadow: `0 0 6px ${config.color}66` }}
               initial={{ width: 0 }}
               animate={{ width: `${worker.progress}%` }}
               transition={{ duration: 0.5 }}
@@ -1138,11 +2162,12 @@ function WorkerPanel({
         {/* Status badge */}
         <div className="flex items-center gap-2">
           <div
-            className="px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold"
+            className="px-3 py-1 text-[9px] uppercase tracking-wider font-bold"
             style={{
-              background: `${worker.color}15`,
-              color: worker.color,
-              border: `1px solid ${worker.color}33`,
+              background: `${config.color}15`,
+              color: config.color,
+              border: `1px solid ${config.color}33`,
+              borderRadius: 2,
             }}
           >
             {worker.status}
@@ -1150,10 +2175,10 @@ function WorkerPanel({
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons (StarCraft style) */}
       <div
-        className="p-4 border-t grid grid-cols-3 gap-2"
-        style={{ borderColor: "rgba(255,255,255,0.05)" }}
+        className="p-4 grid grid-cols-3 gap-2"
+        style={{ borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(0,0,0,0.2)" }}
       >
         {[
           { label: "Resume", color: "#22c55e" },
@@ -1162,20 +2187,27 @@ function WorkerPanel({
         ].map((action) => (
           <button
             key={action.label}
-            className="py-1.5 rounded text-[9px] uppercase tracking-wider font-bold transition-all hover:brightness-125"
+            className="py-1.5 text-[9px] uppercase tracking-wider font-bold transition-all hover:brightness-125"
             style={{
-              background: `${action.color}15`,
+              background: `${action.color}10`,
               color: action.color,
               border: `1px solid ${action.color}33`,
+              borderRadius: 2,
             }}
           >
             {action.label}
           </button>
         ))}
       </div>
+
+      {/* Bottom corners */}
+      <div className="absolute bottom-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${config.color}44`, borderBottom: `2px solid ${config.color}44` }} />
+      <div className="absolute bottom-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${config.color}44`, borderBottom: `2px solid ${config.color}44` }} />
     </motion.div>
   );
 }
+
+// ─── HUD TOP BAR (StarCraft style) ──────────────────────────────────────────
 
 function HUDTopBar({
   time,
@@ -1193,11 +2225,11 @@ function HUDTopBar({
       className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-3"
       style={{
         background:
-          "linear-gradient(180deg, rgba(5,5,8,0.95) 0%, rgba(5,5,8,0.7) 80%, transparent 100%)",
-        backdropFilter: "blur(4px)",
+          "linear-gradient(180deg, rgba(5,5,8,0.97) 0%, rgba(5,5,8,0.8) 70%, transparent 100%)",
+        borderBottom: "1px solid rgba(6, 182, 212, 0.1)",
       }}
     >
-      {/* Left — Title */}
+      {/* Left -- Title */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div
@@ -1217,47 +2249,45 @@ function HUDTopBar({
             MISSION CONTROL
           </span>
         </div>
-        <span
-          className="text-xs"
-          style={{ color: "rgba(255,255,255,0.25)" }}
-        >
+        <span className="text-xs" style={{ color: "rgba(255,255,255,0.15)" }}>
           |
         </span>
         <span
           className="text-[10px] uppercase tracking-wider"
-          style={{ color: "rgba(6, 182, 212, 0.6)" }}
+          style={{ color: "rgba(6, 182, 212, 0.5)" }}
         >
-          Isometric View
+          Tactical View
         </span>
       </div>
 
-      {/* Center — Clock */}
+      {/* Center -- Clock */}
       <div
-        className="text-sm font-bold tabular-nums"
+        className="text-sm font-bold tabular-nums px-4 py-1"
         style={{
           color: "rgba(6, 182, 212, 0.8)",
           textShadow: "0 0 10px rgba(6, 182, 212, 0.3)",
+          background: "rgba(6, 182, 212, 0.03)",
+          border: "1px solid rgba(6, 182, 212, 0.1)",
+          borderRadius: 3,
         }}
       >
         {time}
       </div>
 
-      {/* Right — Stats */}
-      <div className="flex items-center gap-5">
+      {/* Right -- StarCraft resource counters */}
+      <div className="flex items-center gap-4">
         {[
-          { label: "Active", value: activeCount, color: "#22c55e" },
-          { label: "Completed", value: completedCount, color: "#06b6d4" },
-          { label: "Tests", value: testCount, color: "#8b5cf6" },
+          { label: "WORKERS", value: activeCount, color: "#22c55e", icon: ">" },
+          { label: "COMPLETED", value: completedCount, color: "#06b6d4", icon: "+" },
+          { label: "TESTS", value: testCount, color: "#8b5cf6", icon: "#" },
         ].map((stat) => (
-          <div key={stat.label} className="flex items-center gap-1.5">
-            <span
-              className="text-[9px] uppercase tracking-wider"
-              style={{ color: "rgba(255,255,255,0.3)" }}
-            >
+          <div key={stat.label} className="flex items-center gap-1.5 px-2 py-0.5" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 2 }}>
+            <span className="text-[9px] font-bold" style={{ color: stat.color }}>{stat.icon}</span>
+            <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
               {stat.label}
             </span>
             <span
-              className="text-xs font-bold"
+              className="text-xs font-bold tabular-nums"
               style={{
                 color: stat.color,
                 textShadow: `0 0 8px ${stat.color}44`,
@@ -1272,24 +2302,28 @@ function HUDTopBar({
   );
 }
 
+// ─── RESOURCE BAR (StarCraft style) ──────────────────────────────────────────
+
 function ResourceBar() {
   const resources = [
-    { label: "API Tokens", value: "847K", max: "1M", pct: 84.7, color: "#e8a019" },
-    { label: "Session Cost", value: "$2.14", max: "$10", pct: 21.4, color: "#06b6d4" },
-    { label: "Uptime", value: "6d 14h", max: "", pct: 95, color: "#22c55e" },
+    { label: "API Tokens", value: "847K", max: "1M", pct: 84.7, color: "#e8a019", icon: "T" },
+    { label: "Session Cost", value: "$2.14", max: "$10", pct: 21.4, color: "#06b6d4", icon: "$" },
+    { label: "Uptime", value: "6d 14h", max: "", pct: 95, color: "#22c55e", icon: "^" },
   ];
 
   return (
     <div
-      className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-6 px-5 py-2 rounded-full border"
+      className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-5 px-5 py-2"
       style={{
-        background: "rgba(5, 5, 8, 0.8)",
-        borderColor: "rgba(255,255,255,0.06)",
-        backdropFilter: "blur(8px)",
+        background: "rgba(5, 5, 8, 0.85)",
+        border: "1px solid rgba(6, 182, 212, 0.1)",
+        borderRadius: 3,
+        boxShadow: "0 2px 10px rgba(0,0,0,0.5)",
       }}
     >
       {resources.map((r) => (
         <div key={r.label} className="flex items-center gap-2">
+          <span className="text-[9px] font-bold" style={{ color: r.color }}>{r.icon}</span>
           <span
             className="text-[8px] uppercase tracking-wider"
             style={{ color: "rgba(255,255,255,0.3)" }}
@@ -1297,14 +2331,14 @@ function ResourceBar() {
             {r.label}
           </span>
           <div
-            className="w-16 h-1 rounded-full overflow-hidden"
-            style={{ background: "rgba(255,255,255,0.05)" }}
+            className="w-20 h-1.5 rounded-sm overflow-hidden"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.03)" }}
           >
             <div
-              className="h-full rounded-full"
+              className="h-full"
               style={{
                 width: `${r.pct}%`,
-                background: r.color,
+                background: `linear-gradient(90deg, ${r.color}88, ${r.color})`,
                 boxShadow: `0 0 6px ${r.color}66`,
               }}
             />
@@ -1318,6 +2352,110 @@ function ResourceBar() {
         </div>
       ))}
     </div>
+  );
+}
+
+// ─── COMPLETION PARTICLES ────────────────────────────────────────────────────
+
+function CompletionParticles({
+  workers,
+  buildings,
+}: {
+  workers: Worker[];
+  buildings: Building[];
+}) {
+  const [bursts, setBursts] = useState<
+    { id: string; x: number; y: number; color: string }[]
+  >([]);
+
+  const prevProgress = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    workers.forEach((w) => {
+      const prev = prevProgress.current[w.id] ?? w.progress;
+      if (prev > 80 && w.progress < 10) {
+        const target = buildings.find((b) => b.id === w.currentBuildingId);
+        if (target) {
+          const pos = gridToIso(target.gridX, target.gridY);
+          const burst = {
+            id: `burst-${Date.now()}-${w.id}`,
+            x: pos.x + 960,
+            y: pos.y + 300,
+            color: WORKER_TYPE_CONFIG[w.type].color,
+          };
+          setBursts((prev) => [...prev, burst]);
+          setTimeout(() => {
+            setBursts((prev) =>
+              prev.filter((b) => b.id !== burst.id)
+            );
+          }, 1200);
+        }
+      }
+      prevProgress.current[w.id] = w.progress;
+    });
+  }, [workers, buildings]);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-20">
+      <AnimatePresence>
+        {bursts.map((burst) => (
+          <BurstEffect
+            key={burst.id}
+            x={burst.x}
+            y={burst.y}
+            color={burst.color}
+          />
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function BurstEffect({
+  x,
+  y,
+  color,
+}: {
+  x: number;
+  y: number;
+  color: string;
+}) {
+  const sparks = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, i) => ({
+        id: i,
+        angle: (i / 12) * Math.PI * 2,
+        dist: 25 + Math.random() * 40,
+        size: 2 + Math.random() * 4,
+      })),
+    []
+  );
+
+  return (
+    <>
+      {sparks.map((s) => (
+        <motion.div
+          key={s.id}
+          className="absolute rounded-full"
+          style={{
+            left: x,
+            top: y,
+            width: s.size,
+            height: s.size,
+            background: color,
+            boxShadow: `0 0 8px ${color}`,
+          }}
+          initial={{ opacity: 1, x: 0, y: 0 }}
+          animate={{
+            opacity: 0,
+            x: Math.cos(s.angle) * s.dist,
+            y: Math.sin(s.angle) * s.dist,
+          }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        />
+      ))}
+    </>
   );
 }
 
@@ -1355,6 +2493,9 @@ export default function GamePage() {
           let newTarget = w.targetBuildingId;
           let newTask = w.task;
           let newSpeech = w.speechBubble;
+          let newLevel = w.level;
+          let newXp = w.xp;
+          let newEvolving = false;
 
           // Random speech bubbles
           if (Math.random() < 0.05) {
@@ -1365,7 +2506,6 @@ export default function GamePage() {
           }
 
           if (newProgress >= 100) {
-            // Arrived — pick new destination
             newProgress = 0;
             newCurrent = w.targetBuildingId;
             const others = BUILDINGS.filter((b) => b.id !== newCurrent);
@@ -1386,6 +2526,15 @@ export default function GamePage() {
             ];
             newTask = tasks[Math.floor(Math.random() * tasks.length)];
             newSpeech = "Job's done!";
+
+            // XP gain on task completion
+            newXp = w.xp + Math.floor(Math.random() * 8 + 3);
+            if (newXp >= 100) {
+              newXp = 0;
+              newLevel = w.level + 1;
+              newEvolving = true;
+              newSpeech = "LEVEL UP!";
+            }
           }
 
           return {
@@ -1396,6 +2545,9 @@ export default function GamePage() {
             targetBuildingId: newTarget,
             task: newTask,
             speechBubble: newSpeech,
+            level: newLevel,
+            xp: newXp,
+            evolving: newEvolving,
           };
         })
       );
@@ -1403,6 +2555,17 @@ export default function GamePage() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Clear evolving state after animation
+  useEffect(() => {
+    const evolvingWorkers = workers.filter((w) => w.evolving);
+    if (evolvingWorkers.length > 0) {
+      const timeout = setTimeout(() => {
+        setWorkers((prev) => prev.map((w) => ({ ...w, evolving: false })));
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [workers]);
 
   // New events
   useEffect(() => {
@@ -1479,7 +2642,6 @@ export default function GamePage() {
     (w) => w.status === "moving" || w.status === "working"
   ).length;
 
-  // Tooltip for hovered building
   const hoveredBuildingData = BUILDINGS.find((b) => b.id === hoveredBuilding);
 
   return (
@@ -1490,29 +2652,57 @@ export default function GamePage() {
         fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
       }}
     >
-      {/* Scanline overlay */}
+      {/* Vignette (dark edges) */}
+      <div
+        className="fixed inset-0 pointer-events-none z-[55]"
+        style={{
+          background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 80%, rgba(0,0,0,0.7) 100%)",
+        }}
+      />
+
+      {/* Scanline overlay (more prominent) */}
       <div
         className="fixed inset-0 pointer-events-none z-50"
         style={{
           background:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.015) 2px, rgba(0, 255, 255, 0.015) 4px)",
+            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.025) 2px, rgba(0, 255, 255, 0.025) 4px)",
+          mixBlendMode: "overlay",
         }}
       />
 
-      {/* Subtle grid background */}
+      {/* CRT flicker effect */}
+      <div
+        className="fixed inset-0 pointer-events-none z-50"
+        style={{
+          background: "rgba(6, 182, 212, 0.01)",
+          animation: "crtFlicker 0.15s infinite alternate",
+        }}
+      />
+
+      {/* Tech grid background pattern */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
           backgroundImage: `
             linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px)
+            linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+            linear-gradient(rgba(6, 182, 212, 0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(6, 182, 212, 0.015) 1px, transparent 1px)
           `,
-          backgroundSize: "40px 40px",
+          backgroundSize: "80px 80px, 80px 80px, 20px 20px, 20px 20px",
         }}
       />
 
       {/* Background particles */}
       <BackgroundParticles />
+
+      {/* Edge fog/atmosphere */}
+      <div className="fixed inset-0 pointer-events-none z-[5]">
+        <div className="absolute top-0 left-0 right-0 h-32" style={{ background: "linear-gradient(180deg, rgba(5,5,8,0.8) 0%, transparent 100%)" }} />
+        <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: "linear-gradient(0deg, rgba(5,5,8,0.8) 0%, transparent 100%)" }} />
+        <div className="absolute top-0 left-0 bottom-0 w-32" style={{ background: "linear-gradient(90deg, rgba(5,5,8,0.6) 0%, transparent 100%)" }} />
+        <div className="absolute top-0 right-0 bottom-0 w-32" style={{ background: "linear-gradient(270deg, rgba(5,5,8,0.6) 0%, transparent 100%)" }} />
+      </div>
 
       {/* HUD */}
       <HUDTopBar
@@ -1542,8 +2732,13 @@ export default function GamePage() {
             transformOrigin: "center center",
           }}
         >
+          <SvgDefs />
+
           {/* Center the iso world */}
           <g transform="translate(960, 300)">
+            {/* Force field dome */}
+            <ForceFieldDome />
+
             {/* Grid dots */}
             {Array.from({ length: 15 }, (_, gx) =>
               Array.from({ length: 15 }, (_, gy) => {
@@ -1610,23 +2805,24 @@ export default function GamePage() {
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}
-            className="fixed z-40 pointer-events-none px-3 py-2 rounded-lg border"
+            className="fixed z-40 pointer-events-none px-3 py-2"
             style={{
               top: "50%",
               left: "50%",
               transform: "translate(-50%, -50%)",
-              background: "rgba(5, 5, 8, 0.9)",
-              borderColor: hoveredBuildingData.color + "44",
+              background: "rgba(5, 5, 8, 0.95)",
+              border: `1px solid ${hoveredBuildingData.color}44`,
+              borderRadius: 3,
               boxShadow: `0 0 20px ${hoveredBuildingData.glowColor}`,
             }}
           >
             <div className="flex items-center gap-2 mb-1">
               <div
                 className="w-2 h-2 rounded-full"
-                style={{ background: hoveredBuildingData.color }}
+                style={{ background: hoveredBuildingData.color, boxShadow: `0 0 6px ${hoveredBuildingData.glowColor}` }}
               />
               <span
-                className="text-xs font-bold"
+                className="text-xs font-bold uppercase tracking-wider"
                 style={{ color: hoveredBuildingData.color }}
               >
                 {hoveredBuildingData.name}
@@ -1668,112 +2864,16 @@ export default function GamePage() {
       {/* Alert feed */}
       <AlertFeed events={events} />
 
-      {/* Burst particles on worker completion — visual flair */}
+      {/* Burst particles on worker completion */}
       <CompletionParticles workers={workers} buildings={BUILDINGS} />
-    </div>
-  );
-}
 
-// Burst particles when workers complete tasks
-function CompletionParticles({
-  workers,
-  buildings,
-}: {
-  workers: Worker[];
-  buildings: Building[];
-}) {
-  const [bursts, setBursts] = useState<
-    { id: string; x: number; y: number; color: string }[]
-  >([]);
-
-  const prevProgress = useRef<Record<string, number>>({});
-
-  useEffect(() => {
-    workers.forEach((w) => {
-      const prev = prevProgress.current[w.id] ?? w.progress;
-      if (prev > 80 && w.progress < 10) {
-        // Worker just completed (progress reset)
-        const target = buildings.find((b) => b.id === w.currentBuildingId);
-        if (target) {
-          const pos = gridToIso(target.gridX, target.gridY);
-          const burst = {
-            id: `burst-${Date.now()}-${w.id}`,
-            x: pos.x + 960, // match SVG translation
-            y: pos.y + 300,
-            color: w.color,
-          };
-          setBursts((prev) => [...prev, burst]);
-          setTimeout(() => {
-            setBursts((prev) =>
-              prev.filter((b) => b.id !== burst.id)
-            );
-          }, 1200);
+      {/* CSS animation for CRT flicker */}
+      <style jsx global>{`
+        @keyframes crtFlicker {
+          0% { opacity: 0.97; }
+          100% { opacity: 1; }
         }
-      }
-      prevProgress.current[w.id] = w.progress;
-    });
-  }, [workers, buildings]);
-
-  return (
-    <div className="fixed inset-0 pointer-events-none z-20">
-      <AnimatePresence>
-        {bursts.map((burst) => (
-          <BurstEffect
-            key={burst.id}
-            x={burst.x}
-            y={burst.y}
-            color={burst.color}
-          />
-        ))}
-      </AnimatePresence>
+      `}</style>
     </div>
-  );
-}
-
-function BurstEffect({
-  x,
-  y,
-  color,
-}: {
-  x: number;
-  y: number;
-  color: string;
-}) {
-  const sparks = useMemo(
-    () =>
-      Array.from({ length: 8 }, (_, i) => ({
-        id: i,
-        angle: (i / 8) * Math.PI * 2,
-        dist: 20 + Math.random() * 30,
-        size: 2 + Math.random() * 3,
-      })),
-    []
-  );
-
-  return (
-    <>
-      {sparks.map((s) => (
-        <motion.div
-          key={s.id}
-          className="absolute rounded-full"
-          style={{
-            left: x,
-            top: y,
-            width: s.size,
-            height: s.size,
-            background: color,
-            boxShadow: `0 0 6px ${color}`,
-          }}
-          initial={{ opacity: 1, x: 0, y: 0 }}
-          animate={{
-            opacity: 0,
-            x: Math.cos(s.angle) * s.dist,
-            y: Math.sin(s.angle) * s.dist,
-          }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        />
-      ))}
-    </>
   );
 }
