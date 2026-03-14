@@ -74,12 +74,11 @@ class CCLightWorker(BaseWorker):
 
         start_time = time.time()
 
-        # Build command — uses --no-input to prevent interactive prompts
+        # Build command — -p flag enables non-interactive print mode
         cmd = [
             CLAUDE_CLI_PATH,
             "-p",
             prompt,
-            "--no-input",
         ]
 
         try:

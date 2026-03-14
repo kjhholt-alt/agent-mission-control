@@ -225,7 +225,7 @@ class ScoutAgent:
 
         try:
             result = subprocess.run(
-                [CLAUDE_CLI_PATH, "-p", prompt, "--no-input"],
+                [CLAUDE_CLI_PATH, "-p", prompt],
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 min max
