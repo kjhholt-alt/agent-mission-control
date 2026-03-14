@@ -710,16 +710,16 @@ function WorkerPanel({
                 await fetch("/api/webhook", {
                   method: "POST",
                   headers: { "Content-Type": "application/json", "x-nexus-key": "nexus-hive-2026" },
-                  body: JSON.stringify({ event: "stop_worker", data: { worker_id: selectedWorkerData?.id } }),
+                  body: JSON.stringify({ event: "stop_worker", data: { worker_id: worker.id } }),
                 });
-                setSelectedWorker(null);
+                onClose();
               } else if (btn.action === "redirect") {
                 const newGoal = prompt("Enter new instructions for this worker:");
                 if (!newGoal) return;
                 await fetch("/api/webhook", {
                   method: "POST",
                   headers: { "Content-Type": "application/json", "x-nexus-key": "nexus-hive-2026" },
-                  body: JSON.stringify({ goal: newGoal, project: selectedWorkerData?.currentBuildingId }),
+                  body: JSON.stringify({ goal: newGoal, project: "nexus" }),
                 });
                 alert("New task created! Worker will pick it up shortly.");
               } else if (btn.action === "resume") {
