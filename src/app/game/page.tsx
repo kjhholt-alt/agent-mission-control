@@ -1058,14 +1058,7 @@ export default function GamePage() {
         }}
       />
 
-      {/* CRT flicker effect */}
-      <div
-        className="fixed inset-0 pointer-events-none z-50"
-        style={{
-          background: "rgba(6, 182, 212, 0.01)",
-          animation: "crtFlicker 0.15s infinite alternate",
-        }}
-      />
+      {/* CRT flicker removed — was causing strobe effect with R3F */}
 
       {/* Tech grid background pattern */}
       <div

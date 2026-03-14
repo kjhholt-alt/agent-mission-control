@@ -18,20 +18,14 @@ export function PostProcessing() {
   return (
     <EffectComposer>
       <Bloom
-        luminanceThreshold={0.2}
-        luminanceSmoothing={0.9}
-        intensity={0.8}
+        luminanceThreshold={0.6}
+        luminanceSmoothing={0.4}
+        intensity={0.4}
         mipmapBlur
-      />
-      <ChromaticAberration
-        blendFunction={BlendFunction.NORMAL}
-        offset={new Vector2(0.0005, 0.0005)}
-        radialModulation={false}
-        modulationOffset={0}
       />
       <Vignette
         offset={0.3}
-        darkness={0.7}
+        darkness={0.5}
         blendFunction={BlendFunction.NORMAL}
       />
     </EffectComposer>
