@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -991,18 +992,19 @@ function IsometricBuilding({
         )}
       </circle>
 
-      {/* Label */}
+      {/* Label - uses CSS clamp for responsive sizing */}
       <text
         x={x}
         y={y - actualH - (isCmd ? 52 : 16)}
         textAnchor="middle"
         fill={isHovered || isSelected ? "#fff" : "rgba(255,255,255,0.7)"}
-        fontSize={isHovered || isSelected ? 11 : 9}
+        className="building-label"
         fontFamily="var(--font-mono), monospace"
         fontWeight={isHovered || isSelected ? "bold" : "normal"}
         style={{
           textShadow: `0 0 8px ${building.glowColor}`,
           transition: "all 0.2s",
+          fontSize: isHovered || isSelected ? 11 : 9,
         }}
       >
         {building.shortName}
@@ -1616,10 +1618,10 @@ function WorkerSprite({
 
 // ─── BACKGROUND ──────────────────────────────────────────────────────────────
 
-function BackgroundParticles() {
+function BackgroundParticles({ count = 60 }: { count?: number }) {
   const particles = useMemo(
     () =>
-      Array.from({ length: 60 }, (_, i) => ({
+      Array.from({ length: count }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
         y: Math.random() * 100,
@@ -1669,10 +1671,13 @@ function BackgroundParticles() {
 function Minimap({
   buildings,
   workers,
+  hidden,
 }: {
   buildings: Building[];
   workers: Worker[];
+  hidden?: boolean;
 }) {
+  if (hidden) return null;
   return (
     <div
       className="absolute bottom-4 left-4 z-30 overflow-hidden"
@@ -1782,7 +1787,10 @@ function Minimap({
 
 // ─── ALERT FEED ──────────────────────────────────────────────────────────────
 
-function AlertFeed({ events }: { events: AlertEvent[] }) {
+function AlertFeed({ events, isMobile }: { events: AlertEvent[]; isMobile?: boolean }) {
+  const [collapsed, setCollapsed] = useState(isMobile ? true : false);
+  const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
+
   const typeColors: Record<string, string> = {
     success: "#22c55e",
     info: "#06b6d4",
@@ -1790,18 +1798,44 @@ function AlertFeed({ events }: { events: AlertEvent[] }) {
     error: "#ef4444",
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setSwipeStartY(e.touches[0].clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (swipeStartY === null) return;
+    const dy = e.changedTouches[0].clientY - swipeStartY;
+    if (dy > 50) setCollapsed(true); // swipe down to close
+    if (dy < -50) setCollapsed(false); // swipe up to open
+    setSwipeStartY(null);
+  };
+
   return (
-    <div
-      className="absolute bottom-4 right-4 z-30 overflow-hidden"
+    <motion.div
+      className={`absolute z-30 overflow-hidden ${
+        isMobile ? "bottom-0 left-0 right-0" : "bottom-4 right-4"
+      }`}
       style={{
-        width: 370,
-        maxHeight: 210,
-        background: "rgba(5, 5, 8, 0.9)",
+        width: isMobile ? "100%" : 370,
+        maxHeight: isMobile ? (collapsed ? 36 : 220) : 210,
+        background: "rgba(5, 5, 8, 0.95)",
         border: "2px solid rgba(6, 182, 212, 0.2)",
-        borderRadius: 4,
+        borderRadius: isMobile ? "12px 12px 0 0" : 4,
         boxShadow: "0 0 15px rgba(6, 182, 212, 0.05), inset 0 0 30px rgba(0,0,0,0.5)",
+        transition: "max-height 0.3s ease",
       }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
+      {/* Swipe handle for mobile */}
+      {isMobile && (
+        <div
+          className="flex justify-center py-1 cursor-pointer"
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          <div className="w-8 h-1 rounded-full bg-zinc-600" />
+        </div>
+      )}
       {/* Metallic border top */}
       <div
         style={{
@@ -1816,38 +1850,46 @@ function AlertFeed({ events }: { events: AlertEvent[] }) {
           borderBottom: "1px solid rgba(6, 182, 212, 0.1)",
           background: "rgba(6, 182, 212, 0.02)",
         }}
+        onClick={() => isMobile && setCollapsed(!collapsed)}
       >
         <span
           className="inline-block w-1.5 h-1.5 rounded-full"
           style={{ background: "#22c55e", boxShadow: "0 0 4px #22c55e" }}
         />
         LIVE FEED
+        {isMobile && (
+          <span className="ml-auto text-[7px]" style={{ color: "rgba(255,255,255,0.3)" }}>
+            {collapsed ? "TAP TO EXPAND" : "SWIPE DOWN TO CLOSE"}
+          </span>
+        )}
       </div>
-      <div className="overflow-y-auto p-2 space-y-1" style={{ maxHeight: 170 }}>
-        <AnimatePresence initial={false}>
-          {events.map((evt) => (
-            <motion.div
-              key={evt.id}
-              initial={{ opacity: 0, x: 20, height: 0 }}
-              animate={{ opacity: 1, x: 0, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex items-start gap-2 text-[10px]"
-              style={{ fontFamily: "var(--font-mono), monospace" }}
-            >
-              <span style={{ color: "rgba(255,255,255,0.3)" }}>{evt.time}</span>
-              <span
-                className="inline-block w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0"
-                style={{ background: typeColors[evt.type], boxShadow: `0 0 3px ${typeColors[evt.type]}` }}
-              />
-              <span style={{ color: typeColors[evt.type], opacity: 0.9 }}>
-                {evt.message}
-              </span>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-    </div>
+      {(!isMobile || !collapsed) && (
+        <div className="overflow-y-auto p-2 space-y-1" style={{ maxHeight: isMobile ? 160 : 170 }}>
+          <AnimatePresence initial={false}>
+            {events.map((evt) => (
+              <motion.div
+                key={evt.id}
+                initial={{ opacity: 0, x: 20, height: 0 }}
+                animate={{ opacity: 1, x: 0, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3 }}
+                className={`flex items-start gap-2 ${isMobile ? "text-[9px]" : "text-[10px]"}`}
+                style={{ fontFamily: "var(--font-mono), monospace" }}
+              >
+                <span style={{ color: "rgba(255,255,255,0.3)" }}>{evt.time}</span>
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0"
+                  style={{ background: typeColors[evt.type], boxShadow: `0 0 3px ${typeColors[evt.type]}` }}
+                />
+                <span style={{ color: typeColors[evt.type], opacity: 0.9 }}>
+                  {evt.message}
+                </span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -1856,25 +1898,52 @@ function AlertFeed({ events }: { events: AlertEvent[] }) {
 function BuildingPanel({
   building,
   onClose,
+  isMobile,
 }: {
   building: Building;
   onClose: () => void;
+  isMobile?: boolean;
 }) {
+  const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setSwipeStartY(e.touches[0].clientY);
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (swipeStartY === null) return;
+    if (e.changedTouches[0].clientY - swipeStartY > 80) onClose();
+    setSwipeStartY(null);
+  };
+
   return (
     <motion.div
-      initial={{ x: 400, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 400, opacity: 0 }}
+      initial={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
+      animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+      exit={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="absolute top-16 right-4 z-40 overflow-hidden"
+      className={`absolute z-40 overflow-hidden ${
+        isMobile
+          ? "bottom-0 left-0 right-0"
+          : "top-16 right-4"
+      }`}
       style={{
-        width: 340,
+        width: isMobile ? "100%" : 340,
+        maxHeight: isMobile ? "70vh" : undefined,
+        borderRadius: isMobile ? "16px 16px 0 0" : 4,
         background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
         border: `2px solid ${building.color}44`,
         borderRadius: 4,
         boxShadow: `0 0 30px ${building.glowColor}, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
+      {/* Swipe handle for mobile */}
+      {isMobile && (
+        <div className="flex justify-center py-2">
+          <div className="w-10 h-1 rounded-full bg-zinc-600" />
+        </div>
+      )}
       {/* Metallic top border */}
       <div
         style={{
@@ -1999,30 +2068,56 @@ function WorkerPanel({
   worker,
   buildings,
   onClose,
+  isMobile,
 }: {
   worker: Worker;
   buildings: Building[];
   onClose: () => void;
+  isMobile?: boolean;
 }) {
   const current = buildings.find((b) => b.id === worker.currentBuildingId);
   const target = buildings.find((b) => b.id === worker.targetBuildingId);
   const config = WORKER_TYPE_CONFIG[worker.type];
+  const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setSwipeStartY(e.touches[0].clientY);
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (swipeStartY === null) return;
+    if (e.changedTouches[0].clientY - swipeStartY > 80) onClose();
+    setSwipeStartY(null);
+  };
 
   return (
     <motion.div
-      initial={{ x: 400, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 400, opacity: 0 }}
+      initial={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
+      animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+      exit={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="absolute top-16 right-4 z-40 overflow-hidden"
+      className={`absolute z-40 overflow-hidden ${
+        isMobile
+          ? "bottom-0 left-0 right-0"
+          : "top-16 right-4"
+      }`}
       style={{
-        width: 340,
+        width: isMobile ? "100%" : 340,
+        maxHeight: isMobile ? "70vh" : undefined,
+        borderRadius: isMobile ? "16px 16px 0 0" : 4,
         background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
         border: `2px solid ${config.color}44`,
         borderRadius: 4,
         boxShadow: `0 0 30px ${config.color}33, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
+      {/* Swipe handle for mobile */}
+      {isMobile && (
+        <div className="flex justify-center py-2">
+          <div className="w-10 h-1 rounded-full bg-zinc-600" />
+        </div>
+      )}
       {/* Metallic top border */}
       <div
         style={{
@@ -2214,33 +2309,43 @@ function HUDTopBar({
   activeCount,
   completedCount,
   testCount,
+  isMobile,
 }: {
   time: string;
   activeCount: number;
   completedCount: number;
   testCount: number;
+  isMobile?: boolean;
 }) {
+  const stats = [
+    { label: "WORKERS", value: activeCount, color: "#22c55e", icon: ">" },
+    { label: "COMPLETED", value: completedCount, color: "#06b6d4", icon: "+" },
+    { label: "TESTS", value: testCount, color: "#8b5cf6", icon: "#" },
+  ];
+
   return (
     <div
-      className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-3"
+      className={`absolute top-0 left-0 right-0 z-30 ${
+        isMobile ? "px-3 py-2" : "px-6 py-3"
+      }`}
       style={{
         background:
           "linear-gradient(180deg, rgba(5,5,8,0.97) 0%, rgba(5,5,8,0.8) 70%, transparent 100%)",
         borderBottom: "1px solid rgba(6, 182, 212, 0.1)",
       }}
     >
-      {/* Left -- Title */}
-      <div className="flex items-center gap-4">
+      <div className={`flex items-center justify-between ${isMobile ? "flex-wrap gap-1" : ""}`}>
+        {/* Left -- Title */}
         <div className="flex items-center gap-2">
           <div
-            className="w-2 h-2 rounded-full"
+            className="w-2 h-2 rounded-full flex-shrink-0"
             style={{
               background: "#22c55e",
               boxShadow: "0 0 8px rgba(34, 197, 94, 0.6)",
             }}
           />
           <span
-            className="text-sm font-bold tracking-[0.3em] uppercase"
+            className={`font-bold tracking-[0.2em] uppercase ${isMobile ? "text-[10px]" : "text-sm tracking-[0.3em]"}`}
             style={{
               color: "#e8a019",
               textShadow: "0 0 20px rgba(232, 160, 25, 0.4)",
@@ -2248,55 +2353,56 @@ function HUDTopBar({
           >
             MISSION CONTROL
           </span>
+          {!isMobile && (
+            <>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.15)" }}>|</span>
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: "rgba(6, 182, 212, 0.5)" }}>
+                Tactical View
+              </span>
+            </>
+          )}
         </div>
-        <span className="text-xs" style={{ color: "rgba(255,255,255,0.15)" }}>
-          |
-        </span>
-        <span
-          className="text-[10px] uppercase tracking-wider"
-          style={{ color: "rgba(6, 182, 212, 0.5)" }}
+
+        {/* Clock */}
+        <div
+          className={`font-bold tabular-nums ${isMobile ? "text-[10px] px-2 py-0.5" : "text-sm px-4 py-1"}`}
+          style={{
+            color: "rgba(6, 182, 212, 0.8)",
+            textShadow: "0 0 10px rgba(6, 182, 212, 0.3)",
+            background: "rgba(6, 182, 212, 0.03)",
+            border: "1px solid rgba(6, 182, 212, 0.1)",
+            borderRadius: 3,
+          }}
         >
-          Tactical View
-        </span>
-      </div>
+          {time}
+        </div>
 
-      {/* Center -- Clock */}
-      <div
-        className="text-sm font-bold tabular-nums px-4 py-1"
-        style={{
-          color: "rgba(6, 182, 212, 0.8)",
-          textShadow: "0 0 10px rgba(6, 182, 212, 0.3)",
-          background: "rgba(6, 182, 212, 0.03)",
-          border: "1px solid rgba(6, 182, 212, 0.1)",
-          borderRadius: 3,
-        }}
-      >
-        {time}
-      </div>
-
-      {/* Right -- StarCraft resource counters */}
-      <div className="flex items-center gap-4">
-        {[
-          { label: "WORKERS", value: activeCount, color: "#22c55e", icon: ">" },
-          { label: "COMPLETED", value: completedCount, color: "#06b6d4", icon: "+" },
-          { label: "TESTS", value: testCount, color: "#8b5cf6", icon: "#" },
-        ].map((stat) => (
-          <div key={stat.label} className="flex items-center gap-1.5 px-2 py-0.5" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 2 }}>
-            <span className="text-[9px] font-bold" style={{ color: stat.color }}>{stat.icon}</span>
-            <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
-              {stat.label}
-            </span>
-            <span
-              className="text-xs font-bold tabular-nums"
-              style={{
-                color: stat.color,
-                textShadow: `0 0 8px ${stat.color}44`,
-              }}
+        {/* Resource counters -- on mobile, wrap to second row with icons only */}
+        <div className={`flex items-center gap-2 ${isMobile ? "w-full justify-center mt-1" : "gap-4"}`}>
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className={`flex items-center gap-1 ${isMobile ? "px-1.5 py-0.5" : "gap-1.5 px-2 py-0.5"}`}
+              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 2 }}
             >
-              {stat.value}
-            </span>
-          </div>
-        ))}
+              <span className={`font-bold ${isMobile ? "text-[8px]" : "text-[9px]"}`} style={{ color: stat.color }}>{stat.icon}</span>
+              {!isMobile && (
+                <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  {stat.label}
+                </span>
+              )}
+              <span
+                className={`font-bold tabular-nums ${isMobile ? "text-[9px]" : "text-xs"}`}
+                style={{
+                  color: stat.color,
+                  textShadow: `0 0 8px ${stat.color}44`,
+                }}
+              >
+                {stat.value}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -2304,7 +2410,7 @@ function HUDTopBar({
 
 // ─── RESOURCE BAR (StarCraft style) ──────────────────────────────────────────
 
-function ResourceBar() {
+function ResourceBar({ isMobile }: { isMobile?: boolean }) {
   const resources = [
     { label: "API Tokens", value: "847K", max: "1M", pct: 84.7, color: "#e8a019", icon: "T" },
     { label: "Session Cost", value: "$2.14", max: "$10", pct: 21.4, color: "#06b6d4", icon: "$" },
@@ -2313,44 +2419,51 @@ function ResourceBar() {
 
   return (
     <div
-      className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-5 px-5 py-2"
-      style={{
-        background: "rgba(5, 5, 8, 0.85)",
-        border: "1px solid rgba(6, 182, 212, 0.1)",
-        borderRadius: 3,
-        boxShadow: "0 2px 10px rgba(0,0,0,0.5)",
-      }}
+      className={`absolute z-30 ${
+        isMobile
+          ? "top-[52px] left-2 right-2 overflow-x-auto"
+          : "top-14 left-1/2 -translate-x-1/2"
+      }`}
     >
-      {resources.map((r) => (
-        <div key={r.label} className="flex items-center gap-2">
-          <span className="text-[9px] font-bold" style={{ color: r.color }}>{r.icon}</span>
-          <span
-            className="text-[8px] uppercase tracking-wider"
-            style={{ color: "rgba(255,255,255,0.3)" }}
-          >
-            {r.label}
-          </span>
-          <div
-            className="w-20 h-1.5 rounded-sm overflow-hidden"
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.03)" }}
-          >
+      <div
+        className={`flex items-center ${isMobile ? "gap-3 px-3 py-1.5 min-w-max" : "gap-5 px-5 py-2"}`}
+        style={{
+          background: "rgba(5, 5, 8, 0.85)",
+          border: "1px solid rgba(6, 182, 212, 0.1)",
+          borderRadius: 3,
+          boxShadow: "0 2px 10px rgba(0,0,0,0.5)",
+        }}
+      >
+        {resources.map((r) => (
+          <div key={r.label} className="flex items-center gap-1.5">
+            <span className={`font-bold ${isMobile ? "text-[8px]" : "text-[9px]"}`} style={{ color: r.color }}>{r.icon}</span>
+            {!isMobile && (
+              <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
+                {r.label}
+              </span>
+            )}
             <div
-              className="h-full"
-              style={{
-                width: `${r.pct}%`,
-                background: `linear-gradient(90deg, ${r.color}88, ${r.color})`,
-                boxShadow: `0 0 6px ${r.color}66`,
-              }}
-            />
+              className={`h-1.5 rounded-sm overflow-hidden ${isMobile ? "w-12" : "w-20"}`}
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.03)" }}
+            >
+              <div
+                className="h-full"
+                style={{
+                  width: `${r.pct}%`,
+                  background: `linear-gradient(90deg, ${r.color}88, ${r.color})`,
+                  boxShadow: `0 0 6px ${r.color}66`,
+                }}
+              />
+            </div>
+            <span
+              className={`font-bold tabular-nums ${isMobile ? "text-[8px]" : "text-[9px]"}`}
+              style={{ color: r.color }}
+            >
+              {r.value}
+            </span>
           </div>
-          <span
-            className="text-[9px] font-bold tabular-nums"
-            style={{ color: r.color }}
-          >
-            {r.value}
-          </span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -2462,6 +2575,7 @@ function BurstEffect({
 // ─── MAIN PAGE ──────────────────────────────────────────────────────────────
 
 export default function GamePage() {
+  const isMobile = useIsMobile();
   const [time, setTime] = useState(formatTime());
   const [workers, setWorkers] = useState(INITIAL_WORKERS);
   const [events, setEvents] = useState(INITIAL_EVENTS);
@@ -2475,6 +2589,10 @@ export default function GamePage() {
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Touch state for pinch-to-zoom
+  const lastTouchDist = useRef<number | null>(null);
+  const lastTouchCenter = useRef<{ x: number; y: number } | null>(null);
 
   // Clock
   useEffect(() => {
@@ -2621,6 +2739,64 @@ export default function GamePage() {
     isDragging.current = false;
   }, []);
 
+  // Touch controls: drag to pan, pinch to zoom
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      isDragging.current = true;
+      lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      isDragging.current = false;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist.current = Math.sqrt(dx * dx + dy * dy);
+      lastTouchCenter.current = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && isDragging.current) {
+      const dx = e.touches[0].clientX - lastMouse.current.x;
+      const dy = e.touches[0].clientY - lastMouse.current.y;
+      lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      setCamera((prev) => ({
+        ...prev,
+        x: prev.x + dx,
+        y: prev.y + dy,
+      }));
+    } else if (e.touches.length === 2 && lastTouchDist.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const scale = dist / lastTouchDist.current;
+      lastTouchDist.current = dist;
+
+      // Also pan with two fingers
+      const center = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+      const panDx = lastTouchCenter.current ? center.x - lastTouchCenter.current.x : 0;
+      const panDy = lastTouchCenter.current ? center.y - lastTouchCenter.current.y : 0;
+      lastTouchCenter.current = center;
+
+      setCamera((prev) => ({
+        x: prev.x + panDx,
+        y: prev.y + panDy,
+        zoom: Math.max(0.3, Math.min(3, prev.zoom * scale)),
+      }));
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    isDragging.current = false;
+    lastTouchDist.current = null;
+    lastTouchCenter.current = null;
+  }, []);
+
   // Keyboard
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -2693,8 +2869,8 @@ export default function GamePage() {
         }}
       />
 
-      {/* Background particles */}
-      <BackgroundParticles />
+      {/* Background particles - reduced on mobile */}
+      <BackgroundParticles count={isMobile ? 30 : 60} />
 
       {/* Edge fog/atmosphere */}
       <div className="fixed inset-0 pointer-events-none z-[5]">
@@ -2710,8 +2886,9 @@ export default function GamePage() {
         activeCount={activeCount}
         completedCount={47}
         testCount={872}
+        isMobile={isMobile}
       />
-      <ResourceBar />
+      <ResourceBar isMobile={isMobile} />
 
       {/* Isometric viewport */}
       <div
@@ -2722,7 +2899,13 @@ export default function GamePage() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ cursor: isDragging.current ? "grabbing" : "grab" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          cursor: isDragging.current ? "grabbing" : "grab",
+          touchAction: "none",
+        }}
       >
         <svg
           width="100%"
@@ -2734,8 +2917,8 @@ export default function GamePage() {
         >
           <SvgDefs />
 
-          {/* Center the iso world */}
-          <g transform="translate(960, 300)">
+          {/* Center the iso world -- adjusted for screen size */}
+          <g transform={isMobile ? "translate(480, 200) scale(0.7)" : "translate(960, 300)"}>
             {/* Force field dome */}
             <ForceFieldDome />
 
@@ -2838,12 +3021,13 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* Side panels */}
+      {/* Side panels (bottom sheet on mobile) */}
       <AnimatePresence>
         {selectedBuildingData && (
           <BuildingPanel
             building={selectedBuildingData}
             onClose={() => setSelectedBuilding(null)}
+            isMobile={isMobile}
           />
         )}
       </AnimatePresence>
@@ -2854,15 +3038,16 @@ export default function GamePage() {
             worker={selectedWorkerData}
             buildings={BUILDINGS}
             onClose={() => setSelectedWorker(null)}
+            isMobile={isMobile}
           />
         )}
       </AnimatePresence>
 
-      {/* Minimap */}
-      <Minimap buildings={BUILDINGS} workers={workers} />
+      {/* Minimap (hidden on mobile) */}
+      <Minimap buildings={BUILDINGS} workers={workers} hidden={isMobile} />
 
-      {/* Alert feed */}
-      <AlertFeed events={events} />
+      {/* Alert feed (bottom sheet on mobile) */}
+      <AlertFeed events={events} isMobile={isMobile} />
 
       {/* Burst particles on worker completion */}
       <CompletionParticles workers={workers} buildings={BUILDINGS} />
