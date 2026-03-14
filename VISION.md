@@ -57,26 +57,24 @@ All powered by Claude.
 - Research/tech tree for unlocking new agent capabilities
 - Efficiency percentage on each building
 
-### Pokemon DNA
-- Workers are CUTE characters (not realistic — stylized, big eyes, expressive)
-- **Evolution system**: Workers evolve based on XP (tasks completed)
-  - Stage 1 (0-10 tasks): Small, basic sprite — learning the ropes
-  - Stage 2 (10-50 tasks): Medium, more detailed — getting good
-  - Stage 3 (50+ tasks): Large, legendary form — absolute unit
-- **Type system** matching worker roles:
-  - Builder = Steel type (cyan metallic glow)
-  - Inspector = Psychic type (gold aura, floating)
-  - Miner = Ground type (green, earthy)
-  - Scout = Flying type (purple, wings/antenna)
-  - Deployer = Fire type (orange, rocket boosters)
-  - Messenger = Electric type (blue, lightning trails)
-- Workers have **mood indicators** (happy face when tasks go well, frustrated when builds fail)
-- **Collection/Pokedex**: Track all your worker types and their evolution stages
-- **Nicknames**: Name your workers ("PR Machine", "Email Hunter", "The Auditor")
-- Workers gain XP and show level badges
+### Worker Design — Industrial Machines, Not Pets
+- Workers are MACHINES — drones, mechs, industrial bots
+- Each worker type has a distinct mechanical design:
+  - Builder (Forge): Welding mech with sparks, heavy-duty
+  - Inspector (Lens): Scanner drone with rotating sensor arrays
+  - Miner (Digger): Drill rig on treads, excavation arms
+  - Scout (Hawk): Fast recon drone, antenna arrays, radar dish
+  - Deployer (Rocket): Launch platform mech, thrust exhaust
+  - Messenger (Spark): Communication relay bot, signal pulses
+- **Upgrade system** (not evolution — UPGRADES):
+  - Tier 1: Basic unit, minimal armor
+  - Tier 2: Reinforced plating, faster, additional tools
+  - Tier 3: Elite unit, heavy armor, maximum efficiency, visual prestige
+- Workers show wear-and-tear based on tasks completed (battle-scarred veterans)
+- **Naming**: Workers get military designations ("Forge-α", "Lens-007", "Digger-X1")
 
 ### Combined Aesthetic
-The overall feel: a dark, industrial sci-fi base (StarCraft) with visible automation pipelines (Factorio) staffed by cute, evolving AI creatures (Pokemon). It shouldn't look like any single game — it should feel like its own unique thing.
+The overall feel: a dark, industrial military-tech command base (StarCraft) with visible automation pipelines and throughput optimization (Factorio). No cute shit. This is a WAR ROOM for AI operations. Every surface is metal, every edge glows with energy, every machine has purpose.
 
 Color palette:
 - Background: #050508 (near black with blue tint)
