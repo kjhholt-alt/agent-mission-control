@@ -25,10 +25,56 @@ On the map: gold Inspector walks to a building to audit it, cyan Builder hammers
 
 All powered by Claude.
 
-## Game Inspirations
-- **StarCraft**: Workers (SCVs), buildings, resource mining, "Job's done!" audio
-- **Factorio**: Conveyor belts, throughput metrics, pipeline optimization
-- **Cities: Skylines**: Macro city view, zone types, population/budget metrics
+## Art Direction: StarCraft 2 x Factorio x Pokemon
+
+### StarCraft 2 DNA
+- Dark sci-fi aesthetic with holographic edges on buildings
+- Glowing blue/cyan HUD with military-grade typography
+- Command Center is a massive Terran base with pulsing energy core
+- Buildings have shield generators, antenna arrays, structural detail
+- Alert klaxons with red flashing for errors
+- Selection circles glow under workers when clicked
+- Fog of war on inactive project zones
+
+### Factorio DNA
+- Industrial conveyor belts connecting every building
+- Throughput counters on each belt (items/min = commits/hr, emails/hr)
+- Factory buildings have visible machinery — gears turning, pistons pumping
+- Inserter arms picking up "data packets" and placing on belts
+- Bottleneck visualization (red belt = slow, green belt = flowing fast)
+- Research/tech tree for unlocking new agent capabilities
+- Efficiency percentage on each building
+
+### Pokemon DNA
+- Workers are CUTE characters (not realistic — stylized, big eyes, expressive)
+- **Evolution system**: Workers evolve based on XP (tasks completed)
+  - Stage 1 (0-10 tasks): Small, basic sprite — learning the ropes
+  - Stage 2 (10-50 tasks): Medium, more detailed — getting good
+  - Stage 3 (50+ tasks): Large, legendary form — absolute unit
+- **Type system** matching worker roles:
+  - Builder = Steel type (cyan metallic glow)
+  - Inspector = Psychic type (gold aura, floating)
+  - Miner = Ground type (green, earthy)
+  - Scout = Flying type (purple, wings/antenna)
+  - Deployer = Fire type (orange, rocket boosters)
+  - Messenger = Electric type (blue, lightning trails)
+- Workers have **mood indicators** (happy face when tasks go well, frustrated when builds fail)
+- **Collection/Pokedex**: Track all your worker types and their evolution stages
+- **Nicknames**: Name your workers ("PR Machine", "Email Hunter", "The Auditor")
+- Workers gain XP and show level badges
+
+### Combined Aesthetic
+The overall feel: a dark, industrial sci-fi base (StarCraft) with visible automation pipelines (Factorio) staffed by cute, evolving AI creatures (Pokemon). It shouldn't look like any single game — it should feel like its own unique thing.
+
+Color palette:
+- Background: #050508 (near black with blue tint)
+- Primary: #06b6d4 (cyan — StarCraft Protoss energy)
+- Secondary: #e8a019 (gold — Pokemon evolution glow)
+- Accent: #10b981 (emerald — Factorio belt flow)
+- Danger: #ef4444 (red — alerts)
+- Buildings: Dark metal with glowing edges (StarCraft)
+- Belts: Industrial with animated items (Factorio)
+- Workers: Colorful, expressive, cute (Pokemon)
 
 ## Key Innovation: Agent Orchestration via Game UI
 
