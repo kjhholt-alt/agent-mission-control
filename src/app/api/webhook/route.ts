@@ -41,7 +41,6 @@ export async function POST(request: NextRequest) {
         priority: body.priority ?? 50,
         status: "queued",
         task_type: "goal",
-        tier: body.tier || "light",
         input_data: {
           prompt: body.goal,
           source: "webhook",
