@@ -11,16 +11,21 @@ Schema (swarm_workers):
 """
 
 import logging
+import re
 import signal
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+import anthropic
 import requests
 
 from swarm.budget.budget_manager import BudgetManager
-from swarm.config import NEXUS_URL, SUPABASE_KEY, SUPABASE_URL
+from swarm.budget.cost_calculator import calculate_cost
+from swarm.config import ANTHROPIC_API_KEY, ENABLE_QUALITY_GATE, NEXUS_URL, SUPABASE_KEY, SUPABASE_URL
+from swarm.memory import SwarmMemory
+from swarm.retry_strategy import AdaptiveRetry
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.worker")
@@ -48,6 +53,8 @@ class BaseWorker:
         self.sb = create_client(SUPABASE_URL, SUPABASE_KEY)
         self.task_manager = TaskManager()
         self.budget_manager = BudgetManager()
+        self.memory = SwarmMemory(supabase_client=self.sb)
+        self.retry_strategy = AdaptiveRetry()
 
         now = datetime.now(timezone.utc).isoformat()
 
@@ -140,6 +147,72 @@ class BaseWorker:
         except Exception as e:
             logger.debug("Could not reach Nexus: %s", e)
 
+    # ── Quality gate ─────────────────────────────────────────────────────
+
+    def quality_check(self, task_title: str, output: str) -> tuple[bool, str]:
+        """Run a quick quality check on task output using Haiku.
+
+        Calls Haiku to rate the output 1-10 for actionability and specificity.
+        Returns (True, "") if score >= 5, or (False, reason) if score < 5.
+
+        Args:
+            task_title: Title of the completed task
+            output: The output text to evaluate
+
+        Returns:
+            Tuple of (passed: bool, reason: str)
+        """
+        if not ENABLE_QUALITY_GATE:
+            return (True, "")
+
+        # Truncate output to avoid huge quality check calls
+        check_output = output[:2000] if len(output) > 2000 else output
+
+        try:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=10,
+                system="You rate task outputs. Reply with ONLY a single number 1-10.",
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Rate this output 1-10 for actionability and specificity. "
+                        f"Task: {task_title}. Output: {check_output}. "
+                        f"Reply with just the number."
+                    ),
+                }],
+            )
+
+            response_text = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    response_text += block.text
+
+            # Record the quality check cost
+            qc_cost = calculate_cost(
+                "claude-haiku-4-5-20251001",
+                response.usage.input_tokens,
+                response.usage.output_tokens,
+            )
+            self.budget_manager.record_spend(cents=qc_cost)
+
+            # Parse score
+            match = re.search(r"\d+", response_text.strip())
+            if match:
+                score = int(match.group())
+                logger.info("Quality check score: %d/10 for task '%s'", score, task_title[:40])
+                if score < 5:
+                    return (False, f"Low quality output (score: {score}/10)")
+                return (True, "")
+            else:
+                logger.warning("Quality check returned unparseable response: %s", response_text)
+                return (True, "")  # Pass on parse failure to avoid blocking
+
+        except Exception as e:
+            logger.warning("Quality check failed: %s (passing by default)", e)
+            return (True, "")  # Don't block on quality check errors
+
     # ── Pull and execute ──────────────────────────────────────────────────
 
     def pull_and_execute(self) -> bool:
@@ -159,7 +232,7 @@ class BaseWorker:
             "id", self.worker_id
         ).execute()
 
-        task = self.task_manager.pull_task(self.tier, worker_id=self.worker_id)
+        task = self.task_manager.pull_task(self.tier, worker_id=self.worker_id, worker_type=self.worker_type)
         if not task:
             return False
 
@@ -172,8 +245,88 @@ class BaseWorker:
             "task_started", "running", {"task_id": task["id"], "title": task["title"]}
         )
 
+        # ── Memory injection: add context from previous work ──────────
+        project = task.get("project", "")
+        task_type = task.get("task_type")
+        if project:
+            context = self.memory.recall(project)
+            failed_approaches = self.memory.get_failed_approaches(project, task_type)
+            input_data = task.get("input_data", {})
+            if isinstance(input_data, str):
+                import json
+                input_data = json.loads(input_data)
+
+            prompt = input_data.get("prompt", "")
+            memory_prefix = ""
+            if context:
+                memory_prefix += f"{context}\n\n"
+            if failed_approaches:
+                memory_prefix += f"{failed_approaches}\n\n"
+            if memory_prefix and prompt:
+                input_data["prompt"] = f"{memory_prefix}{prompt}"
+                task["input_data"] = input_data
+
+        # ── Adaptive retry: modify prompt if this is a retry ──────────
+        retry_count = task.get("retry_count", 0)
+        if retry_count > 0:
+            input_data = task.get("input_data", {})
+            if isinstance(input_data, str):
+                import json
+                input_data = json.loads(input_data)
+
+            original_prompt = input_data.get("prompt", "")
+            previous_error = task.get("error_message", "Unknown error")
+            enhanced_prompt = self.retry_strategy.enhance_prompt_after_failure(
+                original_prompt, previous_error, retry_count
+            )
+            input_data["prompt"] = enhanced_prompt
+
+            # On attempt 2+, escalate the system prompt
+            if self.retry_strategy.should_escalate_model(retry_count):
+                system = input_data.get(
+                    "system",
+                    "You are an autonomous agent worker in a swarm system. "
+                    "Complete the task precisely and return structured output.",
+                )
+                input_data["system"] = self.retry_strategy.build_escalation_system_prompt(system)
+
+            task["input_data"] = input_data
+            logger.info(
+                "Task %s: retry %d, prompt enhanced with failure context",
+                task["id"][:8],
+                retry_count,
+            )
+
         try:
             output = self.execute(task)
+
+            # ── Quality gate: check output before marking complete ────────
+            response_text = output.get("response", output.get("stdout", ""))
+            quality_retried = task.get("_quality_retried", False)
+
+            if ENABLE_QUALITY_GATE and response_text and not quality_retried:
+                passed, reason = self.quality_check(task.get("title", ""), response_text)
+                if not passed:
+                    logger.warning(
+                        "Task %s failed quality gate: %s. Retrying with enhanced prompt.",
+                        task["id"][:8],
+                        reason,
+                    )
+                    # Retry once with enhanced prompt
+                    input_data = task.get("input_data", {})
+                    if isinstance(input_data, str):
+                        import json
+                        input_data = json.loads(input_data)
+                    input_data = dict(input_data)
+                    original_prompt = input_data.get("prompt", "")
+                    input_data["prompt"] = (
+                        f"Previous attempt was too vague. Be MORE specific and actionable.\n\n"
+                        f"{original_prompt}"
+                    )
+                    task["input_data"] = input_data
+                    task["_quality_retried"] = True
+                    output = self.execute(task)
+                    response_text = output.get("response", output.get("stdout", ""))
 
             # Extract cost/token info from output if available (must be int for Supabase)
             cost_cents = int(round(output.get("cost_cents", 0)))
@@ -205,6 +358,17 @@ class BaseWorker:
                     .execute()
                     .data[0]["xp"] + 10,
             }).eq("id", self.worker_id).execute()
+
+            # ── Store result in memory bank ─────────────────────────────
+            if project:
+                response_text = output.get("response", "")
+                self.memory.store(
+                    project=project,
+                    task_title=task.get("title", "Untitled"),
+                    output=response_text,
+                    task_type=task.get("task_type"),
+                    tokens_used=tokens,
+                )
 
             self.report_to_nexus(
                 "task_completed",
