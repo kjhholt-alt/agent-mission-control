@@ -1026,10 +1026,16 @@ export default function GamePage() {
     if (id === "") {
       // Clicked empty space
       setSelectedBuilding(null);
+      setSelectedWorker(null);
     } else {
       setSelectedBuilding(id);
       setSelectedWorker(null);
     }
+  }, []);
+
+  const handleClickWorker = useCallback((id: string) => {
+    setSelectedWorker(id);
+    setSelectedBuilding(null);
   }, []);
 
   return (
@@ -1100,8 +1106,11 @@ export default function GamePage() {
         <GameCanvas
           hoveredBuilding={hoveredBuilding}
           selectedBuilding={selectedBuilding}
+          selectedWorker={selectedWorker}
+          workers={workers}
           onHoverBuilding={setHoveredBuilding}
           onClickBuilding={handleClickBuilding}
+          onClickWorker={handleClickWorker}
         />
       </div>
 

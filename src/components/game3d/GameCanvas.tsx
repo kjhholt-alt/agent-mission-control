@@ -1,34 +1,53 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrthographicCamera, OrbitControls } from "@react-three/drei";
 import { Ground } from "./Ground";
 import { Building3D } from "./Building3D";
 import { CommandCenter3D } from "./CommandCenter3D";
 import { PostProcessing } from "./PostProcessing";
-import { BUILDINGS } from "./constants";
+import { Worker3D } from "./Worker3D";
+import { ConveyorBelt3D } from "./ConveyorBelt3D";
+import { DataPackets } from "./DataPackets";
+import { BuildingSparkles, CompletionBursts, SpawnRingEffects } from "./ParticleEffects";
+import { SelectionRing } from "./SelectionRing";
+import { ForceField3D } from "./ForceField3D";
+import { BUILDINGS, CONVEYORS } from "./constants";
+import type { Worker } from "./types";
 
 interface GameCanvasProps {
   hoveredBuilding: string | null;
   selectedBuilding: string | null;
+  selectedWorker: string | null;
+  workers: Worker[];
   onHoverBuilding: (id: string | null) => void;
   onClickBuilding: (id: string) => void;
+  onClickWorker: (id: string) => void;
 }
 
 /**
  * Main React Three Fiber canvas for the Nexus game view.
- * Isometric camera, industrial lighting, buildings with glowing edges.
+ * Isometric camera, industrial lighting, buildings, workers,
+ * conveyor belts, data packets, particles, force field.
  */
 export default function GameCanvas({
   hoveredBuilding,
   selectedBuilding,
+  selectedWorker,
+  workers,
   onHoverBuilding,
   onClickBuilding,
+  onClickWorker,
 }: GameCanvasProps) {
   const handlePointerMissed = useCallback(() => {
     onClickBuilding("");
   }, [onClickBuilding]);
+
+  // Find selected building position for selection ring
+  const selectedBuildingData = selectedBuilding
+    ? BUILDINGS.find((b) => b.id === selectedBuilding)
+    : null;
 
   return (
     <Canvas
@@ -99,6 +118,21 @@ export default function GameCanvas({
       {/* Ground plane */}
       <Ground />
 
+      {/* Force field dome */}
+      <ForceField3D />
+
+      {/* Conveyor belts (under everything else) */}
+      {CONVEYORS.map((belt) => (
+        <ConveyorBelt3D
+          key={belt.id}
+          belt={belt}
+          buildings={BUILDINGS}
+        />
+      ))}
+
+      {/* Data packets flowing along belts */}
+      <DataPackets belts={CONVEYORS} buildings={BUILDINGS} />
+
       {/* Buildings */}
       {BUILDINGS.map((building) =>
         building.id === "command-center" ? (
@@ -121,6 +155,34 @@ export default function GameCanvas({
           />
         )
       )}
+
+      {/* Selection ring under selected building */}
+      {selectedBuildingData && (
+        <SelectionRing
+          position={[selectedBuildingData.gridX, 0.02, selectedBuildingData.gridY]}
+          color={selectedBuildingData.color}
+        />
+      )}
+
+      {/* Workers */}
+      {workers.map((worker) => (
+        <Worker3D
+          key={worker.id}
+          worker={worker}
+          buildings={BUILDINGS}
+          isSelected={selectedWorker === worker.id}
+          onClick={onClickWorker}
+        />
+      ))}
+
+      {/* Building sparkles */}
+      <BuildingSparkles buildings={BUILDINGS} />
+
+      {/* Completion burst effects */}
+      <CompletionBursts workers={workers} buildings={BUILDINGS} />
+
+      {/* Spawn ring effects */}
+      <SpawnRingEffects workers={workers} buildings={BUILDINGS} />
 
       {/* Post-processing: bloom, chromatic aberration, vignette */}
       <PostProcessing />
