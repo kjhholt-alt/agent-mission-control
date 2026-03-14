@@ -56,6 +56,9 @@ PROJECTS = {
     },
 }
 
+# ── Blocked projects (on hold — never assign tasks) ──────────────────────
+BLOCKED_PROJECTS = ["MoneyPrinter", "moneyprinter", "moneyprinter-hud"]
+
 # ── Budget defaults ───────────────────────────────────────────────────────────
 BUDGET_DEFAULTS = {
     "daily_api_budget_cents": 500,  # $5/day

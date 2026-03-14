@@ -18,6 +18,7 @@ import requests
 
 from swarm.config import (
     ANTHROPIC_API_KEY,
+    BLOCKED_PROJECTS,
     DISCORD_WEBHOOK_URL,
     PROJECTS,
     SUPABASE_KEY,
@@ -148,6 +149,8 @@ class ScoutAgent:
         """Gather recent completed work across all projects."""
         sections = []
         for project_key in PROJECTS:
+            if project_key in BLOCKED_PROJECTS:
+                continue
             work = self.memory.recall(project_key, limit=5)
             if work:
                 sections.append(f"[{project_key}]\n{work}")
@@ -163,6 +166,8 @@ class ScoutAgent:
         """Gather recently failed approaches across all projects."""
         sections = []
         for project_key in PROJECTS:
+            if project_key in BLOCKED_PROJECTS:
+                continue
             failed = self.memory.get_failed_approaches(project_key)
             if failed:
                 sections.append(f"[{project_key}]\n{failed}")
@@ -191,6 +196,7 @@ class ScoutAgent:
         projects_desc = "\n".join(
             f"  - {key}: {cfg['type']} project at {cfg['dir']}"
             for key, cfg in PROJECTS.items()
+            if key not in BLOCKED_PROJECTS
         )
 
         system = SCOUT_SYSTEM.format(

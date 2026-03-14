@@ -77,21 +77,6 @@ const DEMO_AGENTS: {
       "Published: 'RTX 5070 Bottleneck Guide' — 2,847 words, 14 internal links, SEO score 94/100.",
     finalStatus: "completed",
   },
-  {
-    agent_id: "whale-tracker-005",
-    agent_name: "Whale Tracker",
-    project: "moneyprinter",
-    steps: [
-      "Connecting to Polymarket WebSocket...",
-      "Detected whale buy: 0x7a3f... bought $12,400 YES on 'Fed Rate Cut June'",
-      "Evaluating copy trade — confidence 87%, within risk limits",
-      "ERROR: Insufficient USDC.e balance (need $496, have $231)",
-    ],
-    total_steps: 4,
-    finalOutput:
-      "Failed to execute copy trade — insufficient balance. Alert sent to Discord.",
-    finalStatus: "failed",
-  },
 ];
 
 export function generateDemoHeartbeats(): {

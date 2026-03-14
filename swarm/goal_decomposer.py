@@ -10,7 +10,7 @@ import logging
 import subprocess
 from typing import Any
 
-from swarm.config import PROJECTS
+from swarm.config import BLOCKED_PROJECTS, PROJECTS
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.decomposer")
@@ -61,6 +61,7 @@ class GoalDecomposer:
         projects_desc = "\n".join(
             f"  - {key}: {cfg['type']} project at {cfg['dir']}"
             for key, cfg in PROJECTS.items()
+            if key not in BLOCKED_PROJECTS
         )
 
         system = DECOMPOSE_SYSTEM.format(projects=projects_desc)
