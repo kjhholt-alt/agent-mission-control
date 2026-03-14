@@ -89,3 +89,21 @@ WORKER_TYPE_PREFERENCES = {
 ORCHESTRATOR_LOOP_SECONDS = 10
 WORKER_HEARTBEAT_TIMEOUT_SECONDS = 600  # 10 minutes
 HEAVY_WORKER_TASK_TIMEOUT_SECONDS = 1800  # 30 minutes
+
+# ── Auto-merge settings ─────────────────────────────────────────────────────
+AUTO_MERGE_ENABLED = True
+AUTO_MERGE_MAX_FILES_CHANGED = 10
+AUTO_MERGE_MIN_QUALITY_SCORE = 7
+
+PROTECTED_PATHS = [
+    "railway.json",
+    "vercel.json",
+    "Procfile",
+    ".env",
+    ".env.local",
+    ".env.production",
+    "**/payment/**",
+    "**/auth/**",
+    "**/checkout/**",
+    "supabase/migrations/**",
+]

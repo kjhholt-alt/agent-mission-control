@@ -8,7 +8,8 @@ import subprocess
 import time
 from typing import Any
 
-from swarm.config import HEAVY_WORKER_TASK_TIMEOUT_SECONDS, PROJECTS
+from swarm.auto_merge import AutoMerger
+from swarm.config import AUTO_MERGE_ENABLED, HEAVY_WORKER_TASK_TIMEOUT_SECONDS, PROJECTS
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.heavy")
@@ -104,7 +105,7 @@ class HeavyWorker(BaseWorker):
                 duration_minutes,
             )
 
-            return {
+            output_data = {
                 "stdout": stdout,
                 "stderr": stderr,
                 "exit_code": result.returncode,
@@ -113,9 +114,68 @@ class HeavyWorker(BaseWorker):
                 "cwd": cwd,
             }
 
-        except subprocess.TimeoutExpired:
+            # Auto-merge: check if Claude Code opened a PR
+            if AUTO_MERGE_ENABLED and result.returncode == 0:
+                output_data = self._try_auto_merge(task, stdout, output_data)
+
+            return output_data
+
+        except subprocess.TimeoutExpired as exc:
             duration_seconds = round(time.time() - start_time, 1)
             self.budget_manager.record_spend(minutes=round(duration_seconds / 60, 2))
             raise TimeoutError(
                 f"Claude Code timed out after {HEAVY_WORKER_TASK_TIMEOUT_SECONDS}s"
             )
+
+    def _try_auto_merge(
+        self, task: dict[str, Any], stdout: str, output_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Attempt to auto-merge a PR if one was created by Claude Code.
+
+        Parses the PR number from stdout, checks safety rules, and either
+        merges or flags for review.
+        """
+        merger = AutoMerger()
+
+        pr_number = merger.parse_pr_number(stdout)
+        if pr_number is None:
+            logger.debug("No PR detected in output — skipping auto-merge")
+            return output_data
+
+        repo = merger.parse_repo_from_output(stdout)
+        if not repo:
+            # Fall back to project's GitHub repo if we can't parse it
+            project_key = task.get("project", "")
+            project_config = PROJECTS.get(project_key, {})
+            repo = project_config.get("github_repo", "")
+        if not repo:
+            logger.warning("Could not determine repo for PR #%d", pr_number)
+            output_data["auto_merge"] = {
+                "pr_number": pr_number,
+                "action": "skipped",
+                "reason": "Could not determine repository",
+            }
+            return output_data
+
+        # Fetch PR metadata
+        pr_info = merger.get_pr_info(repo, pr_number)
+
+        # Decide
+        should_merge, reason = merger.should_auto_merge(task, pr_info)
+
+        if should_merge:
+            merged = merger.merge_pr(repo, pr_number)
+            action = "merged" if merged else "merge_failed"
+            logger.info("PR #%d auto-merged: %s", pr_number, reason)
+        else:
+            merger.flag_for_review(repo, pr_number, reason)
+            action = "flagged_for_review"
+            logger.info("PR #%d flagged for review: %s", pr_number, reason)
+
+        output_data["auto_merge"] = {
+            "pr_number": pr_number,
+            "repo": repo,
+            "action": action,
+            "reason": reason,
+        }
+        return output_data

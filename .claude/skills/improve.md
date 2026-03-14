@@ -68,3 +68,12 @@ IMPORTANT RULES:
 - If build fails, revert and try something else
 - ROTATE categories — make it visually better every time
 - This should be FUN and look IMPRESSIVE
+
+## Auto-Merge
+
+After opening the PR:
+- Run tests to verify everything passes: `npm run build`
+- If build succeeds, merge the PR: `gh pr merge {number} --merge --delete-branch`
+- Pull main: `git checkout main && git pull`
+- Report: "PR #{number} auto-merged. Build passing."
+- If build fails, do NOT merge — revert changes and report the failure
