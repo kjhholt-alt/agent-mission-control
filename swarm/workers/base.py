@@ -11,11 +11,13 @@ Schema (swarm_workers):
 """
 
 import logging
+import os
 import re
 import signal
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import anthropic
@@ -29,6 +31,33 @@ from swarm.retry_strategy import AdaptiveRetry
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.worker")
+
+# ── Persona loader ────────────────────────────────────────────────────────────
+
+PERSONAS_DIR = Path(__file__).parent.parent / "personas"
+
+_persona_cache: dict[str, str] = {}
+
+
+def load_persona(worker_type: str) -> str:
+    """Load persona SOUL file for a given worker type.
+
+    Returns the persona text, or an empty string if no persona file exists.
+    Results are cached after first load.
+    """
+    if worker_type in _persona_cache:
+        return _persona_cache[worker_type]
+
+    persona_file = PERSONAS_DIR / f"{worker_type}.md"
+    if persona_file.exists():
+        content = persona_file.read_text(encoding="utf-8").strip()
+        _persona_cache[worker_type] = content
+        logger.debug("Loaded persona for %s: %s", worker_type, persona_file)
+    else:
+        _persona_cache[worker_type] = ""
+        logger.debug("No persona file for worker type: %s", worker_type)
+
+    return _persona_cache[worker_type]
 
 
 class BaseWorker:
@@ -49,6 +78,7 @@ class BaseWorker:
         self.worker_type = worker_type
         self.tier = tier
         self.alive = True
+        self.persona = load_persona(worker_type)
 
         self.sb = create_client(SUPABASE_URL, SUPABASE_KEY)
         self.task_manager = TaskManager()
@@ -104,6 +134,33 @@ class BaseWorker:
         self.sb.table(self.WORKERS_TABLE).update(
             {"last_heartbeat": datetime.now(timezone.utc).isoformat()}
         ).eq("id", self.worker_id).execute()
+
+    # ── Persona-enhanced system prompt ───────────────────────────────────
+
+    def build_system_prompt(self, base_prompt: str = "") -> str:
+        """Build a system prompt with persona injection.
+
+        If a persona file exists for this worker type, it is prepended
+        to the base prompt to give the worker its personality.
+
+        Args:
+            base_prompt: The base system prompt
+
+        Returns:
+            The persona-enhanced system prompt
+        """
+        if not base_prompt:
+            base_prompt = (
+                "You are an autonomous agent worker in a swarm system. "
+                "Complete the task precisely and return structured output."
+            )
+
+        if self.persona:
+            return (
+                f"## Your Persona\n{self.persona}\n\n"
+                f"## Instructions\n{base_prompt}"
+            )
+        return base_prompt
 
     # ── Execute (override in subclass) ────────────────────────────────────
 
@@ -265,6 +322,21 @@ class BaseWorker:
             if memory_prefix and prompt:
                 input_data["prompt"] = f"{memory_prefix}{prompt}"
                 task["input_data"] = input_data
+
+        # ── Persona injection: enhance system prompt with worker persona ──
+        if self.persona:
+            input_data = task.get("input_data", {})
+            if isinstance(input_data, str):
+                import json
+                input_data = json.loads(input_data)
+            input_data = dict(input_data)
+            base_system = input_data.get(
+                "system",
+                "You are an autonomous agent worker in a swarm system. "
+                "Complete the task precisely and return structured output.",
+            )
+            input_data["system"] = self.build_system_prompt(base_system)
+            task["input_data"] = input_data
 
         # ── Adaptive retry: modify prompt if this is a retry ──────────
         retry_count = task.get("retry_count", 0)

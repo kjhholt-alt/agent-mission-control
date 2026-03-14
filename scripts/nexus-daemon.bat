@@ -18,4 +18,9 @@ if not defined ANTHROPIC_API_KEY (
 if not defined SUPABASE_URL set SUPABASE_URL=https://ytvtaorgityczrdhhzqv.supabase.co
 if not defined NEXUS_URL set NEXUS_URL=https://nexus.buildkit.store
 
+:loop
+echo [%date% %time%] Starting Nexus Hive Daemon...
 python -m swarm.daemon
+echo [%date% %time%] Daemon crashed! Restarting in 10 seconds...
+timeout /t 10
+goto loop
