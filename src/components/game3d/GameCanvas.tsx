@@ -13,6 +13,8 @@ import { DataPackets } from "./DataPackets";
 import { BuildingSparkles, CompletionBursts, SpawnRingEffects } from "./ParticleEffects";
 import { SelectionRing } from "./SelectionRing";
 import { ForceField3D } from "./ForceField3D";
+import { Pipes3D } from "./Pipes3D";
+import { Environment3D } from "./Environment3D";
 import { BUILDINGS, CONVEYORS } from "./constants";
 import type { Worker } from "./types";
 
@@ -29,8 +31,8 @@ interface GameCanvasProps {
 
 /**
  * Main React Three Fiber canvas for the Nexus game view.
- * Isometric camera, industrial lighting, buildings, workers,
- * conveyor belts, data packets, particles, force field.
+ * Factorio-style factory floor with industrial lighting, fog,
+ * buildings, workers, conveyor belts, pipes, environment details.
  */
 export default function GameCanvas({
   hoveredBuilding,
@@ -46,12 +48,10 @@ export default function GameCanvas({
     onClickBuilding("");
   }, [onClickBuilding]);
 
-  // Find selected building position for selection ring
   const selectedBuildingData = selectedBuilding
     ? BUILDINGS.find((b) => b.id === selectedBuilding)
     : null;
 
-  // Find selected worker position for selection ring
   const selectedWorkerPosition = useMemo((): {
     position: [number, number, number];
     color: string;
@@ -79,7 +79,6 @@ export default function GameCanvas({
     return { position: [x, 0.02, z], color: worker.color };
   }, [selectedWorker, workers]);
 
-  // Mobile: reduce data packet count
   const activeBelts = useMemo(
     () => (isMobile ? CONVEYORS.filter((b) => b.active).slice(0, 4) : CONVEYORS),
     [isMobile]
@@ -112,22 +111,30 @@ export default function GameCanvas({
         panSpeed={1.2}
         zoomSpeed={0.8}
         mouseButtons={{
-          LEFT: 2,   // PAN on left-click drag
-          MIDDLE: 1, // DOLLY on middle-click
-          RIGHT: 2,  // PAN on right-click drag
+          LEFT: 2,
+          MIDDLE: 1,
+          RIGHT: 2,
         }}
         enableDamping
         dampingFactor={0.1}
       />
 
-      {/* Ambient fill -- dim, lets emissives pop */}
-      <ambientLight intensity={0.4} color="#ffffff" />
+      {/* Industrial fog — depth cue and atmosphere */}
+      <fog attach="fog" args={["#050508", 20, 55]} />
 
-      {/* Primary directional -- slight blue tint for StarCraft feel */}
+      {/* Hemisphere light — industrial: dark blue sky, warm orange ground */}
+      <hemisphereLight
+        args={["#1a2040", "#2a1a08", 0.4]}
+      />
+
+      {/* Ambient fill — slightly warm industrial tint */}
+      <ambientLight intensity={0.3} color="#ffe8d0" />
+
+      {/* Primary directional — warm industrial orange tint */}
       <directionalLight
         position={[5, 8, 5]}
-        intensity={0.8}
-        color="#d0d8ff"
+        intensity={0.7}
+        color="#ffe0b0"
         castShadow={!isMobile}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -138,27 +145,37 @@ export default function GameCanvas({
         shadow-camera-bottom={-15}
       />
 
-      {/* Warm fill from the other side */}
+      {/* Secondary warm fill from the other side */}
       <directionalLight
         position={[-3, 5, -3]}
-        intensity={0.3}
-        color="#ffe0b0"
+        intensity={0.25}
+        color="#ffcc88"
       />
 
-      {/* Subtle rim light from below-behind */}
+      {/* Subtle cool rim light */}
       <directionalLight
         position={[0, -2, -8]}
-        intensity={0.1}
+        intensity={0.08}
         color="#06b6d4"
       />
 
-      {/* Ground plane */}
+      {/* Factory floor overhead lights (simulated via spot-like directionals) */}
+      <directionalLight
+        position={[7, 12, 7]}
+        intensity={0.15}
+        color="#ffe8c0"
+      />
+
+      {/* Ground plane — factory floor */}
       <Ground />
 
       {/* Force field dome (skip on mobile) */}
       {!isMobile && <ForceField3D />}
 
-      {/* Conveyor belts (under everything else) */}
+      {/* Industrial pipes between buildings */}
+      <Pipes3D />
+
+      {/* Conveyor belts */}
       {CONVEYORS.map((belt) => (
         <ConveyorBelt3D
           key={belt.id}
@@ -169,6 +186,9 @@ export default function GameCanvas({
 
       {/* Data packets flowing along belts */}
       <DataPackets belts={activeBelts} buildings={BUILDINGS} />
+
+      {/* Environmental decorations — crates, barrels, poles, carts */}
+      <Environment3D />
 
       {/* Buildings */}
       {BUILDINGS.map((building) =>

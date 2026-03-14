@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useMemo, useState } from "react";
+import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import type { Worker, WorkerType, Building } from "./types";
 import { WORKER_TYPE_CONFIG, BUILDINGS } from "./constants";
 
-// ─── WORKER GEOMETRY BY TYPE ─────────────────────────────────────────────────
+// ---- WORKER GEOMETRY BY TYPE ------------------------------------------------
 
 function WorkerGeometry({ type }: { type: WorkerType }) {
   switch (type) {
@@ -26,7 +26,7 @@ function WorkerGeometry({ type }: { type: WorkerType }) {
   }
 }
 
-// ─── SINGLE WORKER 3D COMPONENT ──────────────────────────────────────────────
+// ---- SINGLE WORKER 3D COMPONENT ---------------------------------------------
 
 interface Worker3DProps {
   worker: Worker;
@@ -40,11 +40,13 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
   const positionRef = useRef(new THREE.Vector3());
   const initialized = useRef(false);
+  const trailRef = useRef<THREE.Group>(null);
+  const sparkRef = useRef<THREE.Group>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
 
   const config = WORKER_TYPE_CONFIG[worker.type];
   const color = useMemo(() => new THREE.Color(config.color), [config.color]);
 
-  // Compute current/target positions from building grid coords
   const currentBuilding = buildings.find((b) => b.id === worker.currentBuildingId);
   const targetBuilding = buildings.find((b) => b.id === worker.targetBuildingId);
 
@@ -64,19 +66,15 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
     const t = clock.getElapsedTime();
     const progress = worker.progress / 100;
 
-    // Lerp position along path between buildings
     const targetPos = new THREE.Vector3().lerpVectors(fromPos, toPos, progress);
 
-    // Initialize position on first frame to avoid lerp from origin
     if (!initialized.current) {
       positionRef.current.copy(targetPos);
       initialized.current = true;
     }
 
-    // Smooth interpolation toward target
     positionRef.current.lerp(targetPos, 0.08);
 
-    // Bob animation
     const bobSpeed = worker.status === "working" ? 4 : 2;
     const bobAmount = worker.status === "working" ? 0.15 : 0.1;
     const bob = Math.sin(t * bobSpeed + worker.id.charCodeAt(1) * 0.7) * bobAmount;
@@ -87,19 +85,82 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
       positionRef.current.z
     );
 
-    // Slow rotation
     groupRef.current.rotation.y += 0.008;
 
-    // Emissive intensity based on state
+    // Emissive intensity
     const baseEmissive = worker.status === "working" ? 0.8 : 0.5;
     const pulse = Math.sin(t * 3 + worker.id.charCodeAt(1)) * 0.15;
     materialRef.current.emissiveIntensity = isSelected
       ? baseEmissive + 0.4 + pulse
       : baseEmissive + pulse;
+
+    // Trail effect — fade dots behind when moving
+    if (trailRef.current && worker.status === "moving") {
+      trailRef.current.children.forEach((child, i) => {
+        const mesh = child as THREE.Mesh;
+        const trailT = (t * 2 + i * 0.3) % 1.5;
+        const fadeProgress = trailT / 1.5;
+        mesh.position.set(
+          -Math.sin(groupRef.current!.rotation.y) * (i + 1) * 0.25 * fadeProgress,
+          -0.1,
+          -Math.cos(groupRef.current!.rotation.y) * (i + 1) * 0.25 * fadeProgress
+        );
+        const scale = 0.04 * (1 - fadeProgress);
+        mesh.scale.set(scale, scale, scale);
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat) mat.opacity = (1 - fadeProgress) * 0.5;
+      });
+    }
+
+    // Spark effect when working
+    if (sparkRef.current && worker.status === "working") {
+      sparkRef.current.children.forEach((child, i) => {
+        const mesh = child as THREE.Mesh;
+        const sparkT = (t * 8 + i * 2.1) % 1.0;
+        const angle = sparkT * Math.PI * 2 + i * 1.5;
+        const radius = 0.2 + sparkT * 0.3;
+        mesh.position.set(
+          Math.cos(angle) * radius,
+          0.2 + sparkT * 0.4,
+          Math.sin(angle) * radius
+        );
+        const scale = sparkT < 0.5 ? 0.03 : 0.03 * (1 - (sparkT - 0.5) * 2);
+        mesh.scale.set(scale, scale, scale);
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat) mat.opacity = sparkT < 0.8 ? 0.9 : (1 - sparkT) * 4.5;
+      });
+      sparkRef.current.visible = true;
+    } else if (sparkRef.current) {
+      sparkRef.current.visible = false;
+    }
+
+    // Orbiting ring when working
+    if (ringRef.current) {
+      if (worker.status === "working") {
+        ringRef.current.visible = true;
+        ringRef.current.rotation.x = t * 3;
+        ringRef.current.rotation.z = t * 2;
+      } else {
+        ringRef.current.visible = false;
+      }
+    }
   });
 
   return (
     <group ref={groupRef}>
+      {/* Ground shadow/glow circle */}
+      <mesh position={[0, -0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.4, 16]} />
+        <meshStandardMaterial
+          color={config.color}
+          emissive={config.color}
+          emissiveIntensity={0.5}
+          transparent
+          opacity={0.15}
+          depthWrite={false}
+        />
+      </mesh>
+
       {/* Worker mesh */}
       <mesh
         onClick={(e) => {
@@ -119,13 +180,67 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
         />
       </mesh>
 
-      {/* Point light for glow */}
+      {/* Headlight — small PointLight on front */}
+      <pointLight
+        position={[0, 0, 0.35]}
+        color={config.color}
+        intensity={0.4}
+        distance={2}
+        decay={2}
+      />
+
+      {/* Main glow light */}
       <pointLight
         color={config.color}
         intensity={0.6}
         distance={2.5}
         decay={2}
       />
+
+      {/* Trail dots — visible when moving */}
+      <group ref={trailRef}>
+        {[0, 1, 2, 3].map((i) => (
+          <mesh key={`trail-${i}`}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial
+              color={config.color}
+              emissive={config.color}
+              emissiveIntensity={1}
+              transparent
+              opacity={0.4}
+            />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Spark particles — visible when working */}
+      <group ref={sparkRef} visible={false}>
+        {[0, 1, 2].map((i) => (
+          <mesh key={`spark-${i}`}>
+            <sphereGeometry args={[1, 4, 4]} />
+            <meshStandardMaterial
+              color="#fbbf24"
+              emissive="#fbbf24"
+              emissiveIntensity={3}
+              transparent
+              opacity={0.9}
+              toneMapped={false}
+            />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Orbiting mechanical ring — visible when working */}
+      <mesh ref={ringRef} visible={false}>
+        <torusGeometry args={[0.5, 0.015, 8, 24]} />
+        <meshStandardMaterial
+          color={config.color}
+          emissive={config.color}
+          emissiveIntensity={1}
+          transparent
+          opacity={0.5}
+        />
+      </mesh>
 
       {/* Floating label */}
       <Html
