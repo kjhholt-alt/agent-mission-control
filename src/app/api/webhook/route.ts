@@ -111,7 +111,6 @@ export async function POST(request: NextRequest) {
       priority: body.priority ?? mapped.priority,
       status: "queued",
       task_type: mapped.taskType,
-      tier: body.tier || "light",
       input_data: {
         prompt: mapped.title,
         source: "webhook",
