@@ -86,6 +86,11 @@ class GoalDecomposer:
                 text = "\n".join(
                     lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
                 )
+            # Find JSON array in the response (handles text before/after)
+            import re
+            json_match = re.search(r'\[[\s\S]*\]', text)
+            if json_match:
+                text = json_match.group(0)
             tasks_data = json.loads(text)
         except json.JSONDecodeError as e:
             logger.error("Failed to parse decomposition response: %s", e)
