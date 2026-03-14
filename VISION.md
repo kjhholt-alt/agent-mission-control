@@ -166,6 +166,46 @@ This makes it a **plug-and-play product** — not just for us.
 - Python SDK for agent reporting
 - Next.js for the web app
 
+## More Game Inspirations
+
+### Farming Simulator 25
+- **Harvesting rows** — When the email enricher scans prospects, visualize it as a combine harvesting rows of data. Each row lights up as it's processed. Deeply satisfying.
+- **Baling/packaging** — When results are compiled (merge CSVs, generate reports), show the data getting "baled" into packages
+- **Selling at market** — When a cold email gets a reply or a client signs, show the "harvest" being sold at a market building. Revenue counter goes up.
+- **Seasonal cycles** — Projects have seasons: planting (planning), growing (building), harvesting (shipping), selling (revenue)
+
+### Path of Exile
+- **Passive skill tree** — A massive skill tree for your agent capabilities. Unlock new skills: "Email Finding", "SEO Content", "Code Review", "Deployment". Visual tree you can zoom into.
+- **Loot drops** — When agents complete tasks, they "drop loot": emails found, PRs merged, bugs fixed. Loot has rarity: Common (pattern email), Rare (mailto link), Legendary (owner's personal email with 100% confidence)
+- **Maps/Dungeons** — Each project is a "dungeon" agents can run. Harder dungeons = more complex tasks. Boss fights = major refactors or deployments.
+- **Flask system** — Temporary boosts: "Focus Flask" (agent works faster), "Precision Flask" (higher accuracy), "Endurance Flask" (longer sessions)
+
+### Hearts of Iron
+- **Grand strategy map** — Zoom ALL the way out and see your entire operation as a world map. Different "territories" = different markets (Iowa, Illinois, etc.). Color-coded by control (prospects contacted vs not)
+- **Production lines** — Like Factorio but more strategic. See your entire pipeline capacity: "Email finding: 50/hr capacity, 32/hr utilization (64%)"
+- **Division management** — Group agents into "divisions" for coordinated attacks. "Iowa Outreach Division" = 3 miners + 1 messenger working together
+- **Research tree** — Unlock new agent capabilities over time through research (building new tools)
+
+### Ballpit
+- **Physics satisfaction** — When data accumulates, show it physically piling up. Emails found pile into a bin. PRs stack up. Revenue coins cascade into a treasury.
+- **Idle accumulation** — Even when you're not watching, things pile up. Come back and see what accumulated overnight.
+- **Tactile feel** — Everything should feel physical and satisfying. Clicks have weight. Things bounce, stack, cascade.
+
+### Slay the Spire
+- **Card-based decisions** — When an agent reaches a decision point, show it as cards: "Add type hints" vs "Add tests" vs "Refactor function". The auto-improvement loop picks a card each run.
+- **Deck building** — Your agent's "deck" is their skill set. As they level up, they add new cards (capabilities).
+- **Branching paths** — After completing a task, the agent chooses the next path. Show the branch visually on the map.
+- **Relics** — Permanent passive bonuses unlocked over time: "Supabase Relic: +20% data query speed", "Resend Relic: +10% email deliverability"
+
+### World of Warcraft
+- **Raids** — Multi-agent coordinated tasks. 5 agents working together on a big feature = a raid. Show them all at the same building with roles (tank=Builder, healer=Inspector, DPS=Miner)
+- **Quest log** — Every task is a quest with objectives, rewards (XP), and completion status. Side quests for bonus work.
+- **XP and leveling** — Agents gain XP from completed tasks. Level up unlocks new abilities. Show a level-up animation with fanfare.
+- **Gear/Equipment** — Agents can be "equipped" with tools: "Equipped: Resend API (+email sending)", "Equipped: Google Places API (+prospect finding)"
+- **Talent trees** — Specialize agents: a Builder can spec into "Testing" or "Refactoring" branches
+- **Guild system** — Your team of agents is a guild. Guild achievements: "First PR merged", "100 emails found", "First client signed"
+- **Achievement system** — Pop-up achievements: "Email Hunter: Found 100 emails", "Code Machine: Merged 10 PRs", "Revenue Runner: First $100 earned"
+
 ## Phases
 1. Static isometric map with buildings (~3 hrs)
 2. Animated workers that walk to buildings (~3 hrs)
