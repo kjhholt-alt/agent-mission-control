@@ -213,12 +213,22 @@ class SwarmOrchestrator:
         for _ in range(max(0, needed_heavy)):
             self._spawn_worker("heavy")
 
+        # Scale browser workers
+        if browser_count > 0:
+            needed_browser = min(browser_count, WORKER_LIMITS["browser_max"]) - active_browser
+            needed_browser = max(needed_browser, 1 if active_browser == 0 else 0)
+        else:
+            needed_browser = 0
+        for _ in range(max(0, needed_browser)):
+            self._spawn_worker("browser")
+
     def _spawn_worker(self, tier: str):
         """Spawn a new worker subprocess."""
         targets = {
             "light": _run_light_worker,
             "cc_light": _run_cc_light_worker,
             "heavy": _run_heavy_worker,
+            "browser": _run_browser_worker,
         }
         target = targets.get(tier, _run_light_worker)
         proc = multiprocessing.Process(target=target, daemon=True)
@@ -392,6 +402,7 @@ class SwarmOrchestrator:
                 "light": sum(1 for w in active_workers if w["tier"] == "light"),
                 "cc_light": sum(1 for w in active_workers if w["tier"] == "cc_light"),
                 "heavy": sum(1 for w in active_workers if w["tier"] == "heavy"),
+                "browser": sum(1 for w in active_workers if w["tier"] == "browser"),
                 "details": active_workers,
             },
             "tasks": {
