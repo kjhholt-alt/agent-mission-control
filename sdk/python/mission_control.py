@@ -33,10 +33,12 @@ class MissionControl:
         total_steps: Optional[int] = None,
         base_url: Optional[str] = None,
         agent_id: Optional[str] = None,
+        worker_type: str = "builder",
     ):
         self.agent_name = agent_name
         self.project = project
         self.total_steps = total_steps
+        self.worker_type = worker_type
         self.base_url = (
             base_url
             or os.environ.get("MISSION_CONTROL_URL", "http://localhost:3000")
@@ -94,6 +96,29 @@ class MissionControl:
             output=final_output,
         )
 
+    def gain_xp(self, amount: int, reason: Optional[str] = None) -> None:
+        """Award XP to this agent for completing work."""
+        payload = {
+            "agent_id": self.agent_id,
+            "xp": amount,
+            "reason": reason or "Task completed",
+        }
+
+        url = f"{self.base_url}/api/xp"
+        data = json.dumps(payload).encode("utf-8")
+
+        try:
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                resp.read()
+        except (urllib.error.URLError, OSError) as e:
+            print(f"[MissionControl] Warning: Failed to send XP: {e}")
+
     def _send_heartbeat(
         self,
         status: str,
@@ -110,6 +135,7 @@ class MissionControl:
             "steps_completed": self._steps_completed,
             "total_steps": self.total_steps,
             "output": output,
+            "worker_type": self.worker_type,
         }
 
         url = f"{self.base_url}/api/heartbeat"
