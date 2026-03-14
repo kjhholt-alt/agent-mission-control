@@ -293,8 +293,8 @@ const INITIAL_WORKERS: Worker[] = [
     level: 5,
     xp: 47,
     currentBuildingId: "command-center",
-    targetBuildingId: "moneyprinter",
-    task: "Building whale-watch update",
+    targetBuildingId: "buildkit",
+    task: "Building infrastructure update",
     progress: 65,
     speechBubble: null,
     status: "moving",
@@ -307,9 +307,9 @@ const INITIAL_WORKERS: Worker[] = [
     color: "#eab308",
     level: 3,
     xp: 28,
-    currentBuildingId: "moneyprinter",
+    currentBuildingId: "barrelhouse",
     targetBuildingId: "automation-hub",
-    task: "Auditing P&L data pipeline",
+    task: "Auditing CRM data pipeline",
     progress: 30,
     speechBubble: null,
     status: "working",
@@ -378,9 +378,7 @@ const INITIAL_WORKERS: Worker[] = [
 ];
 
 const CONVEYORS: ConveyorBelt[] = [
-  { id: "c1", fromBuildingId: "command-center", toBuildingId: "moneyprinter", color: "#3b82f6", dataType: "code", active: true, throughput: 24 },
   { id: "c2", fromBuildingId: "command-center", toBuildingId: "buildkit", color: "#06b6d4", dataType: "config", active: true, throughput: 18 },
-  { id: "c3", fromBuildingId: "moneyprinter", toBuildingId: "automation-hub", color: "#a855f7", dataType: "data", active: true, throughput: 42 },
   { id: "c4", fromBuildingId: "automation-hub", toBuildingId: "command-center", color: "#e8a019", dataType: "alerts", active: true, throughput: 8 },
   { id: "c5", fromBuildingId: "pc-bottleneck", toBuildingId: "finance-brief", color: "#eab308", dataType: "revenue", active: true, throughput: 15 },
   { id: "c6", fromBuildingId: "buildkit", toBuildingId: "barrelhouse", color: "#f59e0b", dataType: "deploy", active: true, throughput: 6 },
@@ -391,7 +389,6 @@ const CONVEYORS: ConveyorBelt[] = [
 ];
 
 const INITIAL_EVENTS: AlertEvent[] = [
-  { id: "e1", time: "14:32:01", message: "MoneyPrinter: Whale copy executed -- $42.50 USDC.e", type: "success" },
   { id: "e2", time: "14:31:45", message: "Autopilot SEO: Published 'Best GPUs for AI Training 2026'", type: "info" },
   { id: "e3", time: "14:30:12", message: "BarrelHouse CRM: Phase 2 deploy successful", type: "success" },
   { id: "e4", time: "14:28:55", message: "n8n Workflow: Daily P&L digest sent to Discord", type: "info" },
@@ -402,14 +399,12 @@ const INITIAL_EVENTS: AlertEvent[] = [
 ];
 
 const NEW_EVENT_MESSAGES = [
-  { message: "MoneyPrinter: Position opened on 'Will ETH hit $5k?'", type: "info" as const },
   { message: "Worker Hammerhead completed build task", type: "success" as const },
   { message: "Autopilot: New blog post queued for review", type: "info" as const },
   { message: "MCP Array: 12 servers healthy, 0 degraded", type: "success" as const },
   { message: "Chess Academy: Lichess API rate limit warning", type: "warning" as const },
   { message: "BuildKit: SSL certificate renewed for buildkit.store", type: "success" as const },
-  { message: "n8n: Whale performance report generated", type: "info" as const },
-  { message: "MoneyPrinter: Stale position timeout -- auto-exited", type: "warning" as const },
+  { message: "n8n: Automation workflow completed", type: "info" as const },
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -2623,7 +2618,7 @@ export default function GamePage() {
               "Health check sweep",
               "Optimizing queries",
               "Generating SEO content",
-              "Processing whale signals",
+              "Processing automation data",
               "Building CRM module",
               "Updating MCP configs",
               "Analyzing trade data",

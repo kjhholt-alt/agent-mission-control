@@ -66,20 +66,6 @@ export async function POST() {
         updated_at: new Date(now.getTime() - 180000).toISOString(),
         completed_at: new Date(now.getTime() - 180000).toISOString(),
       },
-      {
-        agent_id: `whale-tracker-${Date.now()}`,
-        agent_name: "Whale Tracker",
-        project: "moneyprinter",
-        status: "failed",
-        current_step: "Insufficient USDC.e balance",
-        steps_completed: 3,
-        total_steps: 4,
-        output:
-          "Failed to execute copy trade — insufficient balance. Alert sent to Discord.",
-        started_at: new Date(now.getTime() - 900000).toISOString(),
-        updated_at: new Date(now.getTime() - 800000).toISOString(),
-        completed_at: new Date(now.getTime() - 800000).toISOString(),
-      },
     ];
 
     const { data, error } = await supabase
