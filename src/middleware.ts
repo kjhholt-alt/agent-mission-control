@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   if (!request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
 
   // Skip auth for specific public endpoints
-  const publicPaths = ["/api/agents/seed"];
+  const publicPaths = ["/api/agents/seed", "/api/oracle", "/api/oracle/chat"];
   if (publicPaths.includes(request.nextUrl.pathname)) return NextResponse.next();
 
   const apiKey =

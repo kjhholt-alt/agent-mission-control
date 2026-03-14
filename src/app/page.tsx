@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Satellite, Zap, RefreshCw } from "lucide-react";
+import { Satellite, Zap, RefreshCw, Eye } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { AgentActivity } from "@/lib/types";
 import { ParticleBackground } from "@/components/particles";
@@ -124,6 +124,14 @@ export default function MissionControl() {
           <div className="flex items-center gap-4">
             <LiveClock />
             <div className="flex items-center gap-2">
+              <a
+                href="/oracle/chat"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors text-xs text-amber-400"
+                title="Talk to Oracle"
+              >
+                <Eye className="w-3 h-3" />
+                Oracle
+              </a>
               <button
                 onClick={fetchAgents}
                 className="p-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors"
