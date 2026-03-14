@@ -290,9 +290,9 @@ class TaskManager:
             "completed_at": now,
             "updated_at": now,
         }
-        if cost_cents > 0:
-            update["actual_cost_cents"] = int(round(cost_cents))
-        if tokens > 0:
+        if cost_cents and cost_cents > 0:
+            update["actual_cost_cents"] = int(round(float(cost_cents)))
+        if tokens and tokens > 0:
             update["tokens_used"] = int(tokens)
 
         resp = (

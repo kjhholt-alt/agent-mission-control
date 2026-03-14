@@ -145,6 +145,6 @@ class LightWorker(BaseWorker):
             "model": model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            "cost_cents": cost_cents,
+            "cost_cents": int(round(cost_cents)),
             "stop_reason": response.stop_reason,
         }

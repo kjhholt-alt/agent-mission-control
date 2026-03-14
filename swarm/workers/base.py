@@ -408,28 +408,23 @@ class BaseWorker:
             self.budget_manager.record_task_result(success=True)
 
             # Update worker stats
-            self.sb.table(self.WORKERS_TABLE).update({
-                "tasks_completed": self.sb.table(self.WORKERS_TABLE)
-                    .select("tasks_completed")
+            try:
+                w_data = (
+                    self.sb.table(self.WORKERS_TABLE)
+                    .select("tasks_completed, total_cost_cents, total_tokens, xp")
                     .eq("id", self.worker_id)
                     .execute()
-                    .data[0]["tasks_completed"] + 1,
-                "total_cost_cents": self.sb.table(self.WORKERS_TABLE)
-                    .select("total_cost_cents")
-                    .eq("id", self.worker_id)
-                    .execute()
-                    .data[0]["total_cost_cents"] + cost_cents,
-                "total_tokens": self.sb.table(self.WORKERS_TABLE)
-                    .select("total_tokens")
-                    .eq("id", self.worker_id)
-                    .execute()
-                    .data[0]["total_tokens"] + tokens,
-                "xp": self.sb.table(self.WORKERS_TABLE)
-                    .select("xp")
-                    .eq("id", self.worker_id)
-                    .execute()
-                    .data[0]["xp"] + 10,
-            }).eq("id", self.worker_id).execute()
+                )
+                if w_data.data:
+                    wd = w_data.data[0]
+                    self.sb.table(self.WORKERS_TABLE).update({
+                        "tasks_completed": int(wd["tasks_completed"]) + 1,
+                        "total_cost_cents": int(wd["total_cost_cents"]) + int(cost_cents),
+                        "total_tokens": int(wd["total_tokens"]) + int(tokens),
+                        "xp": int(wd["xp"]) + 10,
+                    }).eq("id", self.worker_id).execute()
+            except Exception as e:
+                logger.warning("Failed to update worker stats: %s", e)
 
             # ── Store result in memory bank ─────────────────────────────
             if project:

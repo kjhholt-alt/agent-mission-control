@@ -72,6 +72,8 @@ class HeavyWorker(BaseWorker):
                 text=True,
                 timeout=HEAVY_WORKER_TASK_TIMEOUT_SECONDS,
                 shell=True,
+                encoding="utf-8",
+                errors="replace",
             )
 
             duration_seconds = round(time.time() - start_time, 1)

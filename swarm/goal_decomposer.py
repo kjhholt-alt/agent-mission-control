@@ -85,6 +85,8 @@ class GoalDecomposer:
                 timeout=300,  # 5 min max
                 cwd="C:/Users/Kruz/Desktop/Projects/nexus",
                 shell=True,
+                encoding="utf-8",
+                errors="replace",
             )
             response_text = result.stdout or ""
         except subprocess.TimeoutExpired:
