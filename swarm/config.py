@@ -88,7 +88,7 @@ WORKER_TYPE_PREFERENCES = {
     "inspector": ["eval", "review", "test"],
     "miner": ["mine", "prospect", "enrich"],
     "scout": ["eval", "plan", "research"],
-    "browser": ["screenshot", "health_check", "scrape", "research", "check_deploy"],
+    "browser": ["screenshot", "health_check", "scrape", "research", "check_deploy", "video_analysis"],
 }
 
 # ── Orchestrator timing ──────────────────────────────────────────────────────

@@ -276,6 +276,55 @@ def run_daemon():
     _run_daemon()
 
 
+def analyze_video(url: str, frames: int = 8, deep: bool = False, playwright: bool = False):
+    """Analyze a Twitter/X video."""
+    import importlib.util
+    from pathlib import Path
+
+    tools_dir = Path(__file__).parent.parent / "tools"
+    spec = importlib.util.spec_from_file_location("twitter_video", tools_dir / "twitter-video.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    model = "claude-sonnet-4-5-20250514" if deep else "claude-haiku-4-5-20251001"
+
+    result = mod.analyze_video(
+        url=url,
+        num_frames=frames,
+        model=model,
+        use_playwright=playwright,
+    )
+
+    console.print()
+    console.print(Panel(Text("VIDEO ANALYSIS", style="bold white"), style="blue"))
+    console.print(f"[cyan]Source:[/cyan]  {result['url']}")
+    console.print(f"[cyan]Author:[/cyan] @{result['author']}")
+    console.print(f"[cyan]Title:[/cyan]  {result['title']}")
+    console.print(f"[cyan]Method:[/cyan] {result['method']}")
+    console.print()
+    console.print(result["analysis"])
+    console.print()
+
+    # Store in swarm memory if available
+    try:
+        from swarm.memory import SwarmMemory
+        from supabase import create_client
+        from swarm.config import SUPABASE_URL, SUPABASE_KEY
+
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        memory = SwarmMemory(supabase_client=sb)
+        memory.store(
+            project="nexus",
+            task_title=f"Video analysis: {url}",
+            output=result["analysis"],
+            task_type="video_analysis",
+            tokens_used=0,
+        )
+        console.print("[dim]Analysis saved to swarm memory.[/dim]")
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Swarm: autonomous agent system",
@@ -289,6 +338,10 @@ def main():
     parser.add_argument("--tasks", action="store_true", help="List pending tasks")
     parser.add_argument("--run", action="store_true", help="Start the orchestrator")
     parser.add_argument("--daemon", action="store_true", help="Start the Hive as a persistent 24/7 daemon")
+    parser.add_argument("--video", metavar="URL", help="Analyze a Twitter/X video URL")
+    parser.add_argument("--frames", type=int, default=8, help="Number of frames to extract (default: 8)")
+    parser.add_argument("--deep", action="store_true", help="Use Sonnet for deeper video analysis")
+    parser.add_argument("--playwright", action="store_true", help="Use Playwright for video capture")
 
     args = parser.parse_args()
 
@@ -306,6 +359,8 @@ def main():
         show_tasks()
     elif args.run:
         run_orchestrator()
+    elif args.video:
+        analyze_video(args.video, frames=args.frames, deep=args.deep, playwright=args.playwright)
     elif args.goal:
         run_goal(args.goal)
     else:
