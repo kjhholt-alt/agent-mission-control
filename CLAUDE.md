@@ -59,6 +59,30 @@ npm run build  # Production build
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
 
+## Tools
+
+### Twitter Video Analyzer (`tools/twitter-video.py`)
+Downloads Twitter/X videos via yt-dlp, extracts frames with ffmpeg, analyzes with Claude Vision.
+
+```bash
+# Direct CLI usage
+python tools/twitter-video.py https://x.com/user/status/12345
+python tools/twitter-video.py --url https://x.com/user/status/12345 --frames 12
+python tools/twitter-video.py --url https://x.com/user/status/12345 --deep  # Uses Sonnet
+python tools/twitter-video.py --url https://x.com/user/status/12345 --playwright  # Fallback
+
+# Via swarm CLI
+python -m swarm --video https://x.com/user/status/12345
+python -m swarm --video https://x.com/user/status/12345 --deep --frames 12
+```
+
+Requires: `yt-dlp`, `ffmpeg`, `anthropic` Python package. Auto-loads API key from `.env.local`.
+Downloads go to `tools/downloads/` (gitignored).
+
+### MCP Server (`tools/mcp_server.py`)
+Exposes `analyze_video` as an MCP tool callable from any Claude Code session.
+Configure in `~/.claude.json` under `mcpServers.nexus-tools`.
+
 ## Design
 - Background: #0a0a0f
 - Font: JetBrains Mono

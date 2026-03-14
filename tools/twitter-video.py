@@ -24,6 +24,24 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Load .env / .env.local from the project root if present
+_project_root = Path(__file__).resolve().parent.parent
+for _env_file in [".env.local", ".env"]:
+    _env_path = _project_root / _env_file
+    if _env_path.exists():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(_env_path)
+        except ImportError:
+            # Manual fallback: parse KEY=VALUE lines
+            with open(_env_path, "r") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _, _v = _line.partition("=")
+                        os.environ.setdefault(_k.strip(), _v.strip())
+        break
+
 # Resolve paths from the actual file location (works even when dynamically loaded)
 TOOLS_DIR = Path(__file__).resolve().parent
 DOWNLOADS_DIR = TOOLS_DIR / "downloads"
