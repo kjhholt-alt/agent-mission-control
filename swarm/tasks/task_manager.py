@@ -71,8 +71,11 @@ class TaskManager:
         """
         now = datetime.now(timezone.utc).isoformat()
 
+        # Meta tasks are containers, never executed by workers
         status = "queued"
-        if depends_on:
+        if task_type == "meta":
+            status = "completed"
+        elif depends_on:
             # Check if all dependencies are completed
             dep_resp = (
                 self.sb.table(self.TABLE)
@@ -135,6 +138,11 @@ class TaskManager:
             ).execute()
             if resp.data and len(resp.data) > 0:
                 task = resp.data[0]
+                # Skip meta tasks - they are containers, not executable
+                if task.get("task_type") == "meta":
+                    logger.info("Skipping meta task %s (container only)", task["id"][:8])
+                    self._auto_complete_meta(task)
+                    return None
                 logger.info("Claimed task %s via RPC: %s", task["id"][:8], task["title"])
                 return task
             return None
@@ -142,11 +150,13 @@ class TaskManager:
             logger.debug("RPC claim_swarm_task not available (%s), using fallback", e)
 
         # Fallback: select + update (race condition possible but acceptable)
+        # Exclude meta tasks - they are containers, not executable by workers
         resp = (
             self.sb.table(self.TABLE)
             .select("*")
             .eq("status", "queued")
             .eq("cost_tier", cost_tier)
+            .neq("task_type", "meta")
             .order("priority", desc=False)
             .order("created_at", desc=False)
             .limit(1)
@@ -179,6 +189,23 @@ class TaskManager:
         logger.info("Claimed task %s: %s", task["id"][:8], task["title"])
         return update_resp.data[0]
 
+    # ── Auto-complete meta tasks ─────────────────────────────────────────
+
+    def _auto_complete_meta(self, task: dict[str, Any]):
+        """Auto-complete a meta task that was accidentally queued.
+
+        Meta tasks are containers that track child tasks. They shouldn't
+        be executed by workers. Mark them as completed immediately.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        self.sb.table(self.TABLE).update({
+            "status": "completed",
+            "output_data": {"note": "Meta task auto-completed (container only)"},
+            "completed_at": now,
+            "updated_at": now,
+        }).eq("id", task["id"]).execute()
+        logger.info("Auto-completed meta task %s", task["id"][:8])
+
     # ── Complete ──────────────────────────────────────────────────────────
 
     def complete_task(
@@ -203,9 +230,9 @@ class TaskManager:
             "updated_at": now,
         }
         if cost_cents > 0:
-            update["actual_cost_cents"] = cost_cents
+            update["actual_cost_cents"] = int(round(cost_cents))
         if tokens > 0:
-            update["tokens_used"] = tokens
+            update["tokens_used"] = int(tokens)
 
         resp = (
             self.sb.table(self.TABLE)

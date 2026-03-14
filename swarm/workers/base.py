@@ -175,8 +175,8 @@ class BaseWorker:
         try:
             output = self.execute(task)
 
-            # Extract cost/token info from output if available
-            cost_cents = int(output.get("cost_cents", 0))
+            # Extract cost/token info from output if available (must be int for Supabase)
+            cost_cents = int(round(output.get("cost_cents", 0)))
             tokens = int(output.get("input_tokens", 0)) + int(output.get("output_tokens", 0))
 
             self.task_manager.complete_task(task["id"], output, cost_cents=cost_cents, tokens=tokens)

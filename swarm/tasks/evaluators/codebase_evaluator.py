@@ -81,7 +81,7 @@ Provide your assessment as JSON."""
         logger.info("Evaluating project: %s", project_key)
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-5-20250514",
+            model="claude-haiku-4-5-20251001",
             max_tokens=4096,
             system=EVAL_SYSTEM,
             messages=[{"role": "user", "content": prompt}],

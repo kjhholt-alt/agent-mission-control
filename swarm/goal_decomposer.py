@@ -65,7 +65,7 @@ class GoalDecomposer:
         logger.info("Decomposing goal: %s", user_prompt[:100])
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-5-20250514",
+            model="claude-haiku-4-5-20251001",
             max_tokens=4096,
             system=system,
             messages=[{"role": "user", "content": user_prompt}],
@@ -100,7 +100,10 @@ class GoalDecomposer:
             task_type="meta",
             title=f"Goal: {user_prompt[:80]}",
             project=tasks_data[0].get("project", "nexus") if tasks_data else "nexus",
-            input_data={"original_prompt": user_prompt},
+            input_data={
+                "prompt": f"Meta task: track progress of child tasks for goal: {user_prompt[:200]}",
+                "original_prompt": user_prompt,
+            },
             cost_tier="light",
             priority=1,
         )

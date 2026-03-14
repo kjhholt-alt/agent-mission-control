@@ -100,7 +100,7 @@ class BudgetManager:
         row = self._get_today()
         update: dict[str, Any] = {}
         if cents > 0:
-            update["api_spent_cents"] = round(row["api_spent_cents"] + cents, 4)
+            update["api_spent_cents"] = int(round(row["api_spent_cents"] + cents))
         if minutes > 0:
             update["claude_code_minutes_used"] = round(
                 row["claude_code_minutes_used"] + minutes, 2

@@ -16,7 +16,7 @@ logger = logging.getLogger("swarm.worker.light")
 
 # Default models for light workers
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-SONNET_MODEL = "claude-sonnet-4-5-20250514"
+SONNET_MODEL = "claude-haiku-4-5-20251001"
 
 
 class LightWorker(BaseWorker):
