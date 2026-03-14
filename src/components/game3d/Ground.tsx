@@ -27,11 +27,11 @@ export function Ground() {
     ctx.fillStyle = "#12131a";
     ctx.fillRect(0, 0, size, size);
 
-    const tileSize = size / 25; // 25 major tiles across
+    const tileSize = size / 40; // 40 major tiles across for larger map
 
     // Draw concrete/metal plate tiles — alternating dark/lighter rectangles
-    for (let tx = 0; tx < 25; tx++) {
-      for (let ty = 0; ty < 25; ty++) {
+    for (let tx = 0; tx < 40; tx++) {
+      for (let ty = 0; ty < 40; ty++) {
         const x = tx * tileSize;
         const y = ty * tileSize;
         const isLight = (tx + ty) % 2 === 0;
@@ -143,8 +143,8 @@ export function Ground() {
     }
 
     // Finer cyan grid dots at every tile intersection
-    for (let x = 0; x <= 25; x++) {
-      for (let y = 0; y <= 25; y++) {
+    for (let x = 0; x <= 40; x++) {
+      for (let y = 0; y <= 40; y++) {
         const px = x * tileSize;
         const py = y * tileSize;
         const isMajor = x % 5 === 0 && y % 5 === 0;
@@ -205,8 +205,8 @@ export function Ground() {
   }, []);
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[7, -0.01, 7]} receiveShadow>
-      <planeGeometry args={[50, 50]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[15, -0.01, 15]} receiveShadow>
+      <planeGeometry args={[80, 80]} />
       <meshStandardMaterial
         map={gridTexture}
         color="#14151c"

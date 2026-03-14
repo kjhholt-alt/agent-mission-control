@@ -28,10 +28,10 @@ export function ForceField3D() {
   });
 
   return (
-    <mesh position={[7, 0, 7]}>
-      {/* radius=14, 32 width segments, 16 height segments,
+    <mesh position={[15, 0, 15]}>
+      {/* radius=25, 32 width segments, 16 height segments,
           phiStart=0, phiLength=2PI, thetaStart=0, thetaLength=PI/2 (top half only) */}
-      <sphereGeometry args={[14, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+      <sphereGeometry args={[25, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
       <shaderMaterial
         ref={materialRef}
         uniforms={uniforms}

@@ -28,31 +28,55 @@ export function Pipes3D() {
     // Pipes go through intermediate junction points for interesting routing
     const segments: PipeSegment[] = [];
 
-    // Pipe from command-center to outdoor-crm via junction
+    // Pipe from command-center to outdoor-crm via junction (center to west)
     const cmdPos = getBuildingPos("command-center");
     const ocrPos = getBuildingPos("outdoor-crm");
-    const junction1 = new THREE.Vector3(cmdPos.x - 2, 0.5, cmdPos.z);
+    const junction1 = new THREE.Vector3(cmdPos.x - 5, 0.5, cmdPos.z);
+    const junction1b = new THREE.Vector3(ocrPos.x, 0.5, cmdPos.z);
     segments.push({ from: cmdPos, to: junction1, hasFlow: true });
-    segments.push({ from: junction1, to: ocrPos, hasFlow: true });
+    segments.push({ from: junction1, to: junction1b, hasFlow: true });
+    segments.push({ from: junction1b, to: ocrPos, hasFlow: true });
 
-    // Pipe from barrelhouse to pl-engine
+    // Pipe from barrelhouse to pl-engine (east to north, long run)
     const bhPos = getBuildingPos("barrelhouse");
     const plePos = getBuildingPos("pl-engine");
-    const junction2 = new THREE.Vector3(bhPos.x, 0.5, plePos.z);
-    segments.push({ from: bhPos, to: junction2, hasFlow: false });
-    segments.push({ from: junction2, to: plePos, hasFlow: false });
+    const junction2a = new THREE.Vector3(bhPos.x, 0.5, 10);
+    const junction2b = new THREE.Vector3(15, 0.5, 10);
+    const junction2c = new THREE.Vector3(15, 0.5, plePos.z);
+    segments.push({ from: bhPos, to: junction2a, hasFlow: false });
+    segments.push({ from: junction2a, to: junction2b, hasFlow: false });
+    segments.push({ from: junction2b, to: junction2c, hasFlow: false });
+    segments.push({ from: junction2c, to: plePos, hasFlow: false });
 
-    // Pipe from automation-hub to mcp-array
+    // Pipe from automation-hub to mcp-array (south zone, horizontal run)
     const n8nPos = getBuildingPos("automation-hub");
     const mcpPos = getBuildingPos("mcp-array");
-    const junction3 = new THREE.Vector3(mcpPos.x, 0.5, n8nPos.z);
-    segments.push({ from: n8nPos, to: junction3, hasFlow: true });
-    segments.push({ from: junction3, to: mcpPos, hasFlow: true });
+    const junction3a = new THREE.Vector3(n8nPos.x, 0.5, mcpPos.z);
+    segments.push({ from: n8nPos, to: junction3a, hasFlow: true });
+    segments.push({ from: junction3a, to: mcpPos, hasFlow: true });
 
-    // Short pipe from chess-academy to email-finder
+    // Pipe from chess-academy to email-finder (west zone, vertical run)
     const chePos = getBuildingPos("chess-academy");
     const emlPos = getBuildingPos("email-finder");
-    segments.push({ from: chePos, to: emlPos, hasFlow: false });
+    const junction4 = new THREE.Vector3(chePos.x, 0.5, 18);
+    const junction4b = new THREE.Vector3(emlPos.x, 0.5, 18);
+    segments.push({ from: chePos, to: junction4, hasFlow: false });
+    segments.push({ from: junction4, to: junction4b, hasFlow: false });
+    segments.push({ from: junction4b, to: emlPos, hasFlow: false });
+
+    // Pipe from nexus-hq to pc-bottleneck (north zone horizontal)
+    const nxsPos = getBuildingPos("nexus-hq");
+    const pcbPos = getBuildingPos("pc-bottleneck");
+    segments.push({ from: nxsPos, to: pcbPos, hasFlow: true });
+
+    // Pipe from nexus-hq to pl-engine (north zone)
+    segments.push({ from: nxsPos, to: plePos, hasFlow: false });
+
+    // Pipe from finance-tower to email-finder (west to south-west, vertical run)
+    const finPos = getBuildingPos("finance-brief");
+    const junction5 = new THREE.Vector3(finPos.x, 0.5, emlPos.z);
+    segments.push({ from: finPos, to: junction5, hasFlow: true });
+    segments.push({ from: junction5, to: emlPos, hasFlow: true });
 
     return segments;
   }, []);

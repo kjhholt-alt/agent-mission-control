@@ -98,10 +98,10 @@ export default function GameCanvas({
       {/* Isometric camera */}
       <OrthographicCamera
         makeDefault
-        position={[15, 15, 15]}
-        zoom={40}
+        position={[30, 30, 30]}
+        zoom={25}
         near={0.1}
-        far={200}
+        far={300}
       />
 
       {/* Camera controls: pan + zoom only, no rotation */}
@@ -109,9 +109,9 @@ export default function GameCanvas({
         enableRotate={false}
         enablePan={true}
         enableZoom={true}
-        target={[7, 0, 7]}
-        minZoom={20}
-        maxZoom={80}
+        target={[15, 0, 15]}
+        minZoom={10}
+        maxZoom={100}
         panSpeed={1.2}
         zoomSpeed={0.8}
         mouseButtons={{
@@ -124,7 +124,7 @@ export default function GameCanvas({
       />
 
       {/* Industrial fog — depth cue and atmosphere */}
-      <fog attach="fog" args={["#050508", 20, 55]} />
+      <fog attach="fog" args={["#050508", 30, 90]} />
 
       {/* Hemisphere light — industrial: dark blue sky, warm orange ground */}
       <hemisphereLight
@@ -136,17 +136,17 @@ export default function GameCanvas({
 
       {/* Primary directional — warm industrial orange tint */}
       <directionalLight
-        position={[5, 8, 5]}
+        position={[15, 12, 15]}
         intensity={0.7}
         color="#ffe0b0"
         castShadow={!isMobile}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={50}
-        shadow-camera-left={-15}
-        shadow-camera-right={15}
-        shadow-camera-top={15}
-        shadow-camera-bottom={-15}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-far={80}
+        shadow-camera-left={-35}
+        shadow-camera-right={35}
+        shadow-camera-top={35}
+        shadow-camera-bottom={-35}
       />
 
       {/* Secondary warm fill from the other side */}
@@ -165,7 +165,7 @@ export default function GameCanvas({
 
       {/* Factory floor overhead lights (simulated via spot-like directionals) */}
       <directionalLight
-        position={[7, 12, 7]}
+        position={[15, 15, 15]}
         intensity={0.15}
         color="#ffe8c0"
       />

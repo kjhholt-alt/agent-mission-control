@@ -30,60 +30,97 @@ export function Environment3D() {
       );
     };
 
-    // Storage crates
+    // Storage crates — scattered across all zones
     const crates: { x: number; z: number; scale: number; rotation: number }[] = [];
-    for (let i = 0; i < 25; i++) {
-      const x = -2 + rand() * 18;
-      const z = -2 + rand() * 16;
+    for (let i = 0; i < 60; i++) {
+      const x = -2 + rand() * 34;
+      const z = -2 + rand() * 34;
       if (isValidPos(x, z)) {
         crates.push({
           x,
           z,
-          scale: 0.15 + rand() * 0.2,
+          scale: 0.15 + rand() * 0.25,
           rotation: rand() * Math.PI * 2,
         });
       }
     }
 
-    // Barrels near industrial buildings
+    // Barrels — clusters near each zone
     const barrels: { x: number; z: number; scale: number }[] = [];
-    for (let i = 0; i < 18; i++) {
-      const x = -1 + rand() * 16;
-      const z = -1 + rand() * 15;
+    for (let i = 0; i < 45; i++) {
+      const x = -1 + rand() * 32;
+      const z = -1 + rand() * 32;
       if (isValidPos(x, z)) {
         barrels.push({
           x,
           z,
-          scale: 0.12 + rand() * 0.08,
+          scale: 0.12 + rand() * 0.1,
         });
       }
     }
 
-    // Power poles
+    // Power poles — along major conveyor routes
     const poles: { x: number; z: number }[] = [];
-    // Place poles along two paths
-    for (let i = 0; i < 5; i++) {
-      const x = 1 + i * 3;
-      const z = -0.5;
+    // North row (along production zone)
+    for (let i = 0; i < 8; i++) {
+      const x = 2 + i * 3.5;
+      const z = 1;
       if (isValidPos(x, z)) poles.push({ x, z });
     }
-    for (let i = 0; i < 4; i++) {
-      const x = 14;
-      const z = 1 + i * 3;
+    // East column (services zone)
+    for (let i = 0; i < 6; i++) {
+      const x = 29;
+      const z = 5 + i * 4;
+      if (isValidPos(x, z)) poles.push({ x, z });
+    }
+    // South row (labs zone)
+    for (let i = 0; i < 6; i++) {
+      const x = 6 + i * 4;
+      const z = 29;
+      if (isValidPos(x, z)) poles.push({ x, z });
+    }
+    // West column (research zone)
+    for (let i = 0; i < 5; i++) {
+      const x = 0.5;
+      const z = 8 + i * 3.5;
+      if (isValidPos(x, z)) poles.push({ x, z });
+    }
+    // Center cross paths
+    for (let i = 0; i < 5; i++) {
+      const x = 15;
+      const z = 6 + i * 4;
       if (isValidPos(x, z)) poles.push({ x, z });
     }
 
     // Small vehicles/carts
     const carts: { x: number; z: number; rotation: number }[] = [];
-    for (let i = 0; i < 6; i++) {
-      const x = 1 + rand() * 12;
-      const z = 1 + rand() * 12;
+    for (let i = 0; i < 15; i++) {
+      const x = 1 + rand() * 28;
+      const z = 1 + rand() * 28;
       if (isValidPos(x, z)) {
         carts.push({ x, z, rotation: rand() * Math.PI * 2 });
       }
     }
 
-    return { crates, barrels, poles, carts };
+    // Guard posts / relay stations between zones
+    const allStructures: { x: number; z: number; type: "guard" | "relay" | "shed" }[] = [
+      // Between north and center
+      { x: 15, z: 8, type: "relay" as const },
+      // Between center and east
+      { x: 22, z: 15, type: "guard" as const },
+      // Between center and south
+      { x: 15, z: 22, type: "relay" as const },
+      // Between center and west
+      { x: 8, z: 15, type: "guard" as const },
+      // Corners
+      { x: 5, z: 5, type: "shed" as const },
+      { x: 25, z: 5, type: "shed" as const },
+      { x: 5, z: 25, type: "shed" as const },
+      { x: 25, z: 25, type: "shed" as const },
+    ];
+    const structures = allStructures.filter(s => isValidPos(s.x, s.z));
+
+    return { crates, barrels, poles, carts, structures };
   }, []);
 
   return (
@@ -238,6 +275,61 @@ export function Environment3D() {
               />
             </mesh>
           ))}
+        </group>
+      ))}
+
+      {/* Guard posts, relay stations, storage sheds between zones */}
+      {decorations.structures.map((structure, i) => (
+        <group key={`structure-${i}`} position={[structure.x, 0, structure.z]}>
+          {structure.type === "guard" && (
+            <>
+              {/* Guard post — small booth with light */}
+              <mesh position={[0, 0.35, 0]} castShadow>
+                <boxGeometry args={[0.5, 0.7, 0.5]} />
+                <meshStandardMaterial color="#2a2c38" metalness={0.7} roughness={0.3} />
+              </mesh>
+              <mesh position={[0, 0.75, 0]}>
+                <boxGeometry args={[0.55, 0.08, 0.55]} />
+                <meshStandardMaterial color="#3a3c48" metalness={0.6} roughness={0.4} />
+              </mesh>
+              <mesh position={[0, 0.85, 0]}>
+                <sphereGeometry args={[0.06, 6, 6]} />
+                <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={1.5} />
+              </mesh>
+              <pointLight position={[0, 0.85, 0]} color="#ef4444" intensity={0.2} distance={3} decay={2} />
+            </>
+          )}
+          {structure.type === "relay" && (
+            <>
+              {/* Relay station — antenna mast with dish */}
+              <mesh position={[0, 0.8, 0]} castShadow>
+                <cylinderGeometry args={[0.04, 0.06, 1.6, 6]} />
+                <meshStandardMaterial color="#5a5c68" metalness={0.8} roughness={0.3} />
+              </mesh>
+              <mesh position={[0.15, 1.4, 0]} rotation={[0, 0, Math.PI / 6]}>
+                <coneGeometry args={[0.2, 0.15, 8, 1, true]} />
+                <meshStandardMaterial color="#4a4c58" metalness={0.7} roughness={0.3} side={THREE.DoubleSide} />
+              </mesh>
+              <mesh position={[0, 1.65, 0]}>
+                <sphereGeometry args={[0.04, 6, 6]} />
+                <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={1.2} />
+              </mesh>
+              <pointLight position={[0, 1.65, 0]} color="#06b6d4" intensity={0.15} distance={2.5} decay={2} />
+            </>
+          )}
+          {structure.type === "shed" && (
+            <>
+              {/* Storage shed — low flat building */}
+              <mesh position={[0, 0.2, 0]} castShadow>
+                <boxGeometry args={[0.7, 0.4, 0.5]} />
+                <meshStandardMaterial color="#3a3228" metalness={0.4} roughness={0.7} />
+              </mesh>
+              <mesh position={[0, 0.42, 0]}>
+                <boxGeometry args={[0.75, 0.05, 0.55]} />
+                <meshStandardMaterial color="#4a4238" metalness={0.5} roughness={0.5} />
+              </mesh>
+            </>
+          )}
         </group>
       ))}
     </group>
