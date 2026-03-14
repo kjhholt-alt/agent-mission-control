@@ -71,7 +71,7 @@ class CCLightWorker(BaseWorker):
 
         # Build command — uses --no-input to prevent interactive prompts
         cmd = [
-            "claude",
+            "C:/Users/Kruz/.local/bin/claude.exe",
             "-p",
             prompt,
             "--no-input",

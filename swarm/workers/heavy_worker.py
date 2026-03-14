@@ -58,7 +58,7 @@ class HeavyWorker(BaseWorker):
 
         # Build command
         cmd = [
-            "claude",
+            "C:/Users/Kruz/.local/bin/claude.exe",
             "-p",
             prompt,
             "--dangerously-skip-permissions",

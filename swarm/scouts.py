@@ -214,7 +214,7 @@ class ScoutAgent:
 
         try:
             result = subprocess.run(
-                ["claude", "-p", prompt, "--no-input"],
+                ["C:/Users/Kruz/.local/bin/claude.exe", "-p", prompt, "--no-input"],
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 min max
