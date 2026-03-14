@@ -1,5 +1,13 @@
 """
 Base worker class: registration, heartbeat, pull-execute-report loop.
+
+Schema (swarm_workers):
+  id (text PK), worker_name (text), worker_type (text), tier (text),
+  status (text, default 'idle'), current_task_id (uuid),
+  last_heartbeat (timestamptz), pid (int),
+  tasks_completed (int), tasks_failed (int),
+  total_cost_cents (int), total_tokens (int), xp (int),
+  spawned_at (timestamptz), died_at (timestamptz)
 """
 
 import logging
@@ -41,16 +49,24 @@ class BaseWorker:
         self.task_manager = TaskManager()
         self.budget_manager = BudgetManager()
 
+        now = datetime.now(timezone.utc).isoformat()
+
         # Register in workers table
         self.sb.table(self.WORKERS_TABLE).insert(
             {
                 "id": self.worker_id,
+                "worker_name": f"{worker_type}-{self.worker_id[:8]}",
                 "worker_type": self.worker_type,
                 "tier": self.tier,
                 "status": "idle",
-                "last_heartbeat": datetime.now(timezone.utc).isoformat(),
-                "started_at": datetime.now(timezone.utc).isoformat(),
+                "last_heartbeat": now,
+                "spawned_at": now,
                 "pid": self._get_pid(),
+                "tasks_completed": 0,
+                "tasks_failed": 0,
+                "total_cost_cents": 0,
+                "total_tokens": 0,
+                "xp": 0,
             }
         ).execute()
 
@@ -143,7 +159,7 @@ class BaseWorker:
             "id", self.worker_id
         ).execute()
 
-        task = self.task_manager.pull_task(self.tier)
+        task = self.task_manager.pull_task(self.tier, worker_id=self.worker_id)
         if not task:
             return False
 
@@ -158,7 +174,38 @@ class BaseWorker:
 
         try:
             output = self.execute(task)
-            self.task_manager.complete_task(task["id"], output)
+
+            # Extract cost/token info from output if available
+            cost_cents = int(output.get("cost_cents", 0))
+            tokens = int(output.get("input_tokens", 0)) + int(output.get("output_tokens", 0))
+
+            self.task_manager.complete_task(task["id"], output, cost_cents=cost_cents, tokens=tokens)
+            self.budget_manager.record_task_result(success=True)
+
+            # Update worker stats
+            self.sb.table(self.WORKERS_TABLE).update({
+                "tasks_completed": self.sb.table(self.WORKERS_TABLE)
+                    .select("tasks_completed")
+                    .eq("id", self.worker_id)
+                    .execute()
+                    .data[0]["tasks_completed"] + 1,
+                "total_cost_cents": self.sb.table(self.WORKERS_TABLE)
+                    .select("total_cost_cents")
+                    .eq("id", self.worker_id)
+                    .execute()
+                    .data[0]["total_cost_cents"] + cost_cents,
+                "total_tokens": self.sb.table(self.WORKERS_TABLE)
+                    .select("total_tokens")
+                    .eq("id", self.worker_id)
+                    .execute()
+                    .data[0]["total_tokens"] + tokens,
+                "xp": self.sb.table(self.WORKERS_TABLE)
+                    .select("xp")
+                    .eq("id", self.worker_id)
+                    .execute()
+                    .data[0]["xp"] + 10,
+            }).eq("id", self.worker_id).execute()
+
             self.report_to_mission_control(
                 "task_completed",
                 "completed",
@@ -168,6 +215,18 @@ class BaseWorker:
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
             self.task_manager.fail_task(task["id"], error_msg)
+            self.budget_manager.record_task_result(success=False)
+
+            # Update worker fail count
+            try:
+                w = self.sb.table(self.WORKERS_TABLE).select("tasks_failed").eq("id", self.worker_id).execute()
+                if w.data:
+                    self.sb.table(self.WORKERS_TABLE).update({
+                        "tasks_failed": w.data[0]["tasks_failed"] + 1,
+                    }).eq("id", self.worker_id).execute()
+            except Exception:
+                pass
+
             self.report_to_mission_control(
                 "task_failed",
                 "failed",
@@ -212,7 +271,7 @@ class BaseWorker:
             self.sb.table(self.WORKERS_TABLE).update(
                 {
                     "status": "dead",
-                    "stopped_at": datetime.now(timezone.utc).isoformat(),
+                    "died_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", self.worker_id).execute()
             logger.info("Worker %s shut down", self.worker_id[:8])

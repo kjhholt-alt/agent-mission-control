@@ -1,5 +1,17 @@
 """
 Task manager: CRUD + atomic claim operations for swarm tasks in Supabase.
+
+Schema (swarm_tasks):
+  id (uuid, auto), task_type (text), title (text), description (text),
+  project (text), parent_task_id (uuid), root_task_id (uuid), depth (int),
+  status (text, default 'pending'), priority (int, default 50),
+  cost_tier (text, default 'light'), depends_on (uuid[]),
+  assigned_worker_id (text), worker_type (text),
+  input_data (jsonb), output_data (jsonb), checkpoint (jsonb),
+  error_message (text), retry_count (int), max_retries (int, default 3),
+  estimated_cost_cents (int), actual_cost_cents (int), tokens_used (int),
+  is_recurring (bool), recurrence_interval_minutes (int), next_run_at (timestamptz),
+  created_at, queued_at, started_at, completed_at, updated_at
 """
 
 import json
@@ -32,9 +44,12 @@ class TaskManager:
         project: str,
         input_data: dict[str, Any],
         cost_tier: str = "light",
-        priority: int = 5,
+        priority: int = 50,
         parent_id: Optional[str] = None,
         depends_on: Optional[list[str]] = None,
+        description: str = "",
+        is_recurring: bool = False,
+        recurrence_interval_minutes: Optional[int] = None,
     ) -> dict[str, Any]:
         """Create a new task in the queue.
 
@@ -44,13 +59,18 @@ class TaskManager:
             project: Project key from config.PROJECTS
             input_data: Structured input for the worker
             cost_tier: "light" or "heavy"
-            priority: 1 (highest) to 10 (lowest)
+            priority: 1 (highest) to 100 (lowest), default 50
             parent_id: UUID of parent task (for child tasks)
             depends_on: List of task UUIDs that must complete first
+            description: Detailed task description
+            is_recurring: Whether this task recurs
+            recurrence_interval_minutes: Minutes between recurrences
 
         Returns:
             The created task row
         """
+        now = datetime.now(timezone.utc).isoformat()
+
         status = "queued"
         if depends_on:
             # Check if all dependencies are completed
@@ -66,31 +86,36 @@ class TaskManager:
             if set(depends_on) - completed_ids:
                 status = "blocked"
 
-        row = {
-            "id": str(uuid.uuid4()),
+        row: dict[str, Any] = {
             "task_type": task_type,
             "title": title,
+            "description": description,
             "project": project,
-            "input_data": json.dumps(input_data) if isinstance(input_data, dict) else input_data,
+            "input_data": input_data,
             "cost_tier": cost_tier,
             "priority": priority,
             "status": status,
-            "parent_id": parent_id,
+            "parent_task_id": parent_id,
             "depends_on": depends_on or [],
-            "created_at": datetime.now(timezone.utc).isoformat(),
             "retry_count": 0,
             "max_retries": 3,
+            "is_recurring": is_recurring,
+            "queued_at": now if status == "queued" else None,
         }
+
+        if recurrence_interval_minutes is not None:
+            row["recurrence_interval_minutes"] = recurrence_interval_minutes
 
         resp = self.sb.table(self.TABLE).insert(row).execute()
         if not resp.data:
             raise RuntimeError(f"Failed to create task: {resp}")
-        logger.info("Created task %s: %s [%s]", row["id"][:8], title, status)
-        return resp.data[0]
+        task = resp.data[0]
+        logger.info("Created task %s: %s [%s]", task["id"][:8], title, status)
+        return task
 
     # ── Pull (atomic claim) ───────────────────────────────────────────────
 
-    def pull_task(self, cost_tier: str = "light") -> Optional[dict[str, Any]]:
+    def pull_task(self, cost_tier: str = "light", worker_id: Optional[str] = None) -> Optional[dict[str, Any]]:
         """Atomically claim the next queued task for a given cost tier.
 
         Uses an RPC function if available, otherwise falls back to
@@ -98,6 +123,7 @@ class TaskManager:
 
         Args:
             cost_tier: "light" or "heavy"
+            worker_id: Worker ID to assign
 
         Returns:
             The claimed task row, or None if no tasks available
@@ -105,7 +131,7 @@ class TaskManager:
         # Try RPC first (atomic, uses SELECT FOR UPDATE SKIP LOCKED)
         try:
             resp = self.sb.rpc(
-                "claim_swarm_task", {"p_cost_tier": cost_tier}
+                "claim_swarm_task", {"p_cost_tier": cost_tier, "p_worker_id": worker_id or ""}
             ).execute()
             if resp.data and len(resp.data) > 0:
                 task = resp.data[0]
@@ -130,14 +156,18 @@ class TaskManager:
             return None
 
         task = resp.data[0]
+        now = datetime.now(timezone.utc).isoformat()
+        update: dict[str, Any] = {
+            "status": "running",
+            "started_at": now,
+            "updated_at": now,
+        }
+        if worker_id:
+            update["assigned_worker_id"] = worker_id
+
         update_resp = (
             self.sb.table(self.TABLE)
-            .update(
-                {
-                    "status": "running",
-                    "started_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+            .update(update)
             .eq("id", task["id"])
             .eq("status", "queued")  # Optimistic lock
             .execute()
@@ -152,28 +182,34 @@ class TaskManager:
     # ── Complete ──────────────────────────────────────────────────────────
 
     def complete_task(
-        self, task_id: str, output_data: dict[str, Any]
+        self, task_id: str, output_data: dict[str, Any], cost_cents: int = 0, tokens: int = 0
     ) -> dict[str, Any]:
         """Mark a task as completed and unblock dependents.
 
         Args:
             task_id: UUID of the task
             output_data: Structured output from the worker
+            cost_cents: Actual cost in cents
+            tokens: Total tokens used
 
         Returns:
             The updated task row
         """
+        now = datetime.now(timezone.utc).isoformat()
+        update: dict[str, Any] = {
+            "status": "completed",
+            "output_data": output_data,
+            "completed_at": now,
+            "updated_at": now,
+        }
+        if cost_cents > 0:
+            update["actual_cost_cents"] = cost_cents
+        if tokens > 0:
+            update["tokens_used"] = tokens
+
         resp = (
             self.sb.table(self.TABLE)
-            .update(
-                {
-                    "status": "completed",
-                    "output_data": json.dumps(output_data)
-                    if isinstance(output_data, dict)
-                    else output_data,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+            .update(update)
             .eq("id", task_id)
             .execute()
         )
@@ -211,14 +247,17 @@ class TaskManager:
 
         task = resp.data[0]
         new_count = task["retry_count"] + 1
+        now = datetime.now(timezone.utc).isoformat()
 
         if new_count < task["max_retries"]:
             # Retry: re-queue with incremented count
-            update = {
+            update: dict[str, Any] = {
                 "status": "queued",
                 "retry_count": new_count,
-                "error": error,
+                "error_message": error,
                 "started_at": None,
+                "assigned_worker_id": None,
+                "updated_at": now,
             }
             logger.warning(
                 "Task %s failed (attempt %d/%d), re-queuing: %s",
@@ -232,8 +271,9 @@ class TaskManager:
             update = {
                 "status": "failed",
                 "retry_count": new_count,
-                "error": error,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "error_message": error,
+                "completed_at": now,
+                "updated_at": now,
             }
             logger.error(
                 "Task %s permanently failed after %d attempts: %s",
@@ -269,9 +309,10 @@ class TaskManager:
                 project=child["project"],
                 input_data=child.get("input_data", {}),
                 cost_tier=child.get("cost_tier", "light"),
-                priority=child.get("priority", 5),
+                priority=child.get("priority", 50),
                 parent_id=parent_id,
                 depends_on=child.get("depends_on"),
+                description=child.get("description", ""),
             )
             results.append(task)
         return results
@@ -279,16 +320,18 @@ class TaskManager:
     # ── Recurring/meta tasks ──────────────────────────────────────────────
 
     def get_pending_recurring(self) -> list[dict[str, Any]]:
-        """Find meta-tasks that are due for re-evaluation.
+        """Find recurring tasks that are due for re-execution.
 
         Returns:
-            List of meta-task rows whose eval_interval has elapsed
+            List of recurring task rows whose next_run_at has passed
         """
+        now = datetime.now(timezone.utc).isoformat()
         resp = (
             self.sb.table(self.TABLE)
             .select("*")
-            .eq("task_type", "meta")
-            .in_("status", ["completed", "queued"])
+            .eq("is_recurring", True)
+            .in_("status", ["completed", "pending"])
+            .lte("next_run_at", now)
             .execute()
         )
         return resp.data or []
@@ -297,7 +340,6 @@ class TaskManager:
 
     def _unblock_dependents(self, completed_task_id: str):
         """Move blocked tasks to queued if all their deps are now completed."""
-        # Find all blocked tasks
         resp = (
             self.sb.table(self.TABLE)
             .select("id, depends_on")
@@ -323,9 +365,10 @@ class TaskManager:
                 r["status"] == "completed" for r in (dep_resp.data or [])
             )
             if all_completed:
-                self.sb.table(self.TABLE).update({"status": "queued"}).eq(
-                    "id", task["id"]
-                ).execute()
+                now = datetime.now(timezone.utc).isoformat()
+                self.sb.table(self.TABLE).update(
+                    {"status": "queued", "queued_at": now, "updated_at": now}
+                ).eq("id", task["id"]).execute()
                 logger.info("Unblocked task %s", task["id"][:8])
 
     def unblock_ready_tasks(self):
@@ -342,9 +385,10 @@ class TaskManager:
         for task in resp.data:
             deps = task.get("depends_on", [])
             if not deps:
-                self.sb.table(self.TABLE).update({"status": "queued"}).eq(
-                    "id", task["id"]
-                ).execute()
+                now = datetime.now(timezone.utc).isoformat()
+                self.sb.table(self.TABLE).update(
+                    {"status": "queued", "queued_at": now, "updated_at": now}
+                ).eq("id", task["id"]).execute()
                 continue
 
             dep_resp = (
@@ -357,9 +401,10 @@ class TaskManager:
                 r["status"] == "completed" for r in (dep_resp.data or [])
             )
             if all_completed:
-                self.sb.table(self.TABLE).update({"status": "queued"}).eq(
-                    "id", task["id"]
-                ).execute()
+                now = datetime.now(timezone.utc).isoformat()
+                self.sb.table(self.TABLE).update(
+                    {"status": "queued", "queued_at": now, "updated_at": now}
+                ).eq("id", task["id"]).execute()
                 logger.info("Unblocked task %s", task["id"][:8])
 
     # ── Query helpers ─────────────────────────────────────────────────────
@@ -377,11 +422,11 @@ class TaskManager:
         return resp.data or []
 
     def get_all_active(self) -> list[dict[str, Any]]:
-        """Get all non-terminal tasks (queued, running, blocked)."""
+        """Get all non-terminal tasks (queued, running, blocked, pending)."""
         resp = (
             self.sb.table(self.TABLE)
             .select("*")
-            .in_("status", ["queued", "running", "blocked"])
+            .in_("status", ["queued", "running", "blocked", "pending"])
             .order("priority", desc=False)
             .execute()
         )
