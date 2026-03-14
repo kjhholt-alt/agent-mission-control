@@ -106,6 +106,19 @@ const NEXUS_ASCII = `
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+interface OracleBriefing {
+  greeting: string;
+  summary: string;
+  decisions_needed: Array<{
+    type: string;
+    severity: string;
+    title: string;
+    detail: string;
+    actions: string[];
+  }>;
+  highlights: Array<{ title: string; project: string }>;
+}
+
 export default function MobileCommandCenter() {
   const [workers, setWorkers] = useState<SwarmWorker[]>([]);
   const [tasks, setTasks] = useState<SwarmTask[]>([]);
@@ -114,6 +127,7 @@ export default function MobileCommandCenter() {
   const [commandInput, setCommandInput] = useState("");
   const [commandOutput, setCommandOutput] = useState("");
   const [loading, setLoading] = useState(true);
+  const [oracleBriefing, setOracleBriefing] = useState<OracleBriefing | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const eventsRef = useRef<string[]>([]);
 
@@ -175,6 +189,15 @@ export default function MobileCommandCenter() {
         .limit(1);
 
       if (bResp.data && bResp.data.length > 0) setBudget(bResp.data[0]);
+
+      // Fetch Oracle briefing
+      try {
+        const oracleRes = await fetch("/api/oracle?type=live");
+        const oracleData = await oracleRes.json();
+        if (oracleData.briefing) setOracleBriefing(oracleData.briefing);
+      } catch (oracleErr) {
+        console.error("Oracle fetch error:", oracleErr);
+      }
 
       setLoading(false);
     } catch (err) {
@@ -330,6 +353,43 @@ export default function MobileCommandCenter() {
         </div>
       ) : (
         <>
+          {/* ── ORACLE BRIEFING ── */}
+          {oracleBriefing && (
+            <Section title="BRIEFING">
+              <div style={{ color: "#e8a019", fontSize: "11px", marginBottom: "4px" }}>
+                {oracleBriefing.greeting}
+              </div>
+              <div style={{ color: "#888", fontSize: "11px", marginBottom: "6px", lineHeight: "1.4" }}>
+                {oracleBriefing.summary}
+              </div>
+              {oracleBriefing.decisions_needed.length > 0 && (
+                <div style={{ marginBottom: "4px" }}>
+                  {oracleBriefing.decisions_needed.slice(0, 3).map((d, i) => (
+                    <div key={i} style={{ padding: "2px 0" }}>
+                      <span style={{
+                        color: d.severity === "critical" ? "#ef4444"
+                          : d.severity === "high" ? "#f59e0b"
+                          : "#e8a019",
+                        fontSize: "10px",
+                        fontWeight: "bold",
+                      }}>
+                        [{d.severity === "critical" ? "!!!" : d.severity === "high" ? "!!" : "!"}]
+                      </span>{" "}
+                      <span style={{ color: "#ccc", fontSize: "11px" }}>
+                        {d.title.length > 40 ? d.title.slice(0, 40) + "..." : d.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {oracleBriefing.highlights.length > 0 && (
+                <div style={{ color: "#444", fontSize: "10px", marginTop: "2px" }}>
+                  {oracleBriefing.highlights.length} task(s) done recently
+                </div>
+              )}
+            </Section>
+          )}
+
           {/* ── PARTY STATUS ── */}
           <Section title="PARTY STATUS">
             {workers.length === 0 ? (

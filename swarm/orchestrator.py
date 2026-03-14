@@ -17,6 +17,7 @@ from swarm.config import (
     WORKER_HEARTBEAT_TIMEOUT_SECONDS,
     WORKER_LIMITS,
 )
+from swarm.oracle import Oracle
 from swarm.scouts import ScoutAgent
 from swarm.tasks.task_manager import TaskManager
 
@@ -59,6 +60,7 @@ class SwarmOrchestrator:
         self.task_manager = TaskManager()
         self.budget_manager = BudgetManager()
         self.scout = ScoutAgent(task_manager=self.task_manager)
+        self.oracle = Oracle(supabase_client=self.sb)
         self.alive = True
         self.worker_processes: dict[str, multiprocessing.Process] = {}
 
@@ -89,6 +91,27 @@ class SwarmOrchestrator:
                         self.scout.run_evaluation()
                     except Exception as e:
                         logger.error("Scout failed: %s", e, exc_info=True)
+
+                # Oracle: briefing every 2 hours
+                if self.oracle.is_briefing_due():
+                    try:
+                        self.oracle.run_briefing()
+                    except Exception as e:
+                        logger.error("Oracle briefing failed: %s", e, exc_info=True)
+
+                # Oracle: daily digest at 6pm UTC
+                if self.oracle.is_daily_due():
+                    try:
+                        self.oracle.generate_daily_digest()
+                    except Exception as e:
+                        logger.error("Oracle daily digest failed: %s", e, exc_info=True)
+
+                # Oracle: weekly report on Sundays
+                if self.oracle.is_weekly_due():
+                    try:
+                        self.oracle.generate_weekly_report()
+                    except Exception as e:
+                        logger.error("Oracle weekly report failed: %s", e, exc_info=True)
             except KeyboardInterrupt:
                 break
             except Exception as e:
