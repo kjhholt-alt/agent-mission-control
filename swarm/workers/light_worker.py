@@ -9,7 +9,8 @@ from typing import Any
 import anthropic
 
 from swarm.budget.cost_calculator import calculate_cost
-from swarm.config import ANTHROPIC_API_KEY
+from swarm.config import ANTHROPIC_API_KEY, PROJECTS
+from swarm.context import gather_project_context
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.light")
@@ -25,6 +26,39 @@ class LightWorker(BaseWorker):
     def __init__(self, worker_type: str = "light"):
         super().__init__(worker_type=worker_type, tier="light")
         self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    def _build_prompt_with_context(self, task: dict[str, Any], prompt: str) -> str:
+        """Inject project context before the task prompt if a project is specified.
+
+        Args:
+            task: Task row from Supabase
+            prompt: Original task prompt
+
+        Returns:
+            Prompt with project context prepended, or original prompt
+        """
+        project_key = task.get("project", "")
+        if not project_key:
+            return prompt
+
+        project_config = PROJECTS.get(project_key)
+        if not project_config:
+            return prompt
+
+        project_dir = project_config.get("dir", "")
+        if not project_dir:
+            return prompt
+
+        context = gather_project_context(project_dir)
+        if not context:
+            return prompt
+
+        logger.info(
+            "Injected %d chars of project context for %s",
+            len(context),
+            project_key,
+        )
+        return f"{context}\n\n{prompt}"
 
     def execute(self, task: dict[str, Any]) -> dict[str, Any]:
         """Execute a task by calling the Claude API.
@@ -46,6 +80,9 @@ class LightWorker(BaseWorker):
         prompt = input_data.get("prompt", "")
         if not prompt:
             raise ValueError("Task input_data must contain a 'prompt' field")
+
+        # Inject project context before the prompt
+        prompt = self._build_prompt_with_context(task, prompt)
 
         # Select model based on task type
         model = input_data.get("model", DEFAULT_MODEL)

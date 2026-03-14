@@ -74,6 +74,17 @@ MODEL_COSTS = {
     "claude-sonnet-4-5-20250514": {"input": 0.3, "output": 1.5},
 }
 
+# ── Quality gate ──────────────────────────────────────────────────────────────
+ENABLE_QUALITY_GATE = True
+
+# ── Worker type matching ─────────────────────────────────────────────────────
+WORKER_TYPE_PREFERENCES = {
+    "builder": ["build", "implement", "refactor"],
+    "inspector": ["eval", "review", "test"],
+    "miner": ["mine", "prospect", "enrich"],
+    "scout": ["eval", "plan", "research"],
+}
+
 # ── Orchestrator timing ──────────────────────────────────────────────────────
 ORCHESTRATOR_LOOP_SECONDS = 10
 WORKER_HEARTBEAT_TIMEOUT_SECONDS = 600  # 10 minutes

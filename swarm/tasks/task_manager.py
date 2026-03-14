@@ -118,15 +118,24 @@ class TaskManager:
 
     # ── Pull (atomic claim) ───────────────────────────────────────────────
 
-    def pull_task(self, cost_tier: str = "light", worker_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+    def pull_task(
+        self,
+        cost_tier: str = "light",
+        worker_id: Optional[str] = None,
+        worker_type: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
         """Atomically claim the next queued task for a given cost tier.
 
         Uses an RPC function if available, otherwise falls back to
         select-then-update (less safe but functional).
 
+        When worker_type is provided, prefers tasks matching the worker's
+        specialization (e.g. builder prefers build/implement/refactor tasks).
+
         Args:
             cost_tier: "light" or "heavy"
             worker_id: Worker ID to assign
+            worker_type: Worker type for smart matching (e.g. "builder", "inspector")
 
         Returns:
             The claimed task row, or None if no tasks available
@@ -151,6 +160,7 @@ class TaskManager:
 
         # Fallback: select + update (race condition possible but acceptable)
         # Exclude meta tasks - they are containers, not executable by workers
+        # Fetch a batch of candidates so we can do smart matching client-side
         resp = (
             self.sb.table(self.TABLE)
             .select("*")
@@ -159,13 +169,15 @@ class TaskManager:
             .neq("task_type", "meta")
             .order("priority", desc=False)
             .order("created_at", desc=False)
-            .limit(1)
+            .limit(20)
             .execute()
         )
         if not resp.data:
             return None
 
-        task = resp.data[0]
+        # Smart worker matching: prefer tasks that match the worker's type
+        task = self._pick_best_task(resp.data, worker_type)
+
         now = datetime.now(timezone.utc).isoformat()
         update: dict[str, Any] = {
             "status": "running",
@@ -188,6 +200,43 @@ class TaskManager:
 
         logger.info("Claimed task %s: %s", task["id"][:8], task["title"])
         return update_resp.data[0]
+
+    def _pick_best_task(
+        self, candidates: list[dict[str, Any]], worker_type: Optional[str] = None
+    ) -> dict[str, Any]:
+        """Pick the best task from candidates based on worker type matching.
+
+        If worker_type is provided and matches a known preference list,
+        tasks whose task_type matches are preferred. Falls back to the
+        first candidate (highest priority) if no type match is found.
+
+        Args:
+            candidates: List of queued task rows, already sorted by priority
+            worker_type: Worker type for matching (e.g. "builder", "inspector")
+
+        Returns:
+            The best matching task row
+        """
+        from swarm.config import WORKER_TYPE_PREFERENCES
+
+        if not worker_type or worker_type not in WORKER_TYPE_PREFERENCES:
+            return candidates[0]
+
+        preferred_types = WORKER_TYPE_PREFERENCES[worker_type]
+
+        # Look for a type-matched task
+        for task in candidates:
+            if task.get("task_type") in preferred_types:
+                logger.debug(
+                    "Smart match: worker_type=%s matched task_type=%s for task %s",
+                    worker_type,
+                    task["task_type"],
+                    task["id"][:8],
+                )
+                return task
+
+        # No match found, fall back to highest priority
+        return candidates[0]
 
     # ── Auto-complete meta tasks ─────────────────────────────────────────
 
@@ -366,10 +415,14 @@ class TaskManager:
     # ── Dependency management ─────────────────────────────────────────────
 
     def _unblock_dependents(self, completed_task_id: str):
-        """Move blocked tasks to queued if all their deps are now completed."""
+        """Move blocked tasks to queued if all their deps are now completed.
+
+        Also injects completed dependency outputs into the task's prompt
+        so each task in a chain builds on what came before.
+        """
         resp = (
             self.sb.table(self.TABLE)
-            .select("id, depends_on")
+            .select("id, depends_on, input_data")
             .eq("status", "blocked")
             .execute()
         )
@@ -384,7 +437,7 @@ class TaskManager:
             # Check if ALL deps are completed
             dep_resp = (
                 self.sb.table(self.TABLE)
-                .select("id, status")
+                .select("id, status, title, output_data")
                 .in_("id", deps)
                 .execute()
             )
@@ -392,17 +445,87 @@ class TaskManager:
                 r["status"] == "completed" for r in (dep_resp.data or [])
             )
             if all_completed:
+                # Inject parent outputs into the task prompt
+                updated_input = self._inject_parent_outputs(
+                    task.get("input_data", {}), dep_resp.data or []
+                )
                 now = datetime.now(timezone.utc).isoformat()
-                self.sb.table(self.TABLE).update(
-                    {"status": "queued", "queued_at": now, "updated_at": now}
-                ).eq("id", task["id"]).execute()
-                logger.info("Unblocked task %s", task["id"][:8])
+                self.sb.table(self.TABLE).update({
+                    "status": "queued",
+                    "queued_at": now,
+                    "updated_at": now,
+                    "input_data": updated_input,
+                }).eq("id", task["id"]).execute()
+                logger.info("Unblocked task %s with %d parent outputs injected", task["id"][:8], len(dep_resp.data or []))
+
+    def _inject_parent_outputs(
+        self, input_data: dict[str, Any], completed_deps: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Inject completed dependency outputs into a task's input_data.
+
+        Appends parent task results before the original prompt so the task
+        can build on what came before.
+
+        Args:
+            input_data: The task's current input_data dict
+            completed_deps: List of completed dependency task rows with output_data
+
+        Returns:
+            Updated input_data with parent outputs prepended to the prompt
+        """
+        if isinstance(input_data, str):
+            input_data = json.loads(input_data)
+
+        input_data = dict(input_data)  # shallow copy
+        original_prompt = input_data.get("prompt", "")
+
+        # Build parent output context
+        parent_sections: list[str] = []
+        for dep in completed_deps:
+            title = dep.get("title", "Unknown task")
+            output = dep.get("output_data", {})
+            if isinstance(output, str):
+                try:
+                    output = json.loads(output)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Extract the response text from output_data
+            if isinstance(output, dict):
+                # Light worker output has "response", heavy has "stdout"
+                output_text = output.get("response", output.get("stdout", ""))
+            else:
+                output_text = str(output) if output else ""
+
+            # Truncate very long outputs to keep context reasonable
+            max_output_len = 3000
+            if len(output_text) > max_output_len:
+                output_text = output_text[:max_output_len] + "\n[...truncated...]"
+
+            if output_text:
+                parent_sections.append(
+                    f'Task: "{title}"\nOutput: {output_text}'
+                )
+
+        if not parent_sections:
+            return input_data
+
+        chained_context = "Previous task results:\n---\n"
+        chained_context += "\n---\n".join(parent_sections)
+        chained_context += f"\n---\n\nNow complete this task:\n{original_prompt}"
+
+        input_data["prompt"] = chained_context
+        return input_data
 
     def unblock_ready_tasks(self):
-        """Scan all blocked tasks and unblock those with all deps satisfied."""
+        """Scan all blocked tasks and unblock those with all deps satisfied.
+
+        When unblocking, injects completed dependency outputs into the task's
+        prompt for output chaining.
+        """
         resp = (
             self.sb.table(self.TABLE)
-            .select("id, depends_on")
+            .select("id, depends_on, input_data")
             .eq("status", "blocked")
             .execute()
         )
@@ -420,7 +543,7 @@ class TaskManager:
 
             dep_resp = (
                 self.sb.table(self.TABLE)
-                .select("id, status")
+                .select("id, status, title, output_data")
                 .in_("id", deps)
                 .execute()
             )
@@ -428,11 +551,18 @@ class TaskManager:
                 r["status"] == "completed" for r in (dep_resp.data or [])
             )
             if all_completed:
+                # Inject parent outputs into the task prompt
+                updated_input = self._inject_parent_outputs(
+                    task.get("input_data", {}), dep_resp.data or []
+                )
                 now = datetime.now(timezone.utc).isoformat()
-                self.sb.table(self.TABLE).update(
-                    {"status": "queued", "queued_at": now, "updated_at": now}
-                ).eq("id", task["id"]).execute()
-                logger.info("Unblocked task %s", task["id"][:8])
+                self.sb.table(self.TABLE).update({
+                    "status": "queued",
+                    "queued_at": now,
+                    "updated_at": now,
+                    "input_data": updated_input,
+                }).eq("id", task["id"]).execute()
+                logger.info("Unblocked task %s with %d parent outputs injected", task["id"][:8], len(dep_resp.data or []))
 
     # ── Query helpers ─────────────────────────────────────────────────────
 
