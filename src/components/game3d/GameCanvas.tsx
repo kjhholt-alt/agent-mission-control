@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrthographicCamera, OrbitControls } from "@react-three/drei";
 import { Ground } from "./Ground";
@@ -24,6 +24,7 @@ interface GameCanvasProps {
   onHoverBuilding: (id: string | null) => void;
   onClickBuilding: (id: string) => void;
   onClickWorker: (id: string) => void;
+  isMobile?: boolean;
 }
 
 /**
@@ -39,6 +40,7 @@ export default function GameCanvas({
   onHoverBuilding,
   onClickBuilding,
   onClickWorker,
+  isMobile,
 }: GameCanvasProps) {
   const handlePointerMissed = useCallback(() => {
     onClickBuilding("");
@@ -49,9 +51,44 @@ export default function GameCanvas({
     ? BUILDINGS.find((b) => b.id === selectedBuilding)
     : null;
 
+  // Find selected worker position for selection ring
+  const selectedWorkerPosition = useMemo((): {
+    position: [number, number, number];
+    color: string;
+  } | null => {
+    if (!selectedWorker) return null;
+    const worker = workers.find((w) => w.id === selectedWorker);
+    if (!worker) return null;
+
+    const currentBuilding = BUILDINGS.find(
+      (b) => b.id === worker.currentBuildingId
+    );
+    const targetBuilding = BUILDINGS.find(
+      (b) => b.id === worker.targetBuildingId
+    );
+    if (!currentBuilding || !targetBuilding) return null;
+
+    const progress = worker.progress / 100;
+    const x =
+      currentBuilding.gridX +
+      (targetBuilding.gridX - currentBuilding.gridX) * progress;
+    const z =
+      currentBuilding.gridY +
+      (targetBuilding.gridY - currentBuilding.gridY) * progress;
+
+    return { position: [x, 0.02, z], color: worker.color };
+  }, [selectedWorker, workers]);
+
+  // Mobile: reduce data packet count
+  const activeBelts = useMemo(
+    () => (isMobile ? CONVEYORS.filter((b) => b.active).slice(0, 4) : CONVEYORS),
+    [isMobile]
+  );
+
   return (
     <Canvas
       gl={{ antialias: true, alpha: false }}
+      shadows={!isMobile}
       style={{ background: "#050508" }}
       onPointerMissed={handlePointerMissed}
     >
@@ -91,7 +128,7 @@ export default function GameCanvas({
         position={[5, 8, 5]}
         intensity={0.8}
         color="#d0d8ff"
-        castShadow
+        castShadow={!isMobile}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-camera-far={50}
@@ -118,8 +155,8 @@ export default function GameCanvas({
       {/* Ground plane */}
       <Ground />
 
-      {/* Force field dome */}
-      <ForceField3D />
+      {/* Force field dome (skip on mobile) */}
+      {!isMobile && <ForceField3D />}
 
       {/* Conveyor belts (under everything else) */}
       {CONVEYORS.map((belt) => (
@@ -131,7 +168,7 @@ export default function GameCanvas({
       ))}
 
       {/* Data packets flowing along belts */}
-      <DataPackets belts={CONVEYORS} buildings={BUILDINGS} />
+      <DataPackets belts={activeBelts} buildings={BUILDINGS} />
 
       {/* Buildings */}
       {BUILDINGS.map((building) =>
@@ -164,6 +201,14 @@ export default function GameCanvas({
         />
       )}
 
+      {/* Selection ring under selected worker */}
+      {selectedWorkerPosition && (
+        <SelectionRing
+          position={selectedWorkerPosition.position}
+          color={selectedWorkerPosition.color}
+        />
+      )}
+
       {/* Workers */}
       {workers.map((worker) => (
         <Worker3D
@@ -176,7 +221,7 @@ export default function GameCanvas({
       ))}
 
       {/* Building sparkles */}
-      <BuildingSparkles buildings={BUILDINGS} />
+      <BuildingSparkles buildings={BUILDINGS} isMobile={isMobile} />
 
       {/* Completion burst effects */}
       <CompletionBursts workers={workers} buildings={BUILDINGS} />

@@ -1111,6 +1111,7 @@ export default function GamePage() {
           onHoverBuilding={setHoveredBuilding}
           onClickBuilding={handleClickBuilding}
           onClickWorker={handleClickWorker}
+          isMobile={isMobile}
         />
       </div>
 
