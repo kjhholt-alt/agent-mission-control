@@ -9,6 +9,7 @@ export const WORKER_TYPE_CONFIG: Record<WorkerType, WorkerTypeConfig> = {
   scout:     { color: "#a855f7", icon: "W", shape: "triangle", trailColor: "#a855f7", label: "Scout" },
   deployer:  { color: "#f97316", icon: "R", shape: "hexagon",  trailColor: "#f97316", label: "Deployer" },
   messenger: { color: "#3b82f6", icon: "Z", shape: "bolt",     trailColor: "#3b82f6", label: "Messenger" },
+  browser:   { color: "#0ea5e9", icon: "G", shape: "dodecahedron", trailColor: "#0ea5e9", label: "Browser" },
 };
 
 // ─── DATA TYPE COLORS ───────────────────────────────────────────────────────

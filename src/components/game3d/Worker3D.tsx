@@ -23,6 +23,8 @@ function WorkerGeometry({ type }: { type: WorkerType }) {
       return <cylinderGeometry args={[0.15, 0.3, 0.7, 8]} />;
     case "messenger":
       return <icosahedronGeometry args={[0.25]} />;
+    case "browser":
+      return <dodecahedronGeometry args={[0.3]} />;
   }
 }
 

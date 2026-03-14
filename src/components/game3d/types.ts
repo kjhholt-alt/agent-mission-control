@@ -23,7 +23,8 @@ export type WorkerType =
   | "miner"
   | "scout"
   | "deployer"
-  | "messenger";
+  | "messenger"
+  | "browser";
 
 export interface Worker {
   id: string;
@@ -69,7 +70,7 @@ export interface AlertEvent {
 export interface WorkerTypeConfig {
   color: string;
   icon: string;
-  shape: "square" | "diamond" | "circle" | "triangle" | "hexagon" | "bolt";
+  shape: "square" | "diamond" | "circle" | "triangle" | "hexagon" | "bolt" | "dodecahedron";
   trailColor: string;
   label: string;
 }
