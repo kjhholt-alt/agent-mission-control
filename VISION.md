@@ -44,6 +44,42 @@ Click a building to see:
 - Deploy history
 - "Assign new worker" button to spawn an agent
 
+## Command Center / HQ Building
+
+Click the main base (Command Center) and it opens a **headquarters panel** — the nerve center of your entire operation.
+
+### HQ Dashboard Shows:
+- **Top token usage** — which agents are burning the most tokens
+- **All active agents** — current task, progress, elapsed time
+- **Quick stats** — total PRs, emails sent, prospects found, tests passing
+- **System health** — all services green/red (Supabase, Vercel, Railway, n8n)
+
+### API Connection Manager
+A settings panel where you connect all your services. Green checkmark = connected, red X = needs setup.
+
+| Service | Key Needed | Status |
+|---------|-----------|--------|
+| Supabase | URL + Anon Key + Service Key | Connected |
+| Vercel | Token | Connected |
+| Railway | Token | Connected |
+| Resend | API Key | Connected |
+| Google Places | API Key | Connected |
+| Anthropic (Claude) | API Key | Connected |
+| GitHub | Token | Connected |
+| Discord | Webhook URL | Connected |
+| n8n | API Key + Base URL | Connected |
+| LemonSqueezy | API Key + Store ID | Not Set |
+| Google Search Console | Verification Code | Not Set |
+
+When someone new wants to use Agent Mission Control, they:
+1. Open the HQ building
+2. See which APIs need connecting (red indicators)
+3. Paste in their keys
+4. Everything lights up green
+5. Workers start moving
+
+This makes it a **plug-and-play product** — not just for us.
+
 ## Revenue Potential
 - **Free tier**: 1 project, 3 workers, basic map
 - **Pro ($29/mo)**: Unlimited projects, 10 workers, conveyor belts, audio

@@ -51,14 +51,16 @@ export function ActivityTimeline({ agents }: ActivityTimelineProps) {
           <div className="absolute top-1/2 left-0 right-0 h-px bg-zinc-800" />
           {recent.map((agent, i) => (
             <Tooltip key={agent.id}>
-              <TooltipTrigger asChild>
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: i * 0.05, type: "spring" }}
-                  className={`relative w-3 h-3 rounded-full cursor-pointer ${getColor(agent.status)} ${agent.status === "running" ? "animate-pulse" : ""}`}
-                />
-              </TooltipTrigger>
+              <TooltipTrigger
+                className={`relative w-3 h-3 rounded-full cursor-pointer ${getColor(agent.status)} ${agent.status === "running" ? "animate-pulse" : ""}`}
+                render={
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: i * 0.05, type: "spring" }}
+                  />
+                }
+              />
               <TooltipContent
                 side="top"
                 className="bg-zinc-900 border-zinc-700 text-xs"
