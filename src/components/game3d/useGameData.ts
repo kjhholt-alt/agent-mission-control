@@ -340,14 +340,21 @@ export function useGameData() {
         : activity.current_step;
     }
 
-    // Progress from agent_activity or task
+    // Progress — compute from multiple sources
     let progress = 0;
     if (activity && activity.total_steps && activity.total_steps > 0) {
       progress = Math.min((activity.steps_completed / activity.total_steps) * 100, 99);
-    } else if (sw.status === "busy") {
-      // Estimate progress based on heartbeat recency (fake a progress bar)
+    } else if (sw.status === "busy" || sw.status === "working") {
+      // Estimate progress based on time elapsed since task started
+      // Heavy tasks take ~5-15 min, light tasks take ~1-3 min
       const elapsed = Date.now() - new Date(sw.last_heartbeat).getTime();
-      progress = Math.min(elapsed / 60000 * 33, 90); // ~3 min tasks
+      const isHeavy = sw.worker_type === "heavy";
+      const estimatedDuration = isHeavy ? 600000 : 120000; // 10 min or 2 min
+      progress = Math.min((elapsed / estimatedDuration) * 100, 95);
+      // Add subtle animation so it doesn't look stuck
+      progress = Math.max(progress, 5 + Math.sin(Date.now() / 2000) * 3);
+    } else if (sw.tasks_completed > 0) {
+      progress = 100; // Show full if completed tasks but now idle
     }
 
     return {

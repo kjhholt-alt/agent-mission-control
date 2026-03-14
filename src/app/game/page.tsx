@@ -691,21 +691,43 @@ function WorkerPanel({
         style={{ borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(0,0,0,0.2)" }}
       >
         {[
-          { label: "Resume", color: "#22c55e" },
-          { label: "Redirect", color: "#f59e0b" },
-          { label: "Stop", color: "#ef4444" },
-        ].map((action) => (
+          { label: "Resume", color: "#22c55e", action: "resume" },
+          { label: "Redirect", color: "#f59e0b", action: "redirect" },
+          { label: "Stop", color: "#ef4444", action: "stop" },
+        ].map((btn) => (
           <button
-            key={action.label}
-            className="py-1.5 text-[9px] uppercase tracking-wider font-bold transition-all hover:brightness-125"
+            key={btn.label}
+            className="py-1.5 text-[9px] uppercase tracking-wider font-bold transition-all hover:brightness-125 cursor-pointer"
             style={{
-              background: `${action.color}10`,
-              color: action.color,
-              border: `1px solid ${action.color}33`,
+              background: `${btn.color}10`,
+              color: btn.color,
+              border: `1px solid ${btn.color}33`,
               borderRadius: 2,
             }}
+            onClick={async () => {
+              if (btn.action === "stop") {
+                if (!confirm("Stop this worker?")) return;
+                await fetch("/api/webhook", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "x-nexus-key": "nexus-hive-2026" },
+                  body: JSON.stringify({ event: "stop_worker", data: { worker_id: selectedWorkerData?.id } }),
+                });
+                setSelectedWorker(null);
+              } else if (btn.action === "redirect") {
+                const newGoal = prompt("Enter new instructions for this worker:");
+                if (!newGoal) return;
+                await fetch("/api/webhook", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "x-nexus-key": "nexus-hive-2026" },
+                  body: JSON.stringify({ goal: newGoal, project: selectedWorkerData?.currentBuildingId }),
+                });
+                alert("New task created! Worker will pick it up shortly.");
+              } else if (btn.action === "resume") {
+                alert("Worker is already running.");
+              }
+            }}
           >
-            {action.label}
+            {btn.label}
           </button>
         ))}
       </div>
