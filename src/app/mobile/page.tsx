@@ -106,6 +106,19 @@ const NEXUS_ASCII = `
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+interface OracleDecision {
+  id: string;
+  title: string;
+  description: string;
+  severity: string;
+  project: string;
+  action_needed: string;
+  source_type: string;
+  source_id: string | null;
+  status: string;
+  created_at: string;
+}
+
 interface OracleBriefing {
   greeting: string;
   summary: string;
@@ -128,6 +141,8 @@ export default function MobileCommandCenter() {
   const [commandOutput, setCommandOutput] = useState("");
   const [loading, setLoading] = useState(true);
   const [oracleBriefing, setOracleBriefing] = useState<OracleBriefing | null>(null);
+  const [pendingDecisions, setPendingDecisions] = useState<OracleDecision[]>([]);
+  const [decisionActionInProgress, setDecisionActionInProgress] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const eventsRef = useRef<string[]>([]);
 
@@ -190,11 +205,16 @@ export default function MobileCommandCenter() {
 
       if (bResp.data && bResp.data.length > 0) setBudget(bResp.data[0]);
 
-      // Fetch Oracle briefing
+      // Fetch Oracle briefing + decisions
       try {
-        const oracleRes = await fetch("/api/oracle?type=live");
+        const [oracleRes, decisionsRes] = await Promise.all([
+          fetch("/api/oracle?type=live"),
+          fetch("/api/oracle/decisions"),
+        ]);
         const oracleData = await oracleRes.json();
         if (oracleData.briefing) setOracleBriefing(oracleData.briefing);
+        const decisionsData = await decisionsRes.json();
+        if (decisionsData.decisions) setPendingDecisions(decisionsData.decisions);
       } catch (oracleErr) {
         console.error("Oracle fetch error:", oracleErr);
       }
@@ -277,9 +297,12 @@ export default function MobileCommandCenter() {
     } else if (cmd === "refresh" || cmd === "r") {
       await fetchAll();
       setCommandOutput("Refreshed.");
+    } else if (cmd === "oracle" || cmd === "o" || cmd === "chat") {
+      window.location.href = "/oracle/chat";
+      setCommandOutput("Opening Oracle chat...");
     } else if (cmd === "help" || cmd === "h") {
       setCommandOutput(
-        "Commands: status(s), budget(b), workers(w), refresh(r), help(h)"
+        "Commands: status(s), budget(b), workers(w), oracle(o), refresh(r), help(h)"
       );
     } else {
       setCommandOutput(`Unknown command: ${cmd}. Type 'help' for commands.`);
@@ -362,28 +385,130 @@ export default function MobileCommandCenter() {
               <div style={{ color: "#888", fontSize: "11px", marginBottom: "6px", lineHeight: "1.4" }}>
                 {oracleBriefing.summary}
               </div>
-              {oracleBriefing.decisions_needed.length > 0 && (
-                <div style={{ marginBottom: "4px" }}>
-                  {oracleBriefing.decisions_needed.slice(0, 3).map((d, i) => (
-                    <div key={i} style={{ padding: "2px 0" }}>
+
+              {/* Decision count + link */}
+              {pendingDecisions.length > 0 && (
+                <a
+                  href="/oracle"
+                  style={{
+                    display: "block",
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    borderRadius: "4px",
+                    padding: "6px 10px",
+                    marginBottom: "8px",
+                    textDecoration: "none",
+                    color: "#ef4444",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {pendingDecisions.length} decision{pendingDecisions.length !== 1 ? "s" : ""} pending
+                  <span style={{ color: "#888", fontWeight: "normal", fontSize: "10px", marginLeft: "8px" }}>
+                    Tap for full view
+                  </span>
+                </a>
+              )}
+
+              {/* Top 3 most critical decisions with quick approve/dismiss */}
+              {pendingDecisions.slice(0, 3).map((d) => {
+                const sevColor = d.severity === "critical" ? "#ef4444"
+                  : d.severity === "high" ? "#f97316"
+                  : d.severity === "medium" ? "#e8a019"
+                  : "#06b6d4";
+                const isProcessing = decisionActionInProgress === d.id;
+
+                return (
+                  <div key={d.id} style={{
+                    padding: "6px 0",
+                    borderBottom: "1px solid #1a1a2e",
+                    opacity: isProcessing ? 0.4 : 1,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
                       <span style={{
-                        color: d.severity === "critical" ? "#ef4444"
-                          : d.severity === "high" ? "#f59e0b"
-                          : "#e8a019",
-                        fontSize: "10px",
+                        color: sevColor,
+                        fontSize: "9px",
                         fontWeight: "bold",
+                        background: `${sevColor}20`,
+                        padding: "1px 5px",
+                        borderRadius: "2px",
                       }}>
-                        [{d.severity === "critical" ? "!!!" : d.severity === "high" ? "!!" : "!"}]
-                      </span>{" "}
-                      <span style={{ color: "#ccc", fontSize: "11px" }}>
-                        {d.title.length > 40 ? d.title.slice(0, 40) + "..." : d.title}
+                        {d.severity.toUpperCase()}
+                      </span>
+                      <span style={{ color: "#ccc", fontSize: "11px", flex: 1 }}>
+                        {d.title.length > 35 ? d.title.slice(0, 35) + "..." : d.title}
                       </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div style={{ display: "flex", gap: "6px", marginLeft: "2px" }}>
+                      <button
+                        disabled={isProcessing}
+                        onClick={async () => {
+                          setDecisionActionInProgress(d.id);
+                          try {
+                            const res = await fetch("/api/oracle/decisions", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ decision_id: d.id, action: "approve" }),
+                            });
+                            const result = await res.json();
+                            if (result.success) {
+                              setPendingDecisions(prev => prev.filter(p => p.id !== d.id));
+                              addEvent("Decision approved");
+                            }
+                          } catch { /* ignore */ }
+                          setDecisionActionInProgress(null);
+                        }}
+                        style={{
+                          background: "rgba(16, 185, 129, 0.15)",
+                          border: "1px solid rgba(16, 185, 129, 0.4)",
+                          color: "#10b981",
+                          padding: "3px 10px",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          fontSize: "10px",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        disabled={isProcessing}
+                        onClick={async () => {
+                          setDecisionActionInProgress(d.id);
+                          try {
+                            const res = await fetch("/api/oracle/decisions", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ decision_id: d.id, action: "dismiss" }),
+                            });
+                            const result = await res.json();
+                            if (result.success) {
+                              setPendingDecisions(prev => prev.filter(p => p.id !== d.id));
+                              addEvent("Decision dismissed");
+                            }
+                          } catch { /* ignore */ }
+                          setDecisionActionInProgress(null);
+                        }}
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #333",
+                          color: "#666",
+                          padding: "3px 10px",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          fontSize: "10px",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
               {oracleBriefing.highlights.length > 0 && (
-                <div style={{ color: "#444", fontSize: "10px", marginTop: "2px" }}>
+                <div style={{ color: "#444", fontSize: "10px", marginTop: "6px" }}>
                   {oracleBriefing.highlights.length} task(s) done recently
                 </div>
               )}
@@ -605,7 +730,7 @@ export default function MobileCommandCenter() {
                 marginTop: "4px",
               }}
             >
-              status(s) budget(b) workers(w) refresh(r) help(h)
+              status(s) budget(b) workers(w) oracle(o) refresh(r) help(h)
             </div>
           </div>
         </>
