@@ -16,8 +16,9 @@ SUPABASE_KEY = os.environ.get(
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0dnRhb3JnaXR5Y3pyZGhoenF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MzY4MTEsImV4cCI6MjA4NjUxMjgxMX0.A2uG-yVQ1HSV9-zlNDAztHHVw25g1cQ43180y3TfwGk",
 )
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MISSION_CONTROL_URL = os.environ.get(
-    "MISSION_CONTROL_URL", "https://mission-control.buildkit.store"
+NEXUS_URL = os.environ.get(
+    "NEXUS_URL",
+    os.environ.get("MISSION_CONTROL_URL", "https://nexus.buildkit.store"),
 )
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
@@ -35,8 +36,8 @@ PROJECTS = {
         "default_worker": "builder",
         "eval_interval_minutes": 180,
     },
-    "agent-mission-control": {
-        "dir": "C:/Users/Kruz/Desktop/Projects/agent-mission-control",
+    "nexus": {
+        "dir": "C:/Users/Kruz/Desktop/Projects/nexus",
         "type": "nextjs",
         "default_worker": "builder",
         "eval_interval_minutes": 120,

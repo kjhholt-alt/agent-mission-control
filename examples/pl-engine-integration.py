@@ -1,14 +1,14 @@
 """
-Example: PL Engine Improve Loop with Mission Control
+Example: PL Engine Improve Loop with Nexus
 
-Shows how to wrap any agent loop with Mission Control reporting
+Shows how to wrap any agent loop with Nexus reporting
 so every step appears on the real-time dashboard.
 
 Usage:
     python pl-engine-integration.py
 
-    Or set MISSION_CONTROL_URL to point at a deployed instance:
-    MISSION_CONTROL_URL=https://agent-mission-control.vercel.app python pl-engine-integration.py
+    Or set NEXUS_URL to point at a deployed instance:
+    NEXUS_URL=https://nexus.buildkit.store python pl-engine-integration.py
 """
 
 import sys
@@ -110,7 +110,7 @@ def example_with_context_manager():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  PL Engine Improve Loop — Mission Control Demo")
+    print("  PL Engine Improve Loop — Nexus Demo")
     print("=" * 60)
     print()
     print("Watch your dashboard at http://localhost:3000")

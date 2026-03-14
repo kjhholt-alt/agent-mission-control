@@ -1,4 +1,4 @@
-# Agent Mission Control
+# Nexus
 
 Real-time dashboard for watching AI agents work. Works with ANY agent loop.
 
@@ -11,7 +11,7 @@ Real-time dashboard for watching AI agents work. Works with ANY agent loop.
 - **Frontend**: Single-page dashboard at `src/app/page.tsx`
 - **API Routes**: `/api/heartbeat` (POST), `/api/agents` (GET), `/api/agents/seed` (POST)
 - **Supabase**: Uses `agent_activity` table on `ytvtaorgityczrdhhzqv` (shared with ClawBot)
-- **Python SDK**: `sdk/python/mission_control.py` — drop-in for any Python agent
+- **Python SDK**: `sdk/python/mission_control.py` — drop-in for any Python agent (package: nexus-sdk)
 
 ## Key Files
 - `src/app/page.tsx` — Main dashboard (client component)

@@ -112,8 +112,7 @@ export default function MissionControl() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-glow-cyan">
-                <span className="text-cyan-400">MISSION</span>{" "}
-                <span className="text-zinc-200">CONTROL</span>
+                <span className="text-cyan-400">NEXUS</span>
               </h1>
               <p className="text-xs text-zinc-600 uppercase tracking-widest">
                 Agent Operations Dashboard
@@ -218,7 +217,7 @@ export default function MissionControl() {
 
         {/* Footer */}
         <footer className="text-center text-xs text-zinc-700 py-4 border-t border-zinc-800/30">
-          MISSION CONTROL v1.0 &middot; Powered by Supabase Realtime &middot;{" "}
+          NEXUS v1.0 &middot; Powered by Supabase Realtime &middot;{" "}
           {agents.length} agents tracked
         </footer>
       </div>

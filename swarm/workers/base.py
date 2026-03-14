@@ -20,7 +20,7 @@ from typing import Any, Optional
 import requests
 
 from swarm.budget.budget_manager import BudgetManager
-from swarm.config import MISSION_CONTROL_URL, SUPABASE_KEY, SUPABASE_URL
+from swarm.config import NEXUS_URL, SUPABASE_KEY, SUPABASE_URL
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.worker")
@@ -111,10 +111,10 @@ class BaseWorker:
         """
         raise NotImplementedError("Subclasses must implement execute()")
 
-    # ── Report to Mission Control ─────────────────────────────────────────
+    # ── Report to Nexus ──────────────────────────────────────────────────
 
-    def report_to_mission_control(self, step: str, status: str, data: Optional[dict] = None):
-        """Send a step report to Mission Control API.
+    def report_to_nexus(self, step: str, status: str, data: Optional[dict] = None):
+        """Send a step report to Nexus API.
 
         Args:
             step: Step description
@@ -131,14 +131,14 @@ class BaseWorker:
         }
         try:
             resp = requests.post(
-                f"{MISSION_CONTROL_URL}/api/swarm/report",
+                f"{NEXUS_URL}/api/swarm/report",
                 json=payload,
                 timeout=10,
             )
             if resp.status_code >= 400:
-                logger.debug("Mission Control report returned %d", resp.status_code)
+                logger.debug("Nexus report returned %d", resp.status_code)
         except Exception as e:
-            logger.debug("Could not reach Mission Control: %s", e)
+            logger.debug("Could not reach Nexus: %s", e)
 
     # ── Pull and execute ──────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ class BaseWorker:
         # Check budget before pulling
         if not self.budget_manager.can_spend(self.tier):
             logger.warning("Budget exceeded for tier=%s, skipping", self.tier)
-            self.report_to_mission_control("budget_check", "blocked", {"tier": self.tier})
+            self.report_to_nexus("budget_check", "blocked", {"tier": self.tier})
             return False
 
         # Update status to idle while looking
@@ -168,7 +168,7 @@ class BaseWorker:
             {"status": "working", "current_task_id": task["id"]}
         ).eq("id", self.worker_id).execute()
 
-        self.report_to_mission_control(
+        self.report_to_nexus(
             "task_started", "running", {"task_id": task["id"], "title": task["title"]}
         )
 
@@ -206,7 +206,7 @@ class BaseWorker:
                     .data[0]["xp"] + 10,
             }).eq("id", self.worker_id).execute()
 
-            self.report_to_mission_control(
+            self.report_to_nexus(
                 "task_completed",
                 "completed",
                 {"task_id": task["id"], "title": task["title"]},
@@ -227,7 +227,7 @@ class BaseWorker:
             except Exception:
                 pass
 
-            self.report_to_mission_control(
+            self.report_to_nexus(
                 "task_failed",
                 "failed",
                 {"task_id": task["id"], "error": error_msg},

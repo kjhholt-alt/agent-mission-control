@@ -1,4 +1,4 @@
-# Agent Mission Control — Product Vision
+# Nexus — Product Vision
 
 ## The Pitch
 "StarCraft meets AI agents. Watch your AI workers build, mine data, and improve your codebase in real-time. Click any worker to inspect, redirect, or stop them."
@@ -136,7 +136,7 @@ A settings panel where you connect all your services. Green checkmark = connecte
 | LemonSqueezy | API Key + Store ID | Not Set |
 | Google Search Console | Verification Code | Not Set |
 
-When someone new wants to use Agent Mission Control, they:
+When someone new wants to use Nexus, they:
 1. Open the HQ building
 2. See which APIs need connecting (red indicators)
 3. Paste in their keys

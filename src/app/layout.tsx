@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "MISSION CONTROL | Agent Dashboard",
+  title: "NEXUS | Agent Dashboard",
   description: "Real-time dashboard for watching AI agents work",
 };
 

@@ -2354,7 +2354,7 @@ function HUDTopBar({
               textShadow: "0 0 20px rgba(232, 160, 25, 0.4)",
             }}
           >
-            MISSION CONTROL
+            NEXUS
           </span>
           {!isMobile && (
             <>

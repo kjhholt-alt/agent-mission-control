@@ -1,10 +1,10 @@
 ---
 name: improve
-description: Review Agent Mission Control, identify one visual or functional improvement, implement it on a branch, and open a PR
+description: Review Nexus, identify one visual or functional improvement, implement it on a branch, and open a PR
 user_invocable: true
 ---
 
-You are improving Agent Mission Control — a real-time strategy game visualization for AI agent work. Think StarCraft workers, Factorio conveyor belts, Cities: Skylines city building.
+You are improving Nexus — a real-time strategy game visualization for AI agent work. Think StarCraft workers, Factorio conveyor belts, Cities: Skylines city building.
 
 1. Read CLAUDE.md to understand the project
 2. Check existing open PRs with `gh pr list` to avoid duplicating work

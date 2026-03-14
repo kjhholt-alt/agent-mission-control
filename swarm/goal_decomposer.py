@@ -99,7 +99,7 @@ class GoalDecomposer:
         parent = self.task_manager.create_task(
             task_type="meta",
             title=f"Goal: {user_prompt[:80]}",
-            project=tasks_data[0].get("project", "agent-mission-control") if tasks_data else "agent-mission-control",
+            project=tasks_data[0].get("project", "nexus") if tasks_data else "nexus",
             input_data={"original_prompt": user_prompt},
             cost_tier="light",
             priority=1,
@@ -119,7 +119,7 @@ class GoalDecomposer:
             task = self.task_manager.create_task(
                 task_type=td.get("task_type", "build"),
                 title=td["title"],
-                project=td.get("project", "agent-mission-control"),
+                project=td.get("project", "nexus"),
                 input_data=td.get("input_data", {"prompt": td["title"]}),
                 cost_tier=td.get("cost_tier", "light"),
                 priority=td.get("priority", 5),

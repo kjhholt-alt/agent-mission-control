@@ -1,8 +1,8 @@
 """
-Mission Control Agent SDK
+Nexus Agent SDK
 
 A lightweight Python client for reporting agent activity
-to the Mission Control dashboard in real-time.
+to the Nexus dashboard in real-time.
 
 Usage:
     from mission_control import MissionControl
@@ -24,7 +24,7 @@ from typing import Optional
 
 
 class MissionControl:
-    """Reports agent activity to the Mission Control dashboard."""
+    """Reports agent activity to the Nexus dashboard."""
 
     def __init__(
         self,
@@ -41,6 +41,7 @@ class MissionControl:
         self.worker_type = worker_type
         self.base_url = (
             base_url
+            or os.environ.get("NEXUS_URL")
             or os.environ.get("MISSION_CONTROL_URL", "http://localhost:3000")
         ).rstrip("/")
         self.agent_id = agent_id or f"{agent_name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:8]}"
@@ -117,7 +118,7 @@ class MissionControl:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 resp.read()
         except (urllib.error.URLError, OSError) as e:
-            print(f"[MissionControl] Warning: Failed to send XP: {e}")
+            print(f"[Nexus] Warning: Failed to send XP: {e}")
 
     def _send_heartbeat(
         self,
@@ -152,7 +153,7 @@ class MissionControl:
                 resp.read()
         except (urllib.error.URLError, OSError) as e:
             # Silently fail — don't break the agent's main loop
-            print(f"[MissionControl] Warning: Failed to send heartbeat: {e}")
+            print(f"[Nexus] Warning: Failed to send heartbeat: {e}")
 
 
 # Context manager support
@@ -191,4 +192,4 @@ if __name__ == "__main__":
         time.sleep(1)
 
     mc.complete("Demo complete! 5 items processed.")
-    print("Done! Check your Mission Control dashboard.")
+    print("Done! Check your Nexus dashboard.")
