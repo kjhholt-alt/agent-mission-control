@@ -6,6 +6,25 @@
 ## Core Concept
 AI agents are visualized as RTS game workers on an isometric map. Each project is a building. Workers walk between buildings when assigned tasks. Conveyor belts show data flowing. You can click any worker to see what they're doing, why, and redirect them.
 
+## Worker Types (Specialized Agent Roles)
+
+Each worker has a different role, color, and job. On the map you see different colored workers doing different things.
+
+| Worker | Color | Role | Powered By |
+|--------|-------|------|-----------|
+| **Builder** | Cyan | Writes code, creates features, opens PRs | `/improve` skill |
+| **Inspector** | Gold | Reviews code, audits, finds bugs, plans fixes | `@reviewer` agent |
+| **Miner** | Green | Scrapes data, enriches emails, finds prospects | Prospector + email finder |
+| **Scout** | Purple | Researches, plans, explores new ideas | Planning agents |
+| **Deployer** | Orange | Deploys, monitors, verifies production | Deploy scripts + health checks |
+| **Messenger** | Blue | Sends emails, notifications, follow-ups | Emailer + n8n workflows |
+
+Each worker type has its own skill/agent file in `.claude/`. The auto-improvement loop randomly assigns worker types — sometimes a Builder making a PR, sometimes an Inspector doing a code review, sometimes a Scout planning the next feature.
+
+On the map: gold Inspector walks to a building to audit it, cyan Builder hammers away, green Miner collects data at the prospect node, orange Deployer runs to Vercel/Railway resource nodes.
+
+All powered by Claude.
+
 ## Game Inspirations
 - **StarCraft**: Workers (SCVs), buildings, resource mining, "Job's done!" audio
 - **Factorio**: Conveyor belts, throughput metrics, pipeline optimization
