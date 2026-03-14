@@ -1,7 +1,19 @@
 # Nexus — Product Vision
 
 ## The Pitch
-"StarCraft meets AI agents. Watch your AI workers build, mine data, and improve your codebase in real-time. Click any worker to inspect, redirect, or stop them."
+"Fire one prompt. Watch an army of AI agents build, mine, and improve everything you own — visualized as a real-time strategy game."
+
+## Why Nexus Exists
+Every AI agent framework out there is the same: text in, text out, hope for the best. OpenClaw, LangChain, CrewAI — they're all chat interfaces pretending to be orchestration. None of them let you SEE what's happening. None of them let you COMMAND agents like units in a game. None of them chain autonomously for days.
+
+Nexus is different:
+- **You see everything.** Workers moving on an isometric map. Data flowing through conveyor belts. Buildings glowing when active.
+- **You command everything.** Click a worker to inspect, redirect, or stop. Fire a swarm with one sentence.
+- **It never stops.** Agents chain for days or weeks. Budget management keeps costs controlled. Self-healing restarts crashed workers.
+- **It's actually fun.** StarCraft + Factorio + Pokemon aesthetics make monitoring feel like playing a game.
+- **It's not a framework.** It's a platform. You don't write code to use it — you give it a goal and watch it work.
+
+This is the future of AI agent orchestration.
 
 ## Core Concept
 AI agents are visualized as RTS game workers on an isometric map. Each project is a building. Workers walk between buildings when assigned tasks. Conveyor belts show data flowing. You can click any worker to see what they're doing, why, and redirect them.
