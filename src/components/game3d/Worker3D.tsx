@@ -131,7 +131,7 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
       <Html
         position={[0, 0.7, 0]}
         center
-        distanceFactor={15}
+        transform={false}
         style={{ pointerEvents: "none" }}
       >
         <div
@@ -181,7 +181,7 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
         <Html
           position={[0, 1.1, 0]}
           center
-          distanceFactor={15}
+          transform={false}
           style={{ pointerEvents: "none" }}
         >
           <div

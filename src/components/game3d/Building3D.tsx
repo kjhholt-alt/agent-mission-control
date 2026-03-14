@@ -143,7 +143,7 @@ export function Building3D({
       <Html
         position={[0, height / 2 + 0.6, 0]}
         center
-        distanceFactor={15}
+        transform={false}
         style={{ pointerEvents: "none" }}
       >
         <div
@@ -160,7 +160,7 @@ export function Building3D({
           <span
             style={{
               color: building.color,
-              fontSize: 9,
+              fontSize: 8,
               fontWeight: 700,
               letterSpacing: "0.1em",
               textTransform: "uppercase",

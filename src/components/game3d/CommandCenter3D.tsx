@@ -184,7 +184,7 @@ export function CommandCenter3D({
       <Html
         position={[0, height / 2 + 2.5, 0]}
         center
-        distanceFactor={15}
+        transform={false}
         style={{ pointerEvents: "none" }}
       >
         <div
@@ -202,7 +202,7 @@ export function CommandCenter3D({
           <span
             style={{
               color: "#e8a019",
-              fontSize: 10,
+              fontSize: 8,
               fontWeight: 700,
               letterSpacing: "0.15em",
               textTransform: "uppercase",
