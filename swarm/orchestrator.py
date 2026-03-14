@@ -84,22 +84,35 @@ class SwarmOrchestrator:
     # ── Recurring tasks ───────────────────────────────────────────────────
 
     def check_recurring_tasks(self):
-        """Check if any meta-tasks are due for re-evaluation."""
-        # This is a placeholder for recurring task logic
-        # In production, meta-tasks would track their eval_interval
-        # and trigger new evaluations when due
-        pass
+        """Check if any recurring tasks are due for re-execution."""
+        due_tasks = self.task_manager.get_pending_recurring()
+        for task in due_tasks:
+            # Re-queue the recurring task
+            now = datetime.now(timezone.utc)
+            interval = task.get("recurrence_interval_minutes", 120)
+            next_run = now + timedelta(minutes=interval)
+
+            self.sb.table(self.task_manager.TABLE).update({
+                "status": "queued",
+                "queued_at": now.isoformat(),
+                "started_at": None,
+                "completed_at": None,
+                "output_data": {},
+                "error_message": None,
+                "assigned_worker_id": None,
+                "next_run_at": next_run.isoformat(),
+                "updated_at": now.isoformat(),
+            }).eq("id", task["id"]).execute()
+            logger.info("Re-queued recurring task %s: %s", task["id"][:8], task["title"])
 
     # ── Worker scaling ────────────────────────────────────────────────────
 
     def scale_workers(self):
         """Scale workers up or down based on queue depth."""
-        # Count queued tasks by tier
-        light_queued = self.task_manager.get_tasks_by_status("queued")
-        light_count = sum(1 for t in light_queued if t.get("cost_tier") == "light")
-        heavy_count = sum(1 for t in light_queued if t.get("cost_tier") == "heavy")
+        queued_tasks = self.task_manager.get_tasks_by_status("queued")
+        light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "light")
+        heavy_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "heavy")
 
-        # Count active workers by tier
         active_workers = self._get_active_workers()
         active_light = sum(1 for w in active_workers if w["tier"] == "light")
         active_heavy = sum(1 for w in active_workers if w["tier"] == "heavy")
@@ -164,7 +177,7 @@ class SwarmOrchestrator:
             self.sb.table(self.WORKERS_TABLE).update(
                 {
                     "status": "dead",
-                    "stopped_at": datetime.now(timezone.utc).isoformat(),
+                    "died_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", worker["id"]).execute()
 
@@ -202,13 +215,11 @@ class SwarmOrchestrator:
         """Gracefully shut down all worker processes."""
         logger.info("Shutting down all workers...")
 
-        # Terminate all subprocess workers
         for key, proc in self.worker_processes.items():
             if proc.is_alive():
                 logger.info("Terminating worker %s (PID %d)", key, proc.pid)
                 proc.terminate()
 
-        # Wait for processes to exit
         for key, proc in self.worker_processes.items():
             proc.join(timeout=10)
             if proc.is_alive():
@@ -219,7 +230,7 @@ class SwarmOrchestrator:
         self.sb.table(self.WORKERS_TABLE).update(
             {
                 "status": "dead",
-                "stopped_at": datetime.now(timezone.utc).isoformat(),
+                "died_at": datetime.now(timezone.utc).isoformat(),
             }
         ).neq("status", "dead").execute()
 
@@ -244,6 +255,7 @@ class SwarmOrchestrator:
                 "queued": sum(1 for t in active_tasks if t["status"] == "queued"),
                 "running": sum(1 for t in active_tasks if t["status"] == "running"),
                 "blocked": sum(1 for t in active_tasks if t["status"] == "blocked"),
+                "pending": sum(1 for t in active_tasks if t["status"] == "pending"),
                 "details": active_tasks,
             },
             "budget": budget,

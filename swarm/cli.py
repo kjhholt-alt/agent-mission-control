@@ -57,6 +57,7 @@ def show_status():
     tasks_table.add_row("Queued", str(t["queued"]))
     tasks_table.add_row("Running", str(t["running"]))
     tasks_table.add_row("Blocked", str(t["blocked"]))
+    tasks_table.add_row("Pending", str(t["pending"]))
 
     # Budget
     b = status["budget"]
@@ -65,12 +66,15 @@ def show_status():
     budget_table.add_column("Value", style="green")
     budget_table.add_row(
         "API Spend",
-        f"${b['api_spend_cents']/100:.2f} / ${b['api_budget_cents']/100:.2f} ({b['api_pct']:.1f}%)",
+        f"${b['api_spent_cents']/100:.2f} / ${b['daily_api_budget_cents']/100:.2f} ({b['api_pct']:.1f}%)",
     )
-    budget_table.add_row("API Tokens", f"{b['api_tokens_used']:,}")
     budget_table.add_row(
         "Claude Code",
-        f"{b['claude_code_minutes_used']:.0f} / {b['claude_code_budget_minutes']} min ({b['cc_pct']:.1f}%)",
+        f"{b['claude_code_minutes_used']:.0f} / {b['daily_claude_code_minutes']} min ({b['cc_pct']:.1f}%)",
+    )
+    budget_table.add_row(
+        "Tasks Today",
+        f"{b['tasks_completed']} completed / {b['tasks_failed']} failed",
     )
 
     console.print()
@@ -100,17 +104,22 @@ def show_budget():
 
     table.add_row(
         "API Spend",
-        f"${b['api_spend_cents']/100:.2f}",
-        f"${b['api_budget_cents']/100:.2f}",
+        f"${b['api_spent_cents']/100:.2f}",
+        f"${b['daily_api_budget_cents']/100:.2f}",
         f"{b['api_pct']:.1f}%",
     )
     table.add_row(
         "Claude Code",
         f"{b['claude_code_minutes_used']:.0f} min",
-        f"{b['claude_code_budget_minutes']} min",
+        f"{b['daily_claude_code_minutes']} min",
         f"{b['cc_pct']:.1f}%",
     )
-    table.add_row("Total Tokens", f"{b['api_tokens_used']:,}", "-", "-")
+    table.add_row(
+        "Tasks",
+        f"{b['tasks_completed']} OK / {b['tasks_failed']} fail",
+        "-",
+        "-",
+    )
 
     console.print()
     console.print(table)
@@ -134,19 +143,23 @@ def show_workers():
 
     table = Table(title="Active Workers", show_lines=True)
     table.add_column("ID", style="cyan", max_width=8)
+    table.add_column("Name", style="white")
     table.add_column("Type", style="green")
     table.add_column("Tier", style="blue")
     table.add_column("Status", style="yellow")
-    table.add_column("Last Heartbeat")
+    table.add_column("Tasks", style="magenta")
+    table.add_column("XP", style="green")
     table.add_column("PID")
 
     for w in workers:
         table.add_row(
             w["id"][:8],
+            w.get("worker_name", "?"),
             w.get("worker_type", "?"),
             w.get("tier", "?"),
             w.get("status", "?"),
-            w.get("last_heartbeat", "?")[-8:] if w.get("last_heartbeat") else "?",
+            f"{w.get('tasks_completed', 0)}/{w.get('tasks_failed', 0)}",
+            str(w.get("xp", 0)),
             str(w.get("pid", "?")),
         )
 
@@ -183,7 +196,7 @@ def show_tasks():
         table.add_row(
             t["id"][:8],
             t.get("task_type", "?"),
-            t.get("title", "?")[:40],
+            (t.get("title") or "?")[:40],
             t.get("project", "?"),
             t.get("cost_tier", "?"),
             str(t.get("priority", "?")),
@@ -234,7 +247,7 @@ def run_goal(goal: str):
         table.add_row(
             t["id"][:8],
             t.get("task_type", "?"),
-            t.get("title", "?")[:50],
+            (t.get("title") or "?")[:50],
             t.get("cost_tier", "?"),
             str(t.get("priority", "?")),
             t.get("status", "?"),
