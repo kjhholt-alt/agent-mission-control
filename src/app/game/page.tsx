@@ -1937,7 +1937,6 @@ function BuildingPanel({
         borderRadius: isMobile ? "16px 16px 0 0" : 4,
         background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
         border: `2px solid ${building.color}44`,
-        borderRadius: 4,
         boxShadow: `0 0 30px ${building.glowColor}, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}
       onTouchStart={handleTouchStart}
@@ -2111,7 +2110,6 @@ function WorkerPanel({
         borderRadius: isMobile ? "16px 16px 0 0" : 4,
         background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
         border: `2px solid ${config.color}44`,
-        borderRadius: 4,
         boxShadow: `0 0 30px ${config.color}33, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}
       onTouchStart={handleTouchStart}
