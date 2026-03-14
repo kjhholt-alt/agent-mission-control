@@ -224,10 +224,12 @@ class ScoutAgent:
         )
 
         try:
+            # Use stdin to avoid Windows command-line length limits
             result = subprocess.run(
-                [CLAUDE_CLI_PATH, "-p", prompt],
+                [CLAUDE_CLI_PATH, "-p", "-"],
                 capture_output=True,
                 text=True,
+                input=prompt,
                 timeout=300,  # 5 min max
                 cwd="C:/Users/Kruz/Desktop/Projects/nexus",
                 shell=True,
