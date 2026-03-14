@@ -260,12 +260,19 @@ def run_goal(goal: str):
 
 
 def run_orchestrator():
-    """Start the swarm orchestrator daemon."""
+    """Start the swarm orchestrator (foreground, stops on Ctrl+C)."""
     from swarm.orchestrator import SwarmOrchestrator
 
     console.print("[bold green]Starting swarm orchestrator...[/bold green]")
     orch = SwarmOrchestrator()
     orch.run()
+
+
+def run_daemon():
+    """Start the Nexus Hive as a persistent 24/7 daemon."""
+    from swarm.daemon import run_daemon as _run_daemon
+
+    _run_daemon()
 
 
 def main():
@@ -280,10 +287,13 @@ def main():
     parser.add_argument("--workers", action="store_true", help="List active workers")
     parser.add_argument("--tasks", action="store_true", help="List pending tasks")
     parser.add_argument("--run", action="store_true", help="Start the orchestrator")
+    parser.add_argument("--daemon", action="store_true", help="Start the Hive as a persistent 24/7 daemon")
 
     args = parser.parse_args()
 
-    if args.status:
+    if args.daemon:
+        run_daemon()
+    elif args.status:
         show_status()
     elif args.stop:
         stop_swarm()

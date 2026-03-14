@@ -17,6 +17,7 @@ from swarm.config import (
     WORKER_HEARTBEAT_TIMEOUT_SECONDS,
     WORKER_LIMITS,
 )
+from swarm.scouts import ScoutAgent
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.orchestrator")
@@ -49,6 +50,7 @@ class SwarmOrchestrator:
         self.sb = create_client(SUPABASE_URL, SUPABASE_KEY)
         self.task_manager = TaskManager()
         self.budget_manager = BudgetManager()
+        self.scout = ScoutAgent(task_manager=self.task_manager)
         self.alive = True
         self.worker_processes: dict[str, multiprocessing.Process] = {}
 
@@ -72,6 +74,13 @@ class SwarmOrchestrator:
                 self.scale_workers()
                 self.check_worker_health()
                 self.enforce_budgets()
+
+                # Run scout every 4 hours
+                if self.scout.is_due():
+                    try:
+                        self.scout.run_evaluation()
+                    except Exception as e:
+                        logger.error("Scout failed: %s", e, exc_info=True)
             except KeyboardInterrupt:
                 break
             except Exception as e:
