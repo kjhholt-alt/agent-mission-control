@@ -11,6 +11,7 @@ Oracle watches everything, filters noise, and only surfaces:
 
 import json
 import logging
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
@@ -46,6 +47,14 @@ class Oracle:
     TABLE_TASKS = "swarm_tasks"
     TABLE_WORKERS = "swarm_workers"
     TABLE_BUDGETS = "swarm_budgets"
+    TABLE_DECISIONS = "oracle_decisions"
+
+    SEVERITY_COLORS = {
+        "critical": 0xEF4444,  # red
+        "high": 0xF97316,      # orange
+        "medium": 0xE8A019,    # gold
+        "low": 0x06B6D4,       # cyan
+    }
 
     def __init__(
         self,
@@ -120,6 +129,11 @@ class Oracle:
 
         # Post to Discord
         self._post_to_discord(briefing)
+
+        # Create decision records and post individually to Discord
+        if decisions:
+            self.create_decision_records(decisions)
+            self.post_decisions_to_discord(decisions)
 
         self._last_briefing = datetime.now(timezone.utc)
         logger.info("Oracle briefing complete: %d decisions, %d highlights",
@@ -222,6 +236,91 @@ class Oracle:
             logger.warning("Failed to check dead workers: %s", e)
 
         return decisions
+
+    # ── Decision queue ─────────────────────────────────────────────────────
+
+    def _severity_color(self, severity: str) -> int:
+        """Return Discord embed color int for a severity level."""
+        return self.SEVERITY_COLORS.get(severity, self.SEVERITY_COLORS["medium"])
+
+    def post_decisions_to_discord(self, decisions: list):
+        """Post each decision as a separate Discord embed so user can track them."""
+        if not self.webhook_url:
+            logger.debug("No Discord webhook URL, skipping decision posts")
+            return
+
+        for i, decision in enumerate(decisions):
+            embed = {
+                "title": f"Decision #{i+1}: {decision['title']}",
+                "description": decision.get("detail", decision.get("description", "")),
+                "color": self._severity_color(decision.get("severity", "medium")),
+                "fields": [
+                    {"name": "Action Needed", "value": decision.get("action_needed", ", ".join(decision.get("actions", ["review"]))), "inline": False},
+                    {"name": "Severity", "value": decision.get("severity", "medium").upper(), "inline": True},
+                    {"name": "Project", "value": decision.get("project", "nexus"), "inline": True},
+                ],
+                "footer": {"text": "React: Approve | Dismiss | Redirect | Pause"},
+            }
+            payload = {"username": "Oracle", "embeds": [embed]}
+            try:
+                resp = requests.post(self.webhook_url, json=payload, timeout=10)
+                resp.raise_for_status()
+                logger.debug("Posted decision #%d to Discord", i + 1)
+            except Exception as e:
+                logger.error("Failed to post decision #%d to Discord: %s", i + 1, e)
+            time.sleep(1)  # Don't flood
+
+    def create_decision_records(self, decisions: list) -> list[str]:
+        """Create oracle_decisions rows in Supabase for each decision.
+
+        Returns list of created decision IDs.
+        Skips duplicates (same title + pending status).
+        """
+        created_ids = []
+        for decision in decisions:
+            title = decision.get("title", "Untitled")
+            # Check for existing pending decision with same title
+            try:
+                existing = (
+                    self.sb.table(self.TABLE_DECISIONS)
+                    .select("id")
+                    .eq("title", title)
+                    .eq("status", "pending")
+                    .limit(1)
+                    .execute()
+                )
+                if existing.data:
+                    logger.debug("Decision already exists: %s", title)
+                    continue
+            except Exception:
+                pass  # If check fails, try to create anyway
+
+            source_type_map = {
+                "failed_task": "failed_task",
+                "budget_warning": "budget_alert",
+                "stuck_task": "stuck_task",
+                "worker_deaths": "stuck_task",
+            }
+
+            row = {
+                "title": title,
+                "description": decision.get("detail", decision.get("description", "")),
+                "severity": decision.get("severity", "medium"),
+                "project": decision.get("project", "nexus"),
+                "action_needed": ", ".join(decision.get("actions", ["review"])),
+                "source_type": source_type_map.get(decision.get("type", ""), decision.get("type", "unknown")),
+                "source_id": decision.get("task_id", None),
+                "status": "pending",
+            }
+            try:
+                resp = self.sb.table(self.TABLE_DECISIONS).insert(row).execute()
+                if resp.data:
+                    created_ids.append(resp.data[0]["id"])
+                    logger.info("Created decision record: %s", title)
+            except Exception as e:
+                logger.warning("Failed to create decision record: %s", e)
+
+        return created_ids
 
     # ── Daily digest ───────────────────────────────────────────────────────
 
