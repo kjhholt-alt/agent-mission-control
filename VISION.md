@@ -206,6 +206,35 @@ This makes it a **plug-and-play product** — not just for us.
 - **Guild system** — Your team of agents is a guild. Guild achievements: "First PR merged", "100 emails found", "First client signed"
 - **Achievement system** — Pop-up achievements: "Email Hunter: Found 100 emails", "Code Machine: Merged 10 PRs", "Revenue Runner: First $100 earned"
 
+### Skyrim
+- **Open world exploration** — Agents can be sent to "explore" new markets/niches. They discover opportunities like discovering a dungeon. "Your Scout discovered 47 plumbing businesses in Dubuque!"
+- **Skill progression per agent** — Each agent has a skill page like Skyrim: Smithing (building), Archery (accuracy), Speech (email outreach). Skills level up with use.
+- **Compass/waypoints** — Top of screen shows markers for active tasks with distance. "PR ready for review → PL Engine [2 min away]"
+- **Dragon shouts** — Special powerful abilities with cooldowns. "FUS RO DAH: Deploy All" (deploys every project at once). "WULD NAH KEST: Sprint Mode" (agent works 3x speed for 5 minutes)
+- **Inventory system** — Each agent carries "items" (API keys, credentials, context files). Manage their loadout.
+- **Radiant quest system** — Auto-generated tasks based on current state: "There are 47 prospects without emails in Cedar Rapids. Send a Miner?"
+
+### Card Shop Game (TCG Shop Simulator)
+- **Card collecting** — Every completed task generates a collectible card. Cards have stats, rarity, artwork. Build a collection over time.
+- **Card shop display** — Show your best achievements as cards in a display case on the dashboard
+- **Pack opening** — When an agent finishes a big task, animate a "pack opening" revealing what was accomplished (emails found, PRs merged, bugs fixed)
+- **Trading** — In multiplayer/team mode, trade agent configurations and skill setups
+- **Card grading** — Rate the quality of each PR/task output: S/A/B/C/D tier
+
+### Megabonk
+- **Satisfying impact** — Every action should have WEIGHT. Clicking send on an email batch = screen shake + impact effect. Merging a PR = bonk sound + ripple.
+- **Combo system** — Chain successful tasks for multipliers. 3 PRs merged in a row = 3x XP combo. Visual combo counter on screen.
+- **Escalating intensity** — As more agents are active, everything gets more intense: music speeds up, particles increase, glow brightens, screen energy rises
+
+### Europa Universalis IV (EU4)
+- **Territory control map** — Your market coverage as a map. Colored territories for each city where you have prospects. Expand by running prospector in new regions.
+- **Diplomatic relations** — Track client relationships: "Allied" (active client), "Friendly" (replied to email), "Neutral" (contacted), "Unknown" (new prospect)
+- **Trade routes** — Revenue flows visualized as EU4 trade routes between your base and client territories
+- **Technology groups** — Different tech levels for different agent capabilities. Research to advance.
+- **Casus belli** — Justified reasons to reach out to a prospect: "They have no blog (CB: Missing SEO)", "Competitor has better reviews (CB: Market Advantage)"
+- **Coalition management** — When running multiple agents on the same project, manage them like a coalition — they need to not conflict
+- **Timeline scrubber** — Scrub through time to see how your empire grew. "In January you had 0 prospects. By March you had 2,024."
+
 ## Phases
 1. Static isometric map with buildings (~3 hrs)
 2. Animated workers that walk to buildings (~3 hrs)
