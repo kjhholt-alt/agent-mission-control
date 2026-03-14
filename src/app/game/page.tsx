@@ -1018,9 +1018,11 @@ function IsometricBuilding({
 function ConveyorBeltLine({
   conveyor,
   buildings,
+  simplified,
 }: {
   conveyor: ConveyorBelt;
   buildings: Building[];
+  simplified?: boolean;
 }) {
   const from = buildings.find((b) => b.id === conveyor.fromBuildingId);
   const to = buildings.find((b) => b.id === conveyor.toBuildingId);
@@ -1130,10 +1132,10 @@ function ConveyorBeltLine({
           );
         })}
 
-      {/* Data packets flowing along (colored by type) */}
+      {/* Data packets flowing along (colored by type) -- reduced on mobile */}
       {conveyor.active && (
         <>
-          {[0, 0.25, 0.5, 0.75].map((offset, i) => (
+          {(simplified ? [0, 0.5] : [0, 0.25, 0.5, 0.75]).map((offset, i) => (
             <g key={i}>
               {/* Packet body */}
               <rect
@@ -1285,12 +1287,14 @@ function WorkerSprite({
   onHover,
   onClick,
   isSelected,
+  isMobile,
 }: {
   worker: Worker;
   buildings: Building[];
   onHover: (id: string | null) => void;
   onClick: (id: string) => void;
   isSelected: boolean;
+  isMobile?: boolean;
 }) {
   const current = buildings.find((b) => b.id === worker.currentBuildingId);
   const target = buildings.find((b) => b.id === worker.targetBuildingId);
@@ -1471,8 +1475,8 @@ function WorkerSprite({
         />
       </circle>
 
-      {/* Evolution glow (golden particle burst) */}
-      {worker.evolving && (
+      {/* Evolution glow (golden particle burst) -- skip on mobile for perf */}
+      {worker.evolving && !isMobile && (
         <g>
           {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => (
             <circle
@@ -1563,8 +1567,9 @@ function WorkerSprite({
           y={cy - 18}
           textAnchor="end"
           fill="rgba(255,255,255,0.7)"
-          fontSize={7}
+          fontSize={isMobile ? 6 : 7}
           fontFamily="var(--font-mono), monospace"
+          className="worker-name"
         >
           {worker.name}
         </text>
@@ -2940,7 +2945,7 @@ export default function GamePage() {
 
             {/* Conveyor belts (behind buildings) */}
             {CONVEYORS.map((c) => (
-              <ConveyorBeltLine key={c.id} conveyor={c} buildings={BUILDINGS} />
+              <ConveyorBeltLine key={c.id} conveyor={c} buildings={BUILDINGS} simplified={isMobile} />
             ))}
 
             {/* Buildings (sorted by Y for proper depth) */}
@@ -2975,15 +2980,16 @@ export default function GamePage() {
                   setSelectedBuilding(null);
                 }}
                 isSelected={selectedWorker === w.id}
+                isMobile={isMobile}
               />
             ))}
           </g>
         </svg>
       </div>
 
-      {/* Building tooltip on hover */}
+      {/* Building tooltip on hover (desktop only -- mobile uses tap to select) */}
       <AnimatePresence>
-        {hoveredBuildingData && !selectedBuilding && (
+        {hoveredBuildingData && !selectedBuilding && !isMobile && (
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}

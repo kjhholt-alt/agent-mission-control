@@ -197,7 +197,7 @@ export default function MissionControl() {
           <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
             Activity Timeline (24h)
           </h2>
-          <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4 backdrop-blur-sm">
+          <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4 backdrop-blur-sm dashboard-timeline-wrap">
             <ActivityTimeline agents={agents} />
           </div>
         </motion.section>
@@ -211,7 +211,7 @@ export default function MissionControl() {
           <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
             Agent History
           </h2>
-          <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4 backdrop-blur-sm">
+          <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4 backdrop-blur-sm dashboard-table-wrap">
             <AgentHistory agents={agents} />
           </div>
         </motion.section>
