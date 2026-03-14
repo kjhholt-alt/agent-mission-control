@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from swarm.auto_merge import AutoMerger
-from swarm.config import AUTO_MERGE_ENABLED, HEAVY_WORKER_TASK_TIMEOUT_SECONDS, PROJECTS
+from swarm.config import AUTO_MERGE_ENABLED, CLAUDE_CLI_PATH, HEAVY_WORKER_TASK_TIMEOUT_SECONDS, PROJECTS
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.heavy")
@@ -58,7 +58,7 @@ class HeavyWorker(BaseWorker):
 
         # Build command
         cmd = [
-            "C:/Users/Kruz/.local/bin/claude.exe",
+            CLAUDE_CLI_PATH,
             "-p",
             prompt,
             "--dangerously-skip-permissions",
@@ -71,7 +71,7 @@ class HeavyWorker(BaseWorker):
                 capture_output=True,
                 text=True,
                 timeout=HEAVY_WORKER_TASK_TIMEOUT_SECONDS,
-                shell=False,
+                shell=True,
             )
 
             duration_seconds = round(time.time() - start_time, 1)
@@ -106,6 +106,7 @@ class HeavyWorker(BaseWorker):
             )
 
             output_data = {
+                "response": stdout,
                 "stdout": stdout,
                 "stderr": stderr,
                 "exit_code": result.returncode,

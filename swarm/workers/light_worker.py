@@ -9,7 +9,7 @@ from typing import Any
 import anthropic
 
 from swarm.budget.cost_calculator import calculate_cost
-from swarm.config import ANTHROPIC_API_KEY, PROJECTS
+from swarm.config import ANTHROPIC_API_KEY, BLOCKED_PROJECTS, PROJECTS
 from swarm.context import gather_project_context
 from swarm.workers.base import BaseWorker
 
@@ -41,6 +41,11 @@ class LightWorker(BaseWorker):
         if not project_key:
             return prompt
 
+        # Don't inject context for blocked projects
+        if project_key in BLOCKED_PROJECTS:
+            logger.debug("Skipping context for blocked project: %s", project_key)
+            return prompt
+
         project_config = PROJECTS.get(project_key)
         if not project_config:
             return prompt
@@ -49,7 +54,11 @@ class LightWorker(BaseWorker):
         if not project_dir:
             return prompt
 
-        context = gather_project_context(project_dir)
+        try:
+            context = gather_project_context(project_dir, project_key=project_key)
+        except Exception as e:
+            logger.warning("Context gathering failed for %s: %s", project_key, e)
+            return prompt
         if not context:
             return prompt
 

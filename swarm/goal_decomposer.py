@@ -10,7 +10,7 @@ import logging
 import subprocess
 from typing import Any
 
-from swarm.config import BLOCKED_PROJECTS, PROJECTS
+from swarm.config import BLOCKED_PROJECTS, CLAUDE_CLI_PATH, PROJECTS
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.decomposer")
@@ -20,6 +20,8 @@ Given a high-level goal, break it into concrete, actionable tasks.
 
 Available projects and their types:
 {projects}
+
+BLOCKED PROJECTS (DO NOT create tasks for these): {blocked_projects}
 
 Each task must have:
 - task_type: one of "meta", "eval", "build", "test", "refactor", "mine"
@@ -64,7 +66,10 @@ class GoalDecomposer:
             if key not in BLOCKED_PROJECTS
         )
 
-        system = DECOMPOSE_SYSTEM.format(projects=projects_desc)
+        system = DECOMPOSE_SYSTEM.format(
+            projects=projects_desc,
+            blocked_projects=", ".join(BLOCKED_PROJECTS),
+        )
 
         prompt = f"{system}\n\n{user_prompt}"
 
@@ -72,11 +77,12 @@ class GoalDecomposer:
 
         try:
             result = subprocess.run(
-                ["C:/Users/Kruz/.local/bin/claude.exe", "-p", prompt, "--no-input"],
+                [CLAUDE_CLI_PATH, "-p", prompt, "--no-input"],
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 min max
                 cwd="C:/Users/Kruz/Desktop/Projects/nexus",
+                shell=True,
             )
             response_text = result.stdout or ""
         except subprocess.TimeoutExpired:
@@ -107,6 +113,18 @@ class GoalDecomposer:
 
         if not isinstance(tasks_data, list):
             raise ValueError("Goal decomposition must return a JSON array")
+
+        # Filter out any tasks for blocked projects
+        original_count = len(tasks_data)
+        tasks_data = [
+            td for td in tasks_data
+            if td.get("project", "") not in BLOCKED_PROJECTS
+        ]
+        if len(tasks_data) < original_count:
+            logger.info(
+                "Filtered out %d tasks for blocked projects",
+                original_count - len(tasks_data),
+            )
 
         # Create a parent meta-task
         parent = self.task_manager.create_task(

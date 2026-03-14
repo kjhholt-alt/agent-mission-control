@@ -262,19 +262,27 @@ class TaskManager:
     # ── Complete ──────────────────────────────────────────────────────────
 
     def complete_task(
-        self, task_id: str, output_data: dict[str, Any], cost_cents: int = 0, tokens: int = 0
+        self, task_id: str, output_data: Any, cost_cents: int = 0, tokens: int = 0
     ) -> dict[str, Any]:
         """Mark a task as completed and unblock dependents.
 
         Args:
             task_id: UUID of the task
-            output_data: Structured output from the worker
+            output_data: Structured output from the worker (dict or string)
             cost_cents: Actual cost in cents
             tokens: Total tokens used
 
         Returns:
             The updated task row
         """
+        # Ensure output_data is always a dict so it stores properly in JSONB
+        if output_data is None:
+            output_data = {"response": ""}
+        elif isinstance(output_data, str):
+            output_data = {"response": output_data}
+        elif not isinstance(output_data, dict):
+            output_data = {"response": str(output_data)}
+
         now = datetime.now(timezone.utc).isoformat()
         update: dict[str, Any] = {
             "status": "completed",

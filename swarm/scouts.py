@@ -19,6 +19,7 @@ import requests
 from swarm.config import (
     ANTHROPIC_API_KEY,
     BLOCKED_PROJECTS,
+    CLAUDE_CLI_PATH,
     DISCORD_WEBHOOK_URL,
     PROJECTS,
     SUPABASE_KEY,
@@ -45,9 +46,12 @@ Failed approaches (avoid repeating these):
 Active/queued tasks (avoid duplicating these):
 {active_tasks}
 
+BLOCKED PROJECTS (DO NOT suggest tasks for these): {blocked_projects}
+
 Instructions:
 - Suggest 3-5 goals ranked by impact (highest first)
 - Each goal should be specific and actionable
+- DO NOT suggest tasks for blocked projects listed above (MoneyPrinter, moneyprinter-hud, etc.)
 - Avoid duplicating work that's already queued or recently completed
 - Avoid repeating failed approaches
 - Focus on: bugs, improvements, new features, testing, documentation, performance
@@ -115,7 +119,13 @@ class ScoutAgent:
             logger.warning("Scout produced no suggestions")
             return
 
-        logger.info("Scout generated %d suggestions", len(suggestions))
+        # Filter out any suggestions for blocked projects
+        suggestions = [
+            s for s in suggestions
+            if s.get("project", "") not in BLOCKED_PROJECTS
+        ]
+
+        logger.info("Scout generated %d suggestions (after filtering blocked)", len(suggestions))
 
         # 3. Auto-fire top 2
         fired = []
@@ -204,6 +214,7 @@ class ScoutAgent:
             recent_work=recent_work,
             failed_approaches=failed_approaches,
             active_tasks=active_tasks,
+            blocked_projects=", ".join(BLOCKED_PROJECTS),
         )
 
         prompt = (
@@ -214,11 +225,12 @@ class ScoutAgent:
 
         try:
             result = subprocess.run(
-                ["C:/Users/Kruz/.local/bin/claude.exe", "-p", prompt, "--no-input"],
+                [CLAUDE_CLI_PATH, "-p", prompt, "--no-input"],
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 min max
                 cwd="C:/Users/Kruz/Desktop/Projects/nexus",
+                shell=True,
             )
 
             response_text = result.stdout or ""

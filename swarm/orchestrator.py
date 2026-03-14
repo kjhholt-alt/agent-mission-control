@@ -53,6 +53,9 @@ class SwarmOrchestrator:
 
     WORKERS_TABLE = "swarm_workers"
 
+    TASKS_TABLE = "swarm_tasks"
+    TASK_LOG_TABLE = "swarm_task_log"
+
     def __init__(self):
         from supabase import create_client
 
@@ -63,6 +66,8 @@ class SwarmOrchestrator:
         self.oracle = Oracle(supabase_client=self.sb)
         self.alive = True
         self.worker_processes: dict[str, multiprocessing.Process] = {}
+        self._last_cleanup: float = 0
+        self._cleanup_interval: float = 6 * 60 * 60  # 6 hours
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -98,6 +103,13 @@ class SwarmOrchestrator:
                         self.oracle.run_briefing()
                     except Exception as e:
                         logger.error("Oracle briefing failed: %s", e, exc_info=True)
+
+                # Periodic cleanup every 6 hours
+                if time.time() - self._last_cleanup > self._cleanup_interval:
+                    try:
+                        self.cleanup_stale_data()
+                    except Exception as e:
+                        logger.error("Cleanup failed: %s", e, exc_info=True)
 
                 # Oracle: daily digest at 6pm UTC
                 if self.oracle.is_daily_due():
@@ -148,29 +160,46 @@ class SwarmOrchestrator:
     # ── Worker scaling ────────────────────────────────────────────────────
 
     def scale_workers(self):
-        """Scale workers up or down based on queue depth."""
+        """Scale workers up or down based on queue depth.
+
+        Only counts ACTIVE workers (not dead/paused). If there are queued tasks
+        but 0 active workers of the needed tier, spawns replacements.
+        """
         queued_tasks = self.task_manager.get_tasks_by_status("queued")
         light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "light")
         cc_light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "cc_light")
         heavy_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "heavy")
 
+        # Only count active workers (filters out dead and stale heartbeats)
         active_workers = self._get_active_workers()
-        active_light = sum(1 for w in active_workers if w["tier"] == "light")
-        active_cc_light = sum(1 for w in active_workers if w["tier"] == "cc_light")
-        active_heavy = sum(1 for w in active_workers if w["tier"] == "heavy")
+        active_light = sum(1 for w in active_workers if w.get("tier") == "light")
+        active_cc_light = sum(1 for w in active_workers if w.get("tier") == "cc_light")
+        active_heavy = sum(1 for w in active_workers if w.get("tier") == "heavy")
 
-        # Scale light workers
-        needed_light = min(light_count, WORKER_LIMITS["light_max"]) - active_light
+        # Scale light workers — spawn at least 1 if there are queued tasks
+        if light_count > 0:
+            needed_light = min(light_count, WORKER_LIMITS["light_max"]) - active_light
+            needed_light = max(needed_light, 1 if active_light == 0 else 0)
+        else:
+            needed_light = 0
         for _ in range(max(0, needed_light)):
             self._spawn_worker("light")
 
         # Scale cc_light workers
-        needed_cc_light = min(cc_light_count, WORKER_LIMITS["cc_light_max"]) - active_cc_light
+        if cc_light_count > 0:
+            needed_cc_light = min(cc_light_count, WORKER_LIMITS["cc_light_max"]) - active_cc_light
+            needed_cc_light = max(needed_cc_light, 1 if active_cc_light == 0 else 0)
+        else:
+            needed_cc_light = 0
         for _ in range(max(0, needed_cc_light)):
             self._spawn_worker("cc_light")
 
         # Scale heavy workers
-        needed_heavy = min(heavy_count, WORKER_LIMITS["heavy_max"]) - active_heavy
+        if heavy_count > 0:
+            needed_heavy = min(heavy_count, WORKER_LIMITS["heavy_max"]) - active_heavy
+            needed_heavy = max(needed_heavy, 1 if active_heavy == 0 else 0)
+        else:
+            needed_heavy = 0
         for _ in range(max(0, needed_heavy)):
             self._spawn_worker("heavy")
 
@@ -261,6 +290,56 @@ class SwarmOrchestrator:
         self.sb.table(self.WORKERS_TABLE).update({"status": "paused"}).eq(
             "tier", tier
         ).neq("status", "dead").execute()
+
+    # ── Stale data cleanup ─────────────────────────────────────────────
+
+    def cleanup_stale_data(self):
+        """Remove failed tasks older than 24h and dead workers older than 12h."""
+        now = datetime.now(timezone.utc)
+
+        # Delete failed tasks older than 24 hours
+        failed_cutoff = (now - timedelta(hours=24)).isoformat()
+        try:
+            resp = (
+                self.sb.table(self.TASKS_TABLE)
+                .delete()
+                .eq("status", "failed")
+                .lt("updated_at", failed_cutoff)
+                .execute()
+            )
+            deleted_tasks = len(resp.data) if resp.data else 0
+            if deleted_tasks:
+                logger.info("Cleaned up %d failed tasks older than 24h", deleted_tasks)
+        except Exception as e:
+            logger.warning("Failed to clean up old failed tasks: %s", e)
+
+        # Delete dead workers older than 12 hours
+        dead_cutoff = (now - timedelta(hours=12)).isoformat()
+        try:
+            resp = (
+                self.sb.table(self.WORKERS_TABLE)
+                .delete()
+                .eq("status", "dead")
+                .lt("died_at", dead_cutoff)
+                .execute()
+            )
+            deleted_workers = len(resp.data) if resp.data else 0
+            if deleted_workers:
+                logger.info("Cleaned up %d dead workers older than 12h", deleted_workers)
+        except Exception as e:
+            logger.warning("Failed to clean up dead workers: %s", e)
+
+        # Clean up old task log entries older than 7 days
+        log_cutoff = (now - timedelta(days=7)).isoformat()
+        try:
+            self.sb.table(self.TASK_LOG_TABLE).delete().lt(
+                "created_at", log_cutoff
+            ).execute()
+        except Exception as e:
+            logger.debug("Failed to clean up old task logs: %s", e)
+
+        self._last_cleanup = time.time()
+        logger.info("Periodic cleanup complete")
 
     # ── Shutdown ──────────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ import subprocess
 import time
 from typing import Any
 
-from swarm.config import PROJECTS
+from swarm.config import BLOCKED_PROJECTS, CLAUDE_CLI_PATH, PROJECTS
 from swarm.context import gather_project_context
 from swarm.workers.base import BaseWorker
 
@@ -54,11 +54,16 @@ class CCLightWorker(BaseWorker):
         if not cwd:
             cwd = input_data.get("cwd", "C:/Users/Kruz/Desktop/Projects")
 
-        # Add project context if available
-        if project_key and project_key in PROJECTS:
-            context = gather_project_context(PROJECTS[project_key].get("dir", ""))
-            if context:
-                prompt = f"{context}\n\n{prompt}"
+        # Add project context if available (skip blocked projects)
+        if project_key and project_key in PROJECTS and project_key not in BLOCKED_PROJECTS:
+            try:
+                context = gather_project_context(
+                    PROJECTS[project_key].get("dir", ""), project_key=project_key
+                )
+                if context:
+                    prompt = f"{context}\n\n{prompt}"
+            except Exception as e:
+                logger.warning("Context gathering failed for %s: %s, continuing without context", project_key, e)
 
         logger.info(
             "Launching Claude Code (cc_light) for task %s in %s: %s",
@@ -71,7 +76,7 @@ class CCLightWorker(BaseWorker):
 
         # Build command — uses --no-input to prevent interactive prompts
         cmd = [
-            "C:/Users/Kruz/.local/bin/claude.exe",
+            CLAUDE_CLI_PATH,
             "-p",
             prompt,
             "--no-input",
@@ -84,7 +89,7 @@ class CCLightWorker(BaseWorker):
                 capture_output=True,
                 text=True,
                 timeout=CC_LIGHT_TASK_TIMEOUT_SECONDS,
-                shell=False,
+                shell=True,
             )
 
             duration_seconds = round(time.time() - start_time, 1)
@@ -119,6 +124,7 @@ class CCLightWorker(BaseWorker):
             )
 
             return {
+                "response": stdout,
                 "stdout": stdout,
                 "stderr": stderr,
                 "exit_code": result.returncode,

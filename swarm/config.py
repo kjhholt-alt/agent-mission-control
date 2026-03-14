@@ -99,6 +99,9 @@ AUTO_MERGE_ENABLED = True
 AUTO_MERGE_MAX_FILES_CHANGED = 10
 AUTO_MERGE_MIN_QUALITY_SCORE = 7
 
+# ── Claude Code CLI path ────────────────────────────────────────────────
+CLAUDE_CLI_PATH = os.environ.get("CLAUDE_CLI_PATH", "C:/nvm4w/nodejs/claude.cmd")
+
 PROTECTED_PATHS = [
     "railway.json",
     "vercel.json",

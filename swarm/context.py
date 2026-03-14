@@ -18,7 +18,7 @@ CLAUDE_MD_MAX_CHARS = 2000
 MAX_CONTEXT_CHARS = 8000
 
 
-def gather_project_context(project_dir: str) -> str:
+def gather_project_context(project_dir: str, project_key: str = "") -> str:
     """Gather context from a project directory for injection into task prompts.
 
     Reads:
@@ -28,43 +28,61 @@ def gather_project_context(project_dir: str) -> str:
 
     Args:
         project_dir: Absolute path to the project directory
+        project_key: Optional project key to check against BLOCKED_PROJECTS
 
     Returns:
-        Formatted context string, or empty string if project dir doesn't exist
+        Formatted context string, or empty string if project dir doesn't exist,
+        project is blocked, or any error occurs during gathering.
     """
+    from swarm.config import BLOCKED_PROJECTS, PROJECTS
+
+    # Check if project is blocked
+    if project_key and project_key in BLOCKED_PROJECTS:
+        logger.debug("Project %s is blocked, skipping context", project_key)
+        return ""
+
+    # If project_key given but not in PROJECTS registry, return empty (don't crash)
+    if project_key and project_key not in PROJECTS:
+        logger.debug("Project %s not in PROJECTS registry, skipping context", project_key)
+        return ""
+
     if not project_dir or not os.path.isdir(project_dir):
         logger.debug("Project dir does not exist: %s", project_dir)
         return ""
 
-    sections: list[str] = []
+    try:
+        sections: list[str] = []
 
-    # 1. Read CLAUDE.md
-    claude_md = _read_claude_md(project_dir)
-    if claude_md:
-        sections.append(f"## Project Instructions (CLAUDE.md)\n{claude_md}")
+        # 1. Read CLAUDE.md
+        claude_md = _read_claude_md(project_dir)
+        if claude_md:
+            sections.append(f"## Project Instructions (CLAUDE.md)\n{claude_md}")
 
-    # 2. Recent git commits
-    git_log = _get_git_log(project_dir)
-    if git_log:
-        sections.append(f"## Recent Commits\n{git_log}")
+        # 2. Recent git commits
+        git_log = _get_git_log(project_dir)
+        if git_log:
+            sections.append(f"## Recent Commits\n{git_log}")
 
-    # 3. File structure
-    file_tree = _get_file_tree(project_dir)
-    if file_tree:
-        sections.append(f"## File Structure\n{file_tree}")
+        # 3. File structure
+        file_tree = _get_file_tree(project_dir)
+        if file_tree:
+            sections.append(f"## File Structure\n{file_tree}")
 
-    if not sections:
+        if not sections:
+            return ""
+
+        context = f"--- PROJECT CONTEXT ({os.path.basename(project_dir)}) ---\n\n"
+        context += "\n\n".join(sections)
+        context += "\n\n--- END PROJECT CONTEXT ---"
+
+        # Enforce max length
+        if len(context) > MAX_CONTEXT_CHARS:
+            context = context[:MAX_CONTEXT_CHARS] + "\n[...context truncated...]"
+
+        return context
+    except Exception as e:
+        logger.warning("Failed to gather context for %s: %s", project_dir, e)
         return ""
-
-    context = f"--- PROJECT CONTEXT ({os.path.basename(project_dir)}) ---\n\n"
-    context += "\n\n".join(sections)
-    context += "\n\n--- END PROJECT CONTEXT ---"
-
-    # Enforce max length
-    if len(context) > MAX_CONTEXT_CHARS:
-        context = context[:MAX_CONTEXT_CHARS] + "\n[...context truncated...]"
-
-    return context
 
 
 def _read_claude_md(project_dir: str) -> Optional[str]:
