@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { MobileRecentWins } from "@/components/live-feed";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -409,6 +410,11 @@ export default function MobileCommandCenter() {
                 </span>
               )}
             </div>
+          </Section>
+
+          {/* ── RECENT WINS ── */}
+          <Section title="RECENT WINS">
+            <MobileRecentWins />
           </Section>
 
           {/* ── TASK QUEUE ── */}

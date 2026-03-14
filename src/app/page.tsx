@@ -11,6 +11,7 @@ import { StatsBar } from "@/components/stats-bar";
 import { AgentCard } from "@/components/agent-card";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { AgentHistory } from "@/components/agent-history";
+import { LiveFeed } from "@/components/live-feed";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -144,6 +145,15 @@ export default function MissionControl() {
 
         {/* Stats Bar */}
         <StatsBar agents={agents} />
+
+        {/* Live Feed */}
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 }}
+        >
+          <LiveFeed />
+        </motion.section>
 
         {/* Active Agents */}
         <section>
