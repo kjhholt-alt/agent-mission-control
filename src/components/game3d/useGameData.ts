@@ -432,13 +432,24 @@ export function useGameData() {
     const completedCount = projectTasks.filter((t) => t.status === "completed").length;
     const failedCount = projectTasks.filter((t) => t.status === "failed").length;
 
+    // Dynamic size — buildings grow based on activity
+    // Base size from constants, scaled up by completed tasks + workers
+    const activityScore = completedCount + (hasActiveWorker ? 5 : 0);
+    let sizeMultiplier = 1.0;
+    if (!isDemo && activityScore > 0) {
+      // Scale from 1.0 (no activity) to 1.8 (very active)
+      // Logarithmic so first few tasks have big impact, then it levels off
+      sizeMultiplier = 1.0 + Math.min(Math.log2(activityScore + 1) * 0.15, 0.8);
+    }
+
     return {
       ...b,
+      size: b.size * sizeMultiplier,
       status,
       stats: isDemo
         ? b.stats
         : {
-            tests: b.stats.tests, // Keep original test count (not tracked in swarm)
+            tests: b.stats.tests,
             deploys: completedCount || b.stats.deploys,
             uptime: recentFailure ? "WARN" : hasActiveWorker ? "LIVE" : b.stats.uptime,
           },
