@@ -24,9 +24,9 @@ export function SelectionRing({ position, color }: SelectionRingProps) {
     // Slow rotation
     meshRef.current.rotation.z = t * 0.5;
 
-    // Opacity pulsing
-    materialRef.current.opacity = 0.5 + Math.sin(t * 3) * 0.2;
-    materialRef.current.emissiveIntensity = 1.0 + Math.sin(t * 3) * 0.4;
+    // Opacity pulsing 0.4 - 0.8
+    materialRef.current.opacity = 0.6 + Math.sin(t * 3) * 0.2;
+    materialRef.current.emissiveIntensity = 1.0 + Math.sin(t * 3) * 0.3;
   });
 
   return (
@@ -35,14 +35,14 @@ export function SelectionRing({ position, color }: SelectionRingProps) {
       position={position}
       rotation={[-Math.PI / 2, 0, 0]}
     >
-      <ringGeometry args={[0.5, 0.6, 32]} />
+      <ringGeometry args={[0.6, 0.75, 32]} />
       <meshStandardMaterial
         ref={materialRef}
         color={color}
         emissive={color}
         emissiveIntensity={1.0}
         transparent
-        opacity={0.5}
+        opacity={0.6}
         side={THREE.DoubleSide}
       />
     </mesh>

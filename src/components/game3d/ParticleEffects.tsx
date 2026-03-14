@@ -10,16 +10,19 @@ import type { Building, Worker } from "./types";
 
 interface BuildingSparklesProps {
   buildings: Building[];
+  isMobile?: boolean;
 }
 
 /**
  * Sparkle particles around active buildings. Industrial glow effect.
  */
-export function BuildingSparkles({ buildings }: BuildingSparklesProps) {
+export function BuildingSparkles({ buildings, isMobile }: BuildingSparklesProps) {
   const activeBuildings = useMemo(
     () => buildings.filter((b) => b.status === "active"),
     [buildings]
   );
+
+  const sparkleCount = isMobile ? 6 : 12;
 
   return (
     <>
@@ -28,8 +31,8 @@ export function BuildingSparkles({ buildings }: BuildingSparklesProps) {
         return (
           <Sparkles
             key={building.id}
-            count={15}
-            size={2}
+            count={sparkleCount}
+            size={1.5}
             speed={0.3}
             scale={[building.size * 2, height + 1, building.size * 2]}
             position={[building.gridX, height / 2 + 0.5, building.gridY]}
