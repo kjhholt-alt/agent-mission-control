@@ -1,14 +1,16 @@
 """
 Goal decomposer: breaks high-level user goals into structured meta-tasks.
+
+Uses Claude Code CLI (free Opus on Max plan) instead of Haiku API for much
+smarter goal decomposition.
 """
 
 import json
 import logging
+import subprocess
 from typing import Any
 
-import anthropic
-
-from swarm.config import ANTHROPIC_API_KEY, PROJECTS
+from swarm.config import PROJECTS
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.decomposer")
@@ -40,14 +42,15 @@ Guidelines:
 
 
 class GoalDecomposer:
-    """Breaks user goals into structured tasks using Sonnet."""
+    """Breaks user goals into structured tasks using Claude Code CLI (free Opus)."""
 
     def __init__(self):
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self.task_manager = TaskManager()
 
     def decompose(self, user_prompt: str) -> list[dict[str, Any]]:
         """Decompose a user goal into meta-tasks and create them in Supabase.
+
+        Uses Claude Code CLI subprocess for free Opus-level decomposition.
 
         Args:
             user_prompt: High-level goal description
@@ -62,19 +65,23 @@ class GoalDecomposer:
 
         system = DECOMPOSE_SYSTEM.format(projects=projects_desc)
 
-        logger.info("Decomposing goal: %s", user_prompt[:100])
+        prompt = f"{system}\n\n{user_prompt}"
 
-        response = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
-            system=system,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
+        logger.info("Decomposing goal via Claude Code CLI: %s", user_prompt[:100])
 
-        response_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                response_text += block.text
+        try:
+            result = subprocess.run(
+                ["claude", "-p", prompt, "--no-input"],
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 min max
+                cwd="C:/Users/Kruz/Desktop/Projects/nexus",
+            )
+            response_text = result.stdout or ""
+        except subprocess.TimeoutExpired:
+            raise ValueError("Goal decomposition timed out after 5 minutes")
+        except FileNotFoundError:
+            raise ValueError("Claude Code CLI not found. Is 'claude' in PATH?")
 
         # Parse JSON from response
         try:

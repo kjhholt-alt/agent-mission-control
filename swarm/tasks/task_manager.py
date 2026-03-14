@@ -89,6 +89,10 @@ class TaskManager:
             if set(depends_on) - completed_ids:
                 status = "blocked"
 
+        # Route strategic thinking tasks to cc_light tier (free Opus via Claude Code CLI)
+        if cost_tier == "light" and task_type in ("eval", "meta", "plan", "review"):
+            cost_tier = "cc_light"
+
         row: dict[str, Any] = {
             "task_type": task_type,
             "title": title,

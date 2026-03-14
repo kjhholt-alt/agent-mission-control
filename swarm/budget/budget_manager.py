@@ -83,7 +83,7 @@ class BudgetManager:
             True if within budget
         """
         row = self._get_today()
-        if tier == "heavy":
+        if tier in ("heavy", "cc_light"):
             return (
                 row["claude_code_minutes_used"] < row["daily_claude_code_minutes"]
             )

@@ -47,6 +47,7 @@ def show_status():
     workers_table.add_column("Value", style="green")
     workers_table.add_row("Total Active", str(w["total"]))
     workers_table.add_row("Light Workers", str(w["light"]))
+    workers_table.add_row("CC Light Workers", str(w.get("cc_light", 0)))
     workers_table.add_row("Heavy Workers", str(w["heavy"]))
 
     # Tasks summary

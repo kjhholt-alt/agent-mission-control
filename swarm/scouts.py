@@ -8,6 +8,7 @@ and posts a summary to Discord.
 
 import json
 import logging
+import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -186,7 +187,7 @@ class ScoutAgent:
     def _get_suggestions(
         self, recent_work: str, failed_approaches: str, active_tasks: str
     ) -> list[dict[str, Any]]:
-        """Ask Claude for goal suggestions."""
+        """Ask Claude Code CLI (Opus, free) for goal suggestions."""
         projects_desc = "\n".join(
             f"  - {key}: {cfg['type']} project at {cfg['dir']}"
             for key, cfg in PROJECTS.items()
@@ -199,23 +200,22 @@ class ScoutAgent:
             active_tasks=active_tasks,
         )
 
+        prompt = (
+            f"{system}\n\n"
+            f"Evaluate the current state and suggest the top 3-5 goals for the swarm "
+            f"to pursue next. Return ONLY a valid JSON array, no markdown fences."
+        )
+
         try:
-            response = self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=4096,
-                system=system,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "Evaluate the current state and suggest the top 3-5 goals for the swarm to pursue next. Return JSON only.",
-                    }
-                ],
+            result = subprocess.run(
+                ["claude", "-p", prompt, "--no-input"],
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 min max
+                cwd="C:/Users/Kruz/Desktop/Projects/nexus",
             )
 
-            response_text = ""
-            for block in response.content:
-                if hasattr(block, "text"):
-                    response_text += block.text
+            response_text = result.stdout or ""
 
             # Parse JSON
             text = response_text.strip()
@@ -237,7 +237,7 @@ class ScoutAgent:
             return suggestions
 
         except Exception as e:
-            logger.error("Scout Claude call failed: %s", e)
+            logger.error("Scout Claude Code call failed: %s", e)
             return []
 
     def _log_scout_run(

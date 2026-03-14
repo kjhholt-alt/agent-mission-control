@@ -64,8 +64,9 @@ BUDGET_DEFAULTS = {
 
 # ── Worker limits ─────────────────────────────────────────────────────────────
 WORKER_LIMITS = {
-    "light_max": 15,
-    "heavy_max": 3,
+    "light_max": 10,       # Haiku API workers (bulk tasks, quality gate)
+    "cc_light_max": 3,     # Claude Code light workers (eval, scout, planning)
+    "heavy_max": 3,        # Claude Code heavy workers (code writing, PRs)
 }
 
 # ── Model costs (cents per 1K tokens) ────────────────────────────────────────

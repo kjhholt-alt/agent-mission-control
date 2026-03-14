@@ -31,6 +31,14 @@ def _run_light_worker():
     worker.run_loop()
 
 
+def _run_cc_light_worker():
+    """Entry point for cc_light worker subprocess."""
+    from swarm.workers.cc_light_worker import CCLightWorker
+
+    worker = CCLightWorker()
+    worker.run_loop()
+
+
 def _run_heavy_worker():
     """Entry point for heavy worker subprocess."""
     from swarm.workers.heavy_worker import HeavyWorker
@@ -120,16 +128,23 @@ class SwarmOrchestrator:
         """Scale workers up or down based on queue depth."""
         queued_tasks = self.task_manager.get_tasks_by_status("queued")
         light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "light")
+        cc_light_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "cc_light")
         heavy_count = sum(1 for t in queued_tasks if t.get("cost_tier") == "heavy")
 
         active_workers = self._get_active_workers()
         active_light = sum(1 for w in active_workers if w["tier"] == "light")
+        active_cc_light = sum(1 for w in active_workers if w["tier"] == "cc_light")
         active_heavy = sum(1 for w in active_workers if w["tier"] == "heavy")
 
         # Scale light workers
         needed_light = min(light_count, WORKER_LIMITS["light_max"]) - active_light
         for _ in range(max(0, needed_light)):
             self._spawn_worker("light")
+
+        # Scale cc_light workers
+        needed_cc_light = min(cc_light_count, WORKER_LIMITS["cc_light_max"]) - active_cc_light
+        for _ in range(max(0, needed_cc_light)):
+            self._spawn_worker("cc_light")
 
         # Scale heavy workers
         needed_heavy = min(heavy_count, WORKER_LIMITS["heavy_max"]) - active_heavy
@@ -138,7 +153,12 @@ class SwarmOrchestrator:
 
     def _spawn_worker(self, tier: str):
         """Spawn a new worker subprocess."""
-        target = _run_light_worker if tier == "light" else _run_heavy_worker
+        targets = {
+            "light": _run_light_worker,
+            "cc_light": _run_cc_light_worker,
+            "heavy": _run_heavy_worker,
+        }
+        target = targets.get(tier, _run_light_worker)
         proc = multiprocessing.Process(target=target, daemon=True)
         proc.start()
         self.worker_processes[f"{tier}-{proc.pid}"] = proc
@@ -209,8 +229,9 @@ class SwarmOrchestrator:
             self._pause_workers("light")
 
         if status["cc_pct"] >= 100:
-            logger.warning("Claude Code budget exceeded! Pausing heavy workers.")
+            logger.warning("Claude Code budget exceeded! Pausing heavy and cc_light workers.")
             self._pause_workers("heavy")
+            self._pause_workers("cc_light")
 
     def _pause_workers(self, tier: str):
         """Mark all workers of a tier as paused."""
@@ -257,6 +278,7 @@ class SwarmOrchestrator:
             "workers": {
                 "total": len(active_workers),
                 "light": sum(1 for w in active_workers if w["tier"] == "light"),
+                "cc_light": sum(1 for w in active_workers if w["tier"] == "cc_light"),
                 "heavy": sum(1 for w in active_workers if w["tier"] == "heavy"),
                 "details": active_workers,
             },
