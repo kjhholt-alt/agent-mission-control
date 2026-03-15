@@ -1357,6 +1357,7 @@ export default function GamePage() {
           selectedWorker={selectedWorker}
           workers={workers}
           buildings={buildings}
+          conveyors={gameData.conveyors}
           onHoverBuilding={setHoveredBuilding}
           onClickBuilding={handleClickBuilding}
           onClickWorker={handleClickWorker}

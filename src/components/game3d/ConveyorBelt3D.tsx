@@ -27,7 +27,15 @@ const DATA_ITEM_CONFIG: Record<
 
 const BELT_Y = 0.3;
 const ITEM_Y = BELT_Y + 0.1;
-const ITEMS_PER_BELT = 4;
+
+/** Number of visible items scales with real throughput. 0 throughput = 0 items. */
+function itemCountFromThroughput(throughput: number): number {
+  if (throughput <= 0) return 0;
+  if (throughput <= 2) return 1;
+  if (throughput <= 5) return 2;
+  if (throughput <= 15) return 3;
+  return 4;
+}
 
 /**
  * Factorio-style conveyor belt with 3D body, side rails, rollers,
@@ -136,6 +144,7 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
   const rollerCount = Math.max(2, Math.floor(length / 0.8));
 
   const itemConfig = DATA_ITEM_CONFIG[belt.dataType] || DATA_ITEM_CONFIG.data;
+  const itemCount = belt.active ? itemCountFromThroughput(belt.throughput) : 0;
 
   // Animate belt texture and items
   const beltOffsetRef = useRef(0);
@@ -153,7 +162,8 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
     if (itemsRef.current) {
       itemsRef.current.children.forEach((child, i) => {
         const mesh = child as THREE.Mesh;
-        const phase = i / ITEMS_PER_BELT;
+        const count = Math.max(1, itemCount);
+        const phase = i / count;
         const progress = ((-beltOffsetRef.current * 0.7 + phase) % 1.0 + 1.0) % 1.0;
 
         const pos = new THREE.Vector3().lerpVectors(from, to, progress);
@@ -310,10 +320,10 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
           );
         })}
 
-      {/* ═══ DATA ITEMS on belt ═══ */}
+      {/* ═══ DATA ITEMS on belt — only shown when real data is flowing ═══ */}
       <group ref={itemsRef}>
-        {belt.active &&
-          Array.from({ length: ITEMS_PER_BELT }).map((_, i) => (
+        {belt.active && itemCount > 0 &&
+          Array.from({ length: itemCount }).map((_, i) => (
             <mesh key={`item-${i}`} position={[midPoint.x, ITEM_Y, midPoint.z]}>
               {itemConfig.geometry === "box" && (
                 <boxGeometry args={[0.12, 0.08, 0.12]} />

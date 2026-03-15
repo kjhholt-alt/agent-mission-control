@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Worker, WorkerType, Building, AlertEvent } from "./types";
-import { BUILDINGS, INITIAL_WORKERS, INITIAL_EVENTS, WORKER_TYPE_CONFIG } from "./constants";
+import type { Worker, WorkerType, Building, AlertEvent, ConveyorBelt } from "./types";
+import { BUILDINGS, CONVEYORS, INITIAL_WORKERS, INITIAL_EVENTS, WORKER_TYPE_CONFIG } from "./constants";
 
 // ─── SUPABASE ROW TYPES ─────────────────────────────────────────────────────
 
@@ -134,11 +134,112 @@ function xpToLevel(xp: number): number {
   return Math.floor(xp / 100) + 1;
 }
 
+// ─── CONVEYOR COMPUTATION ────────────────────────────────────────────────────
+
+/** Map task_type to conveyor dataType */
+function taskTypeToDataType(taskType: string): ConveyorBelt["dataType"] {
+  const map: Record<string, ConveyorBelt["dataType"]> = {
+    build: "code",
+    eval: "tests",
+    test: "tests",
+    mine: "data",
+    deploy: "deploy",
+    scout: "config",
+    inspect: "tests",
+    alert: "alerts",
+    report: "revenue",
+  };
+  return map[taskType] || "data";
+}
+
+/**
+ * Compute active conveyors based on real swarm task activity.
+ * - A conveyor is "active" if there are in_progress or recently completed tasks
+ *   whose project maps to either endpoint of the conveyor.
+ * - Throughput = count of completed tasks in the last hour between the two buildings.
+ * - DataType is derived from the most recent task type flowing on that route.
+ * - If no real activity exists, the conveyor is inactive with 0 throughput.
+ */
+function computeActiveConveyors(
+  tasks: SwarmTask[],
+  workers: SwarmWorker[],
+  isDemo: boolean
+): ConveyorBelt[] {
+  if (isDemo) return CONVEYORS; // Return original demo conveyors
+
+  const now = Date.now();
+  const oneHourAgo = now - 60 * 60 * 1000;
+  const fiveMinAgo = now - 5 * 60 * 1000;
+
+  return CONVEYORS.map((belt) => {
+    const fromId = belt.fromBuildingId;
+    const toId = belt.toBuildingId;
+
+    // Find tasks that relate to either endpoint building
+    const relevantTasks = tasks.filter((t) => {
+      const bId = projectToBuilding(t.project);
+      return bId === fromId || bId === toId;
+    });
+
+    // In-progress tasks at either endpoint
+    const inProgressAtEndpoints = relevantTasks.filter(
+      (t) => t.status === "in_progress"
+    );
+
+    // Recently completed tasks (last 5 min) at either endpoint
+    const recentlyCompleted = relevantTasks.filter((t) => {
+      if (t.status !== "completed" || !t.completed_at) return false;
+      return new Date(t.completed_at).getTime() > fiveMinAgo;
+    });
+
+    // Completed tasks in the last hour for throughput count
+    const completedLastHour = relevantTasks.filter((t) => {
+      if (t.status !== "completed" || !t.completed_at) return false;
+      return new Date(t.completed_at).getTime() > oneHourAgo;
+    });
+
+    // Workers currently at buildings that are endpoints of this conveyor
+    const workersAtEndpoints = workers.filter((w) => {
+      if (w.status === "dead") return false;
+      const task = tasks.find((t) => t.id === w.current_task_id);
+      const workerBuilding = task?.project
+        ? projectToBuilding(task.project)
+        : "command-center";
+      return (
+        (workerBuilding === fromId || workerBuilding === toId) &&
+        (w.status === "busy" || w.current_task_id)
+      );
+    });
+
+    const isActive =
+      inProgressAtEndpoints.length > 0 ||
+      recentlyCompleted.length > 0 ||
+      workersAtEndpoints.length > 0;
+
+    const throughput = completedLastHour.length;
+
+    // Determine data type from most recent relevant task
+    const mostRecentTask =
+      inProgressAtEndpoints[0] || recentlyCompleted[0] || completedLastHour[0];
+    const dataType = mostRecentTask
+      ? taskTypeToDataType(mostRecentTask.task_type)
+      : belt.dataType;
+
+    return {
+      ...belt,
+      active: isActive,
+      throughput,
+      dataType,
+    };
+  });
+}
+
 // ─── MAIN HOOK ───────────────────────────────────────────────────────────────
 
 export interface GameData {
   workers: Worker[];
   buildings: Building[];
+  conveyors: ConveyorBelt[];
   events: AlertEvent[];
   budget: {
     apiSpent: number;
@@ -486,9 +587,13 @@ export function useGameData() {
     workerCounts[gt] = (workerCounts[gt] || 0) + 1;
   });
 
+  // ── Conveyors from real task data ──
+  const conveyors = computeActiveConveyors(swarmTasks, swarmWorkers, isDemo);
+
   return {
     workers: finalWorkers,
     buildings: buildingsWithStatus,
+    conveyors,
     events,
     budget: budgetData,
     isDemo,

@@ -11,9 +11,17 @@ interface DataPacketsProps {
   buildings: Building[];
 }
 
-const PACKETS_PER_BELT = 4;
 const PACKET_SIZE = 0.15;
 const BELT_Y = 0.3;
+
+/** Packet count scales with real throughput. 0 throughput = 0 packets. */
+function packetsForThroughput(throughput: number): number {
+  if (throughput <= 0) return 0;
+  if (throughput <= 2) return 1;
+  if (throughput <= 5) return 2;
+  if (throughput <= 15) return 3;
+  return 4;
+}
 
 const tempMatrix = new THREE.Matrix4();
 const tempPosition = new THREE.Vector3();
@@ -28,10 +36,13 @@ const tempEuler = new THREE.Euler();
 export function DataPackets({ belts, buildings }: DataPacketsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
-  const activeBelts = useMemo(() => belts.filter((b) => b.active), [belts]);
-  const totalInstances = activeBelts.length * PACKETS_PER_BELT;
+  // Only include belts that are active AND have real throughput
+  const activeBelts = useMemo(
+    () => belts.filter((b) => b.active && b.throughput > 0),
+    [belts]
+  );
 
-  // Precompute belt endpoints and colors
+  // Precompute belt endpoints, colors, and per-belt packet counts
   const beltData = useMemo(() => {
     return activeBelts.map((belt) => {
       const fromB = buildings.find((b) => b.id === belt.fromBuildingId);
@@ -45,20 +56,27 @@ export function DataPackets({ belts, buildings }: DataPacketsProps) {
       const color = new THREE.Color(
         DATA_TYPE_COLORS[belt.dataType] || "#ffffff"
       );
-      return { from, to, color, speed: 0.25 + Math.random() * 0.15 };
+      const packetCount = packetsForThroughput(belt.throughput);
+      return { from, to, color, speed: 0.25 + Math.random() * 0.15, packetCount };
     });
   }, [activeBelts, buildings]);
+
+  const totalInstances = useMemo(
+    () => beltData.reduce((sum, d) => sum + d.packetCount, 0),
+    [beltData]
+  );
 
   // Per-packet phase offsets for staggering
   const packetPhases = useMemo(() => {
     const phases: number[] = [];
-    for (let b = 0; b < activeBelts.length; b++) {
-      for (let p = 0; p < PACKETS_PER_BELT; p++) {
-        phases.push(p / PACKETS_PER_BELT);
+    for (let b = 0; b < beltData.length; b++) {
+      const count = beltData[b].packetCount;
+      for (let p = 0; p < count; p++) {
+        phases.push(count > 1 ? p / count : 0);
       }
     }
     return phases;
-  }, [activeBelts.length]);
+  }, [beltData]);
 
   const tempScale = useMemo(() => new THREE.Vector3(PACKET_SIZE, PACKET_SIZE, PACKET_SIZE), []);
 
@@ -69,8 +87,8 @@ export function DataPackets({ belts, buildings }: DataPacketsProps) {
     let instanceIdx = 0;
 
     for (let b = 0; b < beltData.length; b++) {
-      const { from, to, color, speed } = beltData[b];
-      for (let p = 0; p < PACKETS_PER_BELT; p++) {
+      const { from, to, color, speed, packetCount } = beltData[b];
+      for (let p = 0; p < packetCount; p++) {
         const phase = packetPhases[instanceIdx];
         const progress = ((t * speed + phase) % 1.0 + 1.0) % 1.0;
 

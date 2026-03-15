@@ -15,8 +15,8 @@ import { SelectionRing } from "./SelectionRing";
 import { ForceField3D } from "./ForceField3D";
 import { Pipes3D } from "./Pipes3D";
 import { Environment3D } from "./Environment3D";
-import { BUILDINGS as DEFAULT_BUILDINGS, CONVEYORS } from "./constants";
-import type { Worker, Building } from "./types";
+import { BUILDINGS as DEFAULT_BUILDINGS, CONVEYORS as DEFAULT_CONVEYORS } from "./constants";
+import type { Worker, Building, ConveyorBelt } from "./types";
 
 interface GameCanvasProps {
   hoveredBuilding: string | null;
@@ -24,6 +24,7 @@ interface GameCanvasProps {
   selectedWorker: string | null;
   workers: Worker[];
   buildings?: Building[];
+  conveyors?: ConveyorBelt[];
   onHoverBuilding: (id: string | null) => void;
   onClickBuilding: (id: string) => void;
   onClickWorker: (id: string) => void;
@@ -41,12 +42,14 @@ export default function GameCanvas({
   selectedWorker,
   workers,
   buildings: buildingsProp,
+  conveyors: conveyorsProp,
   onHoverBuilding,
   onClickBuilding,
   onClickWorker,
   isMobile,
 }: GameCanvasProps) {
   const BUILDINGS = buildingsProp || DEFAULT_BUILDINGS;
+  const CONVEYORS = conveyorsProp || DEFAULT_CONVEYORS;
 
   const handlePointerMissed = useCallback(() => {
     onClickBuilding("");
@@ -85,7 +88,7 @@ export default function GameCanvas({
 
   const activeBelts = useMemo(
     () => (isMobile ? CONVEYORS.filter((b) => b.active).slice(0, 4) : CONVEYORS),
-    [isMobile]
+    [isMobile, CONVEYORS]
   );
 
   return (
