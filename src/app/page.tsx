@@ -16,6 +16,8 @@ import { AgentHistory } from "@/components/agent-history";
 import { LiveFeed } from "@/components/live-feed";
 import { CommandBar } from "@/components/command-bar";
 import { SpawnModal } from "@/components/spawn-modal";
+import { RadiantQuests } from "@/components/radiant-quests";
+import { useNavigationHotkeys } from "@/lib/use-hotkeys";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -23,6 +25,18 @@ export default function MissionControl() {
   const [seeding, setSeeding] = useState(false);
   const [spawnOpen, setSpawnOpen] = useState(false);
   const [liveSessions, setLiveSessions] = useState<NexusSession[]>([]);
+
+  // Global keyboard shortcuts (1-7 navigate, N=new mission, R=refresh)
+  useNavigationHotkeys([
+    { key: "n", handler: () => setSpawnOpen(true) },
+    {
+      key: "r",
+      handler: () => {
+        fetchAgents();
+        fetchLiveSessions();
+      },
+    },
+  ]);
 
   const fetchAgents = useCallback(async () => {
     const res = await fetch("/api/agents");
@@ -288,14 +302,30 @@ export default function MissionControl() {
           </motion.section>
         )}
 
-        {/* Live Feed */}
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.25 }}
-        >
-          <LiveFeed />
-        </motion.section>
+        {/* Live Feed + Radiant Quests side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            className="lg:col-span-2"
+          >
+            <LiveFeed />
+          </motion.section>
+
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <RadiantQuests
+              onLaunch={(goal, project) => {
+                setSpawnOpen(true);
+                // The spawn modal will pick up the goal from template
+              }}
+            />
+          </motion.section>
+        </div>
 
         {/* Active Agents */}
         <section>

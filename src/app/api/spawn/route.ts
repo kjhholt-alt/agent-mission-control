@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Also log to swarm_task_log
+    // Log to swarm_task_log
     supabase
       .from("swarm_task_log")
       .insert({
@@ -65,6 +65,30 @@ export async function POST(request: NextRequest) {
         project: project,
       })
       .then(() => {});
+
+    // Discord notification (fire-and-forget)
+    if (process.env.DISCORD_WEBHOOK_URL) {
+      fetch(process.env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "NEXUS",
+          embeds: [
+            {
+              title: "New Mission Spawned",
+              description: `**${goal}**`,
+              color: 0x06b6d4,
+              fields: [
+                { name: "Project", value: project, inline: true },
+                { name: "Priority", value: String(body.priority ?? 50), inline: true },
+              ],
+              footer: { text: "NEXUS" },
+              timestamp: now,
+            },
+          ],
+        }),
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       ok: true,
