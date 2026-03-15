@@ -5,34 +5,36 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 ## Stack
 - Next.js 16, TypeScript, Tailwind v4, shadcn/ui, Framer Motion, React Three Fiber
 - Supabase Realtime for live updates (no polling)
-- Python executor + scheduler for task processing
-- Tauri v2 desktop app for persistent daemon
+- Python executor v3 (parallel, handoffs, memory, model routing) + scheduler v2 (predictive)
+- Tauri v2 desktop app with smart loader
 - Python SDK for agent integration
 
 ## Architecture
-- **Frontend**: 15 pages at `src/app/*/page.tsx`
-- **API Routes**: 18 endpoints at `src/app/api/*/route.ts`
-- **Supabase**: 9 tables on `ytvtaorgityczrdhhzqv`
-- **Executor**: `executor.py` — polls queue, runs tasks via Claude Code CLI
-- **Scheduler**: `scheduler.py` — cron-based task spawning
-- **Desktop**: `src-tauri/` — Tauri v2 with daemon watchdog
+- **Frontend**: 17 pages at `src/app/*/page.tsx`
+- **API Routes**: 25+ endpoints at `src/app/api/*/route.ts`
+- **Supabase**: 11 tables on `ytvtaorgityczrdhhzqv`
+- **Executor v3**: `executor.py` — parallel task execution (ThreadPoolExecutor), agent handoffs, shared memory, model routing, specialization tracking
+- **Scheduler v2**: `scheduler.py` — cron + workflow pipelines + predictive scheduling
+- **Context Library**: `contexts/` — auto-loaded markdown files (finance terminology, report templates, email style)
+- **Desktop**: `src-tauri/` — Tauri v2 with smart loader, daemon watchdog, devtools
 - **Swarm**: `swarm/` — full orchestrator with workers, scouts, oracle, supervisor
-- **Scripts**: `scripts/` — 46 operational scripts
+- **Scripts**: `scripts/` — 47+ operational scripts
 
 ## Pages
 | Route | Purpose |
 |-------|---------|
 | `/` | Main dashboard with live agents, sessions, radiant quests |
+| `/today` | Personal dashboard: today's tasks, costs, rankings, intelligence |
 | `/command` | Work logs + mini kanban |
 | `/command-center` | Bloomberg-terminal overview |
-| `/ops` | Task kanban + worker fleet |
+| `/ops` | Task kanban + worker fleet + pipeline view |
 | `/game` | 3D isometric factory (Three.js) |
 | `/oracle` | AI decision engine |
 | `/oracle/chat` | Conversational oracle |
 | `/sessions` | Session history with CSV export |
-| `/templates` | Mission template library |
-| `/workflows` | Multi-step pipeline builder |
-| `/fusion` | Cross-project intelligence |
+| `/templates` | Mission template library (6 default + 5 Deere + 8 personal) |
+| `/workflows` | Multi-step pipeline builder (5 presets: standup, ship, close, variance, review) |
+| `/fusion` | Cross-project intelligence + git activity + export |
 | `/achievements` | Trophy gallery (16 achievements) |
 | `/setup` | Onboarding wizard |
 | `/settings` | API connection manager |
@@ -47,6 +49,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/collector/agents` | GET | Public | Live sessions |
 | `/api/sessions` | GET | Public | Session history |
 | `/api/tasks` | GET | Public | Task query with filters |
+| `/api/tasks/approve` | POST | API Key | Approve/reject pending tasks |
 | `/api/spawn` | POST | API Key | Create mission |
 | `/api/deploy` | GET/POST | API Key | Deploy management |
 | `/api/heartbeat` | POST | Public | Agent heartbeat |
@@ -57,40 +60,60 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/oracle/decisions` | GET/POST | Public | Decision management |
 | `/api/discord/notify` | POST | API Key | Discord notifications |
 | `/api/workflows` | POST | API Key | Execute workflow pipeline |
-| `/api/tasks/approve` | POST | API Key | Approve/reject pending tasks |
-| `/api/git-activity` | GET | Public | Recent GitHub commits |
+| `/api/git-activity` | GET | Public | Recent GitHub commits across repos |
+| `/api/today` | GET | Public | Aggregated daily dashboard data |
+| `/api/patterns` | GET | Public | Task success/fail patterns + specializations |
+| `/api/memory` | GET | Public | Shared agent memory query |
+| `/api/alerts` | GET | Public | Real-time anomaly detection |
+| `/api/export` | GET | Public | CSV/JSON report export |
 | `/api/schedules` | GET/POST/DELETE | Public | Schedule management |
 | `/api/building-activity` | GET | Public | Building stats |
 
 ## Supabase Tables
 - `nexus_sessions` — Claude Code session tracking (Realtime enabled)
-- `nexus_hook_events` — Individual tool use events
-- `nexus_schedules` — Cron-based scheduled tasks
-- `swarm_tasks` — Task queue
-- `swarm_workers` — Worker registry
+- `nexus_hook_events` — Individual tool use events (Realtime enabled)
+- `nexus_schedules` — Cron-based scheduled tasks + workflow_steps + predictive source
+- `swarm_tasks` — Task queue (queued/running/completed/failed/pending_approval/approved/blocked)
+- `swarm_workers` — Worker registry with XP tracking
 - `swarm_budgets` — Daily budget tracking
 - `swarm_task_log` — Task event log
+- `swarm_memory` — Shared agent memory (output summaries across tasks)
+- `swarm_budgets` — Daily budget tracking
 - `agent_activity` — Agent heartbeats
+- `agent_specializations` — Per-project/task_type success patterns + best practices
 - `oracle_decisions` — Decision history
 
 ## Key Commands
 ```bash
-npm run dev              # Start dev server
-npm run build            # Production build
-python executor.py --loop    # Start task executor daemon
-python scheduler.py --loop   # Start scheduler daemon
-python -m pytest tests/ -v   # Run 18-test suite
-python scripts/run.py        # List all 46 scripts
-python scripts/run.py smoke-test  # Quick health check
-nexus.bat start          # Launch desktop app
-nexus.bat status         # Check app + daemon status
+npm run dev                          # Start dev server
+npm run build                        # Production build
+python executor.py --loop            # Start executor daemon (1 worker)
+python executor.py --loop --workers 3  # Start with 3 parallel workers
+python scheduler.py --loop           # Start scheduler daemon
+python scripts/ops/weekly-retrospective.py  # Generate weekly report
+python scripts/ops/morning-briefing.py      # Generate morning brief
+python -m pytest tests/ -v           # Run test suite
+python scripts/run.py                # List all scripts
+nexus.bat start                      # Launch desktop app
 ```
+
+## Executor v3 Features
+- **Parallel execution**: `--workers N` flag (default 3, max 5), ThreadPoolExecutor
+- **Agent handoff**: `chain_next` in input_data auto-spawns follow-up tasks
+- **Shared memory**: Stores output summaries in swarm_memory, recalls before execution
+- **Cost optimization**: Auto-routes to haiku/sonnet/opus based on task keywords
+- **Specialization**: Tracks success/fail per project+task_type, loads best practices
+- **Approval gates**: Pauses at wait_for_approval steps, notifies Discord
+- **File I/O**: Reads xlsx, pdf, csv + saves output to nexus/output/
+- **Context library**: Auto-loads from contexts/ based on project and task type
+- **Dependency unblocking**: Moves blocked tasks to queued when deps complete
 
 ## Environment Variables
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
+- `NEXT_PUBLIC_NEXUS_API_KEY` — API key for frontend (baked at build time)
+- `NEXUS_API_KEY` — API auth (server-side, default: nexus-hive-2026)
 - `ANTHROPIC_API_KEY` — For executor + oracle
-- `NEXUS_API_KEY` — API auth (default: nexus-hive-2026)
 - `DISCORD_WEBHOOK_URL` — Notification webhook
 
 ## Design
