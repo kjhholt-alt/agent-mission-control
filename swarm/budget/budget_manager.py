@@ -84,9 +84,7 @@ class BudgetManager:
         """
         row = self._get_today()
         if tier in ("heavy", "cc_light"):
-            return (
-
-            )
+            return True  # No budget limit on Claude Code (included in Max plan)
         return row["api_spent_cents"] < row["daily_api_budget_cents"]
 
     def record_spend(self, cents: float = 0, tokens: int = 0, minutes: float = 0):
