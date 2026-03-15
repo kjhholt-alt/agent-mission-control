@@ -12,14 +12,18 @@ interface DataPacketsProps {
 }
 
 const PACKETS_PER_BELT = 4;
+const PACKET_SIZE = 0.15;
+const BELT_Y = 0.3;
+
 const tempMatrix = new THREE.Matrix4();
 const tempPosition = new THREE.Vector3();
-const tempScale = new THREE.Vector3(1, 1, 1);
 const tempQuaternion = new THREE.Quaternion();
+const tempEuler = new THREE.Euler();
 
 /**
  * Data packets flowing along conveyor belts using InstancedMesh for performance.
- * Each packet lerps along its belt path. Color matches data type.
+ * Each packet lerps along its belt, spinning slowly. Color matches data type.
+ * Packets are big enough to see at default zoom and ride on top of the belts.
  */
 export function DataPackets({ belts, buildings }: DataPacketsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -33,15 +37,15 @@ export function DataPackets({ belts, buildings }: DataPacketsProps) {
       const fromB = buildings.find((b) => b.id === belt.fromBuildingId);
       const toB = buildings.find((b) => b.id === belt.toBuildingId);
       const from = fromB
-        ? new THREE.Vector3(fromB.gridX, 0.25, fromB.gridY)
-        : new THREE.Vector3(0, 0.25, 0);
+        ? new THREE.Vector3(fromB.gridX, BELT_Y + 0.12, fromB.gridY)
+        : new THREE.Vector3(0, BELT_Y + 0.12, 0);
       const to = toB
-        ? new THREE.Vector3(toB.gridX, 0.25, toB.gridY)
-        : new THREE.Vector3(0, 0.25, 0);
+        ? new THREE.Vector3(toB.gridX, BELT_Y + 0.12, toB.gridY)
+        : new THREE.Vector3(0, BELT_Y + 0.12, 0);
       const color = new THREE.Color(
         DATA_TYPE_COLORS[belt.dataType] || "#ffffff"
       );
-      return { from, to, color, speed: 0.3 + Math.random() * 0.2 };
+      return { from, to, color, speed: 0.25 + Math.random() * 0.15 };
     });
   }, [activeBelts, buildings]);
 
@@ -56,7 +60,8 @@ export function DataPackets({ belts, buildings }: DataPacketsProps) {
     return phases;
   }, [activeBelts.length]);
 
-  // Set initial colors on InstancedMesh
+  const tempScale = useMemo(() => new THREE.Vector3(PACKET_SIZE, PACKET_SIZE, PACKET_SIZE), []);
+
   useFrame(({ clock }) => {
     if (!meshRef.current || totalInstances === 0) return;
 
@@ -67,12 +72,19 @@ export function DataPackets({ belts, buildings }: DataPacketsProps) {
       const { from, to, color, speed } = beltData[b];
       for (let p = 0; p < PACKETS_PER_BELT; p++) {
         const phase = packetPhases[instanceIdx];
-        // Progress along belt, wrapping around
         const progress = ((t * speed + phase) % 1.0 + 1.0) % 1.0;
 
         tempPosition.lerpVectors(from, to, progress);
         // Slight vertical bob
-        tempPosition.y += Math.sin(t * 6 + instanceIdx) * 0.03;
+        tempPosition.y += Math.sin(t * 4 + instanceIdx * 1.3) * 0.02;
+
+        // Spin the packet
+        tempEuler.set(
+          t * 0.8 + instanceIdx * 0.5,
+          t * 1.2 + instanceIdx * 0.3,
+          0
+        );
+        tempQuaternion.setFromEuler(tempEuler);
 
         tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
         meshRef.current.setMatrixAt(instanceIdx, tempMatrix);
@@ -96,12 +108,12 @@ export function DataPackets({ belts, buildings }: DataPacketsProps) {
       args={[undefined, undefined, totalInstances]}
       frustumCulled={false}
     >
-      <sphereGeometry args={[0.06, 8, 8]} />
+      <boxGeometry args={[1, 0.7, 1]} />
       <meshStandardMaterial
         emissive="#ffffff"
-        emissiveIntensity={0.8}
+        emissiveIntensity={1.0}
         metalness={0.3}
-        roughness={0.4}
+        roughness={0.3}
         toneMapped={false}
       />
     </instancedMesh>

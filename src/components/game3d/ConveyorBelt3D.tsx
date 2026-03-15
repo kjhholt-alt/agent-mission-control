@@ -10,21 +10,40 @@ interface ConveyorBelt3DProps {
   buildings: Building[];
 }
 
+// Data type → item shape + color
+const DATA_ITEM_CONFIG: Record<
+  string,
+  { geometry: "box" | "octahedron" | "cylinder" | "tetrahedron" | "cone" | "sphere"; color: string }
+> = {
+  code:    { geometry: "box",         color: "#3b82f6" },
+  tests:   { geometry: "octahedron",  color: "#22c55e" },
+  revenue: { geometry: "cylinder",    color: "#eab308" },
+  errors:  { geometry: "tetrahedron", color: "#ef4444" },
+  deploy:  { geometry: "cone",        color: "#f97316" },
+  data:    { geometry: "sphere",      color: "#a855f7" },
+  config:  { geometry: "box",         color: "#06b6d4" },
+  alerts:  { geometry: "tetrahedron", color: "#e8a019" },
+};
+
+const BELT_Y = 0.3;
+const ITEM_Y = BELT_Y + 0.1;
+const ITEMS_PER_BELT = 4;
+
 /**
- * Factorio-style conveyor belt with solid body, animated chevron pattern,
- * side rails, and colored item boxes traveling along it.
+ * Factorio-style conveyor belt with 3D body, side rails, rollers,
+ * support legs, direction chevrons, and distinct data-type items.
  */
 export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
-  const beltMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const itemsRef = useRef<THREE.Group>(null);
+  const beltMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
   const fromBuilding = buildings.find((b) => b.id === belt.fromBuildingId);
   const toBuilding = buildings.find((b) => b.id === belt.toBuildingId);
 
   if (!fromBuilding || !toBuilding) return null;
 
-  const from = new THREE.Vector3(fromBuilding.gridX, 0.06, fromBuilding.gridY);
-  const to = new THREE.Vector3(toBuilding.gridX, 0.06, toBuilding.gridY);
+  const from = new THREE.Vector3(fromBuilding.gridX, BELT_Y, fromBuilding.gridY);
+  const to = new THREE.Vector3(toBuilding.gridX, BELT_Y, toBuilding.gridY);
 
   const dir = new THREE.Vector3().subVectors(to, from);
   const length = dir.length();
@@ -32,78 +51,101 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
 
   const midPoint = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
   const rotationY = Math.atan2(dir.x, dir.z);
-
-  // Perpendicular for side rails
   const perp = new THREE.Vector3(-dir.z, 0, dir.x);
-  const railOffset = 0.17;
+  const railOffset = 0.22;
 
-  // Belt body texture with chevron/arrow pattern
+  // Belt surface texture with animated chevrons
   const beltTexture = useMemo(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 64;
+    canvas.width = 512;
+    canvas.height = 128;
     const ctx = canvas.getContext("2d")!;
 
-    // Dark metal belt surface
-    ctx.fillStyle = "#1a1c28";
-    ctx.fillRect(0, 0, 256, 64);
+    // Dark steel belt surface
+    ctx.fillStyle = "#0e0f1a";
+    ctx.fillRect(0, 0, 512, 128);
 
-    // Chevron arrows showing direction
-    ctx.fillStyle = belt.active
-      ? `${belt.color}40`
-      : "rgba(50, 50, 60, 0.3)";
-    for (let x = 0; x < 256; x += 32) {
+    // Subtle grid lines across belt surface
+    ctx.strokeStyle = "rgba(40, 42, 55, 0.6)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < 512; x += 16) {
       ctx.beginPath();
-      ctx.moveTo(x + 8, 10);
-      ctx.lineTo(x + 16, 32);
-      ctx.lineTo(x + 8, 54);
-      ctx.lineTo(x + 12, 54);
-      ctx.lineTo(x + 20, 32);
-      ctx.lineTo(x + 12, 10);
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 128);
+      ctx.stroke();
+    }
+
+    // Directional chevrons
+    const chevronColor = belt.active ? `${belt.color}55` : "rgba(35, 35, 45, 0.3)";
+    ctx.fillStyle = chevronColor;
+    for (let x = 0; x < 512; x += 48) {
+      ctx.beginPath();
+      ctx.moveTo(x + 10, 15);
+      ctx.lineTo(x + 24, 64);
+      ctx.lineTo(x + 10, 113);
+      ctx.lineTo(x + 18, 113);
+      ctx.lineTo(x + 32, 64);
+      ctx.lineTo(x + 18, 15);
       ctx.closePath();
       ctx.fill();
     }
 
-    // Edge lines
-    ctx.strokeStyle = "rgba(80, 82, 95, 0.5)";
+    // Center tread line
+    ctx.strokeStyle = belt.active ? `${belt.color}30` : "rgba(40, 40, 50, 0.3)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 64);
+    ctx.lineTo(512, 64);
+    ctx.stroke();
+
+    // Edge wear lines
+    ctx.strokeStyle = "rgba(60, 62, 75, 0.5)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, 1);
-    ctx.lineTo(256, 1);
+    ctx.moveTo(0, 2);
+    ctx.lineTo(512, 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(0, 63);
-    ctx.lineTo(256, 63);
+    ctx.moveTo(0, 126);
+    ctx.lineTo(512, 126);
     ctx.stroke();
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.repeat.set(Math.max(1, Math.floor(length / 2)), 1);
+    tex.repeat.set(Math.max(1, Math.floor(length / 1.5)), 1);
     return tex;
   }, [belt.active, belt.color, length]);
 
   // Rail positions
-  const rail1From = new THREE.Vector3().copy(from).add(perp.clone().multiplyScalar(railOffset));
-  const rail1To = new THREE.Vector3().copy(to).add(perp.clone().multiplyScalar(railOffset));
-  const rail2From = new THREE.Vector3().copy(from).add(perp.clone().multiplyScalar(-railOffset));
-  const rail2To = new THREE.Vector3().copy(to).add(perp.clone().multiplyScalar(-railOffset));
+  const rail1Mid = new THREE.Vector3()
+    .addVectors(
+      new THREE.Vector3().copy(from).add(perp.clone().multiplyScalar(railOffset)),
+      new THREE.Vector3().copy(to).add(perp.clone().multiplyScalar(railOffset))
+    )
+    .multiplyScalar(0.5);
+  const rail2Mid = new THREE.Vector3()
+    .addVectors(
+      new THREE.Vector3().copy(from).add(perp.clone().multiplyScalar(-railOffset)),
+      new THREE.Vector3().copy(to).add(perp.clone().multiplyScalar(-railOffset))
+    )
+    .multiplyScalar(0.5);
 
-  const rail1Mid = new THREE.Vector3().addVectors(rail1From, rail1To).multiplyScalar(0.5);
-  const rail2Mid = new THREE.Vector3().addVectors(rail2From, rail2To).multiplyScalar(0.5);
+  // How many support legs and rollers
+  const supportCount = Math.max(1, Math.floor(length / 2));
+  const rollerCount = Math.max(2, Math.floor(length / 0.8));
 
-  const beltColor = belt.active ? "#2a2c38" : "#1a1c24";
-  const itemCount = belt.active ? 4 : 0;
+  const itemConfig = DATA_ITEM_CONFIG[belt.dataType] || DATA_ITEM_CONFIG.data;
 
-  // Animate belt texture offset and items (frame-rate independent)
+  // Animate belt texture and items
   const beltOffsetRef = useRef(0);
 
   useFrame((_, delta) => {
     if (!belt.active) return;
 
-    // Scroll belt texture — delta-based for consistent speed
-    beltOffsetRef.current -= delta * 0.3;
-    if (beltMatRef.current && beltMatRef.current.map) {
+    // Scroll belt texture
+    beltOffsetRef.current -= delta * 0.4;
+    if (beltMatRef.current?.map) {
       beltMatRef.current.map.offset.x = beltOffsetRef.current;
     }
 
@@ -111,102 +153,273 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
     if (itemsRef.current) {
       itemsRef.current.children.forEach((child, i) => {
         const mesh = child as THREE.Mesh;
-        const phase = i / itemCount;
-        // Use accumulated offset for smooth wrapping
-        const progress = ((-beltOffsetRef.current * 0.833 + phase) % 1.0 + 1.0) % 1.0;
+        const phase = i / ITEMS_PER_BELT;
+        const progress = ((-beltOffsetRef.current * 0.7 + phase) % 1.0 + 1.0) % 1.0;
 
         const pos = new THREE.Vector3().lerpVectors(from, to, progress);
-        pos.y = 0.12;
+        pos.y = ITEM_Y;
         mesh.position.copy(pos);
-        mesh.rotation.y += delta * 1.2; // Frame-rate independent spin
+        // Slow spin
+        mesh.rotation.y += delta * 1.5;
+        mesh.rotation.x += delta * 0.5;
       });
     }
   });
 
+  // Steam vent particles refs
+  const steamRef = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!belt.active || !steamRef.current) return;
+    const t = clock.getElapsedTime();
+    steamRef.current.children.forEach((child, i) => {
+      const mesh = child as THREE.Mesh;
+      const st = (t * 1.2 + i * 0.7) % 2.0;
+      mesh.position.y = 0.05 + st * 0.25;
+      const s = 0.02 + st * 0.015;
+      mesh.scale.setScalar(s);
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (mat) mat.opacity = Math.max(0, 0.25 - st * 0.125);
+    });
+  });
+
   return (
     <group>
-      {/* Belt body — thin box */}
+      {/* ═══ BELT BODY — wide, visible, industrial ═══ */}
       <mesh
-        position={[midPoint.x, 0.06, midPoint.z]}
+        position={[midPoint.x, BELT_Y, midPoint.z]}
         rotation={[0, rotationY, 0]}
+        receiveShadow
       >
-        <boxGeometry args={[0.3, 0.05, length]} />
+        <boxGeometry args={[0.4, 0.08, length]} />
         <meshStandardMaterial
           ref={beltMatRef}
           map={beltTexture}
-          color={beltColor}
-          metalness={0.7}
-          roughness={0.4}
-        />
-      </mesh>
-
-      {/* Side rail 1 */}
-      <mesh position={[rail1Mid.x, 0.08, rail1Mid.z]} rotation={[0, rotationY, 0]}>
-        <boxGeometry args={[0.03, 0.06, length]} />
-        <meshStandardMaterial
-          color="#4a4c58"
+          color={belt.active ? "#1a1a2e" : "#111118"}
           metalness={0.8}
-          roughness={0.3}
+          roughness={0.35}
         />
       </mesh>
 
-      {/* Side rail 2 */}
-      <mesh position={[rail2Mid.x, 0.08, rail2Mid.z]} rotation={[0, rotationY, 0]}>
-        <boxGeometry args={[0.03, 0.06, length]} />
+      {/* ═══ SIDE RAILS — chrome cylinders along each edge ═══ */}
+      <mesh
+        position={[rail1Mid.x, BELT_Y + 0.04, rail1Mid.z]}
+        rotation={[Math.PI / 2, 0, rotationY]}
+      >
+        <cylinderGeometry args={[0.03, 0.03, length, 8]} />
         <meshStandardMaterial
-          color="#4a4c58"
-          metalness={0.8}
-          roughness={0.3}
+          color="#8a8c98"
+          metalness={0.9}
+          roughness={0.15}
+        />
+      </mesh>
+      <mesh
+        position={[rail2Mid.x, BELT_Y + 0.04, rail2Mid.z]}
+        rotation={[Math.PI / 2, 0, rotationY]}
+      >
+        <cylinderGeometry args={[0.03, 0.03, length, 8]} />
+        <meshStandardMaterial
+          color="#8a8c98"
+          metalness={0.9}
+          roughness={0.15}
         />
       </mesh>
 
-      {/* Support posts along belt every ~2 units */}
-      {Array.from({ length: Math.max(1, Math.floor(length / 2.5)) }).map((_, i) => {
-        const t = (i + 1) / (Math.floor(length / 2.5) + 1);
+      {/* ═══ ROLLERS — small cylinders underneath the belt ═══ */}
+      {Array.from({ length: rollerCount }).map((_, i) => {
+        const t = (i + 0.5) / rollerCount;
         const pos = new THREE.Vector3().lerpVectors(from, to, t);
         return (
-          <mesh key={`support-${i}`} position={[pos.x, 0.03, pos.z]}>
-            <boxGeometry args={[0.35, 0.02, 0.06]} />
+          <mesh
+            key={`roller-${i}`}
+            position={[pos.x, BELT_Y - 0.05, pos.z]}
+            rotation={[0, rotationY + Math.PI / 2, 0]}
+          >
+            <cylinderGeometry args={[0.025, 0.025, 0.38, 6]} />
             <meshStandardMaterial
-              color="#3a3c48"
-              metalness={0.7}
-              roughness={0.4}
+              color="#555566"
+              metalness={0.85}
+              roughness={0.2}
             />
           </mesh>
         );
       })}
 
-      {/* Items on belt — small colored boxes like Factorio items */}
+      {/* ═══ SUPPORT LEGS — posts holding the belt up ═══ */}
+      {Array.from({ length: supportCount }).map((_, i) => {
+        const t = (i + 1) / (supportCount + 1);
+        const pos = new THREE.Vector3().lerpVectors(from, to, t);
+        const leftPos = new THREE.Vector3().copy(pos).add(perp.clone().multiplyScalar(0.12));
+        const rightPos = new THREE.Vector3().copy(pos).add(perp.clone().multiplyScalar(-0.12));
+        return (
+          <group key={`support-${i}`}>
+            {/* Left leg */}
+            <mesh position={[leftPos.x, BELT_Y / 2, leftPos.z]}>
+              <boxGeometry args={[0.04, BELT_Y, 0.04]} />
+              <meshStandardMaterial
+                color="#2a2c38"
+                metalness={0.7}
+                roughness={0.4}
+              />
+            </mesh>
+            {/* Right leg */}
+            <mesh position={[rightPos.x, BELT_Y / 2, rightPos.z]}>
+              <boxGeometry args={[0.04, BELT_Y, 0.04]} />
+              <meshStandardMaterial
+                color="#2a2c38"
+                metalness={0.7}
+                roughness={0.4}
+              />
+            </mesh>
+            {/* Cross brace */}
+            <mesh
+              position={[pos.x, BELT_Y * 0.35, pos.z]}
+              rotation={[0, rotationY, 0]}
+            >
+              <boxGeometry args={[0.3, 0.025, 0.025]} />
+              <meshStandardMaterial
+                color="#3a3c48"
+                metalness={0.7}
+                roughness={0.4}
+              />
+            </mesh>
+          </group>
+        );
+      })}
+
+      {/* ═══ DIRECTION CHEVRONS — small 3D cones on belt surface ═══ */}
+      {belt.active &&
+        Array.from({ length: Math.max(2, Math.floor(length / 2.5)) }).map((_, i) => {
+          const t = (i + 0.5) / Math.max(2, Math.floor(length / 2.5));
+          const pos = new THREE.Vector3().lerpVectors(from, to, t);
+          return (
+            <mesh
+              key={`chevron-${i}`}
+              position={[pos.x, BELT_Y + 0.05, pos.z]}
+              rotation={[Math.PI / 2, rotationY + Math.PI, 0]}
+            >
+              <coneGeometry args={[0.04, 0.08, 3]} />
+              <meshStandardMaterial
+                color={belt.color}
+                emissive={belt.color}
+                emissiveIntensity={0.4}
+                transparent
+                opacity={0.35}
+                toneMapped={false}
+              />
+            </mesh>
+          );
+        })}
+
+      {/* ═══ DATA ITEMS on belt ═══ */}
       <group ref={itemsRef}>
-        {Array.from({ length: itemCount }).map((_, i) => (
-          <mesh key={`item-${i}`} position={[midPoint.x, 0.12, midPoint.z]}>
-            <boxGeometry args={[0.1, 0.08, 0.1]} />
+        {belt.active &&
+          Array.from({ length: ITEMS_PER_BELT }).map((_, i) => (
+            <mesh key={`item-${i}`} position={[midPoint.x, ITEM_Y, midPoint.z]}>
+              {itemConfig.geometry === "box" && (
+                <boxGeometry args={[0.12, 0.08, 0.12]} />
+              )}
+              {itemConfig.geometry === "octahedron" && (
+                <octahedronGeometry args={[0.08]} />
+              )}
+              {itemConfig.geometry === "cylinder" && (
+                <cylinderGeometry args={[0.07, 0.07, 0.04, 8]} />
+              )}
+              {itemConfig.geometry === "tetrahedron" && (
+                <tetrahedronGeometry args={[0.09]} />
+              )}
+              {itemConfig.geometry === "cone" && (
+                <coneGeometry args={[0.06, 0.14, 6]} />
+              )}
+              {itemConfig.geometry === "sphere" && (
+                <sphereGeometry args={[0.07, 8, 8]} />
+              )}
+              <meshStandardMaterial
+                color={itemConfig.color}
+                emissive={itemConfig.color}
+                emissiveIntensity={0.8}
+                metalness={0.4}
+                roughness={0.25}
+                toneMapped={false}
+              />
+            </mesh>
+          ))}
+      </group>
+
+      {/* ═══ SORTING MACHINE at belt endpoints ═══ */}
+      {belt.active && (
+        <group>
+          {/* Destination sorting box */}
+          <mesh position={[to.x, BELT_Y + 0.04, to.z]}>
+            <boxGeometry args={[0.3, 0.2, 0.3]} />
             <meshStandardMaterial
-              color={belt.color}
-              emissive={belt.color}
-              emissiveIntensity={0.6}
-              metalness={0.4}
+              color="#1a1c28"
+              metalness={0.75}
               roughness={0.3}
             />
           </mesh>
-        ))}
-      </group>
-
-      {/* Steam puff at belt endpoints (active only) */}
-      {belt.active && (
-        <>
-          <mesh position={[to.x, 0.2, to.z]}>
-            <sphereGeometry args={[0.08, 6, 6]} />
-            <meshStandardMaterial
-              color="#888899"
-              emissive="#555566"
-              emissiveIntensity={0.2}
-              transparent
-              opacity={0.15}
-            />
-          </mesh>
-        </>
+          {/* Spinning gear on top */}
+          <SortingGear position={[to.x, BELT_Y + 0.18, to.z]} color={belt.color} />
+        </group>
       )}
+
+      {/* ═══ STEAM VENTS at belt endpoint ═══ */}
+      {belt.active && (
+        <group ref={steamRef} position={[to.x, BELT_Y + 0.15, to.z]}>
+          {[0, 1, 2, 3].map((i) => (
+            <mesh key={`steam-${i}`} position={[
+              Math.sin(i * 1.7) * 0.08,
+              0,
+              Math.cos(i * 1.7) * 0.08,
+            ]}>
+              <sphereGeometry args={[1, 5, 5]} />
+              <meshStandardMaterial
+                color="#aabbcc"
+                emissive="#8899aa"
+                emissiveIntensity={0.3}
+                transparent
+                opacity={0.2}
+              />
+            </mesh>
+          ))}
+        </group>
+      )}
+
+      {/* ═══ OIL PUDDLE under belt start ═══ */}
+      <mesh
+        position={[from.x, 0.01, from.z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <circleGeometry args={[0.25, 12]} />
+        <meshStandardMaterial
+          color="#0a0b12"
+          metalness={0.95}
+          roughness={0.1}
+          transparent
+          opacity={0.4}
+        />
+      </mesh>
     </group>
+  );
+}
+
+/** Small spinning gear on sorting machines */
+function SortingGear({ position, color }: { position: [number, number, number]; color: string }) {
+  const ref = useRef<THREE.Mesh>(null);
+
+  useFrame((_, delta) => {
+    if (ref.current) ref.current.rotation.y += delta * 3;
+  });
+
+  return (
+    <mesh ref={ref} position={position}>
+      <torusGeometry args={[0.08, 0.02, 4, 6]} />
+      <meshStandardMaterial
+        color="#6a6c78"
+        emissive={color}
+        emissiveIntensity={0.3}
+        metalness={0.85}
+        roughness={0.2}
+      />
+    </mesh>
   );
 }
