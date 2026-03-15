@@ -26,6 +26,19 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const taskId = crypto.randomUUID();
 
+    // Map worker type to cost tier for orchestrator
+    const workerType = body.worker_type || "builder";
+    const costTierMap: Record<string, string> = {
+      builder: "cc_light",
+      inspector: "cc_light",
+      scout: "cc_light",
+      deployer: "cc_light",
+      miner: "light",
+      messenger: "light",
+      any: "cc_light",
+      goal: "cc_light",
+    };
+
     const task = {
       id: taskId,
       title: goal,
@@ -33,7 +46,8 @@ export async function POST(request: NextRequest) {
       project: project,
       priority: body.priority ?? 50,
       status: "queued",
-      task_type: body.worker_type || "goal",
+      task_type: workerType === "goal" ? "eval" : workerType,
+      cost_tier: costTierMap[workerType] || "cc_light",
       created_at: now,
       updated_at: now,
       retry_count: 0,
