@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import type { Worker, WorkerType, Building } from "./types";
-import { WORKER_TYPE_CONFIG } from "./constants";
+import { WORKER_TYPE_CONFIG, BUILDINGS } from "./constants";
 
 // ---- SPARK POOL (reusable temp vectors) ------------------------------------
 
@@ -1168,25 +1168,185 @@ function getWorkPosition(
 
 // ---- SINGLE WORKER 3D COMPONENT ---------------------------------------------
 
+// ---- HOVER TOOLTIP ----------------------------------------------------------
+
+function WorkerHoverTooltip({
+  worker,
+  config,
+}: {
+  worker: Worker;
+  config: { color: string; label: string };
+}) {
+  const building = BUILDINGS.find((b) => b.id === worker.currentBuildingId);
+  const taskText =
+    worker.task.length > 40 ? worker.task.slice(0, 40) + "..." : worker.task;
+
+  return (
+    <Html
+      position={[0, 1.1, 0]}
+      center
+      transform
+      occlude={false}
+      style={{ pointerEvents: "none" }}
+    >
+      <div
+        style={{
+          background: "rgba(5, 5, 8, 0.92)",
+          border: `1px solid ${config.color}55`,
+          borderRadius: 5,
+          padding: "8px 12px",
+          whiteSpace: "nowrap",
+          fontFamily: "'JetBrains Mono', monospace",
+          userSelect: "none",
+          boxShadow: `0 0 16px ${config.color}22, 0 4px 20px rgba(0,0,0,0.6)`,
+          minWidth: 160,
+          maxWidth: 220,
+        }}
+      >
+        {/* Name + Level */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <span
+            style={{
+              color: config.color,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textShadow: `0 0 6px ${config.color}`,
+            }}
+          >
+            {worker.name}
+          </span>
+          <span
+            style={{
+              color: "#eab308",
+              fontSize: 8,
+              fontWeight: 700,
+              background: "rgba(234, 179, 8, 0.12)",
+              padding: "1px 4px",
+              borderRadius: 2,
+              border: "1px solid rgba(234, 179, 8, 0.3)",
+            }}
+          >
+            Lv.{worker.level}
+          </span>
+        </div>
+
+        {/* Type */}
+        <div
+          style={{
+            fontSize: 8,
+            color: "rgba(255,255,255,0.4)",
+            textTransform: "uppercase",
+            letterSpacing: "0.15em",
+            marginBottom: 5,
+          }}
+        >
+          {config.label}
+        </div>
+
+        {/* Current task */}
+        <div
+          style={{
+            fontSize: 9,
+            color: "rgba(255,255,255,0.6)",
+            marginBottom: 5,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: 200,
+          }}
+        >
+          {taskText}
+        </div>
+
+        {/* Progress bar */}
+        <div
+          style={{
+            height: 3,
+            borderRadius: 2,
+            background: "rgba(255,255,255,0.06)",
+            overflow: "hidden",
+            marginBottom: 5,
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${worker.progress}%`,
+              background: `linear-gradient(90deg, ${config.color}88, ${config.color})`,
+              borderRadius: 2,
+              transition: "width 0.3s",
+            }}
+          />
+        </div>
+
+        {/* Bottom stats */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 8,
+            color: "rgba(255,255,255,0.3)",
+          }}
+        >
+          <span>@ {building?.shortName || "—"}</span>
+          <span>{Math.round(worker.progress)}%</span>
+        </div>
+      </div>
+    </Html>
+  );
+}
+
+// ---- STANDUP GATHERING HELPER -----------------------------------------------
+
+function getStandupGatherPosition(
+  workerIndex: number,
+  totalWorkers: number,
+  commandCenterX: number,
+  commandCenterZ: number,
+): [number, number, number] {
+  // Arrange in semicircle around the command center
+  const radius = 3.5;
+  const startAngle = -Math.PI * 0.6;
+  const endAngle = Math.PI * 0.6;
+  const angleStep = totalWorkers > 1 ? (endAngle - startAngle) / (totalWorkers - 1) : 0;
+  const angle = startAngle + angleStep * workerIndex;
+
+  return [
+    commandCenterX + Math.cos(angle) * radius,
+    0.5,
+    commandCenterZ + Math.sin(angle) * radius,
+  ];
+}
+
 interface Worker3DProps {
   worker: Worker;
   buildings: Building[];
   allWorkers: Worker[];
   isSelected: boolean;
   onClick: (id: string) => void;
+  isStandupActive?: boolean;
 }
 
-export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }: Worker3DProps) {
+export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick, isStandupActive }: Worker3DProps) {
   const groupRef = useRef<THREE.Group>(null);
   const positionRef = useRef(new THREE.Vector3());
   const initialized = useRef(false);
   const timeRef = useRef(0);
   const facingAngleRef = useRef(0);
+  const [hovered, setHovered] = useState(false);
 
   const config = WORKER_TYPE_CONFIG[worker.type];
 
   const currentBuilding = buildings.find((b) => b.id === worker.currentBuildingId);
   const targetBuilding = buildings.find((b) => b.id === worker.targetBuildingId);
+
+  // Standup gathering: find command center position
+  const commandCenter = buildings.find((b) => b.id === "command-center");
+  const workerStandupIndex = useMemo(() => {
+    return allWorkers.findIndex((w) => w.id === worker.id);
+  }, [allWorkers, worker.id]);
 
   const workingBuilding = worker.status === "working" ? (currentBuilding || targetBuilding) : null;
 
@@ -1222,7 +1382,22 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
 
     let targetPos: THREE.Vector3;
 
-    if (worker.status === "working" && workingBuilding) {
+    // Standup gathering: override target to command center semicircle
+    if (isStandupActive && commandCenter) {
+      const [gx, gy, gz] = getStandupGatherPosition(
+        workerStandupIndex,
+        allWorkers.length,
+        commandCenter.gridX,
+        commandCenter.gridY
+      );
+      targetPos = _tmpV.set(gx, gy, gz);
+      targetPos.y = baseY;
+      // Face the command center
+      facingAngleRef.current = Math.atan2(
+        commandCenter.gridX - gx,
+        commandCenter.gridY - gz
+      );
+    } else if (worker.status === "working" && workingBuilding) {
       const [wx, wy, wz] = getWorkPosition(
         workingBuilding.gridX,
         workingBuilding.gridY,
@@ -1301,15 +1476,29 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
           </mesh>
         )}
 
-        {/* Worker model — clickable wrapper */}
+        {/* Worker model — clickable + hoverable wrapper */}
         <group
           onClick={(e) => {
             e.stopPropagation();
             onClick(worker.id);
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setHovered(true);
+            document.body.style.cursor = "pointer";
+          }}
+          onPointerOut={() => {
+            setHovered(false);
+            document.body.style.cursor = "auto";
+          }}
         >
           <WorkerModel type={worker.type} status={worker.status} t={timeRef.current} color={config.color} />
         </group>
+
+        {/* Hover tooltip — desktop only */}
+        {hovered && !isSelected && (
+          <WorkerHoverTooltip worker={worker} config={config} />
+        )}
 
         {/* Main glow light */}
         <pointLight color={config.color} intensity={0.6} distance={2.5} decay={2} />

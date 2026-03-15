@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/lib/use-mobile";
+import { Megaphone } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Building, Worker, AlertEvent, WorkerType } from "@/components/game3d/types";
 import {
@@ -14,6 +15,7 @@ import {
   WORKER_TYPE_CONFIG,
 } from "@/components/game3d/constants";
 import { useGameData } from "@/components/game3d/useGameData";
+import { StandupBoard } from "@/components/game3d/StandupBoard";
 
 // Dynamic import -- R3F cannot run on the server
 const GameCanvas = dynamic(
@@ -946,12 +948,16 @@ function HUDTopBar({
   completedCount,
   testCount,
   isMobile,
+  onStandup,
+  hasActiveWorkers,
 }: {
   time: string;
   activeCount: number;
   completedCount: number;
   testCount: number;
   isMobile?: boolean;
+  onStandup: () => void;
+  hasActiveWorkers: boolean;
 }) {
   const stats = [
     { label: "WORKERS", value: activeCount, color: "#22c55e", icon: ">" },
@@ -1035,6 +1041,34 @@ function HUDTopBar({
               </span>
             </div>
           ))}
+
+          {/* STANDUP button */}
+          <button
+            onClick={onStandup}
+            className={`flex items-center gap-1.5 cursor-pointer transition-all hover:brightness-125 ${
+              isMobile ? "px-2 py-0.5" : "px-3 py-1"
+            }`}
+            style={{
+              background: hasActiveWorkers
+                ? "rgba(232, 160, 25, 0.12)"
+                : "rgba(232, 160, 25, 0.06)",
+              border: "1px solid rgba(232, 160, 25, 0.35)",
+              borderRadius: 3,
+              color: "#e8a019",
+              boxShadow: hasActiveWorkers
+                ? "0 0 12px rgba(232, 160, 25, 0.15)"
+                : "none",
+              animation: hasActiveWorkers ? "standupPulse 2s ease-in-out infinite" : "none",
+            }}
+            title="Standup Briefing (S)"
+          >
+            <Megaphone size={isMobile ? 10 : 12} />
+            {!isMobile && (
+              <span className="text-[9px] uppercase tracking-[0.15em] font-bold">
+                STANDUP
+              </span>
+            )}
+          </button>
         </div>
       </div>
     </div>
@@ -1123,6 +1157,7 @@ export default function GamePage() {
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+  const [showStandup, setShowStandup] = useState(false);
 
   // Use live data when available, demo data as fallback
   const workers = gameData.isDemo ? demoWorkers : gameData.workers;
@@ -1248,13 +1283,23 @@ export default function GamePage() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setSelectedBuilding(null);
-        setSelectedWorker(null);
+        if (showStandup) {
+          setShowStandup(false);
+        } else {
+          setSelectedBuilding(null);
+          setSelectedWorker(null);
+        }
+      }
+      if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Don't trigger if typing in an input
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+        setShowStandup((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [showStandup]);
 
   const selectedBuildingData = buildings.find(
     (b) => b.id === selectedBuilding
@@ -1346,6 +1391,8 @@ export default function GamePage() {
         completedCount={completedCount}
         testCount={gameData.isDemo ? 872 : completedCount + tasksFailed}
         isMobile={isMobile}
+        onStandup={() => setShowStandup(true)}
+        hasActiveWorkers={activeCount > 0}
       />
       <ResourceBar isMobile={isMobile} budget={gameData.budget} />
 
@@ -1362,6 +1409,7 @@ export default function GamePage() {
           onClickBuilding={handleClickBuilding}
           onClickWorker={handleClickWorker}
           isMobile={isMobile}
+          isStandupActive={showStandup}
         />
       </div>
 
@@ -1448,11 +1496,25 @@ export default function GamePage() {
       {/* Alert feed */}
       <AlertFeed events={events} isMobile={isMobile} />
 
-      {/* CSS animation for CRT flicker */}
+      {/* Standup Board Modal */}
+      <AnimatePresence>
+        {showStandup && (
+          <StandupBoard
+            workers={workers}
+            onClose={() => setShowStandup(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* CSS animations */}
       <style jsx global>{`
         @keyframes crtFlicker {
           0% { opacity: 0.97; }
           100% { opacity: 1; }
+        }
+        @keyframes standupPulse {
+          0%, 100% { box-shadow: 0 0 8px rgba(232, 160, 25, 0.1); }
+          50% { box-shadow: 0 0 16px rgba(232, 160, 25, 0.3); }
         }
       `}</style>
     </div>

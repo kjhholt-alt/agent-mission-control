@@ -29,6 +29,7 @@ interface GameCanvasProps {
   onClickBuilding: (id: string) => void;
   onClickWorker: (id: string) => void;
   isMobile?: boolean;
+  isStandupActive?: boolean;
 }
 
 /**
@@ -47,6 +48,7 @@ export default function GameCanvas({
   onClickBuilding,
   onClickWorker,
   isMobile,
+  isStandupActive,
 }: GameCanvasProps) {
   const BUILDINGS = buildingsProp || DEFAULT_BUILDINGS;
   const CONVEYORS = conveyorsProp || DEFAULT_CONVEYORS;
@@ -248,6 +250,7 @@ export default function GameCanvas({
           allWorkers={workers}
           isSelected={selectedWorker === worker.id}
           onClick={onClickWorker}
+          isStandupActive={isStandupActive}
         />
       ))}
 
