@@ -238,7 +238,7 @@ export function LiveWorkLog({
                     className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
                     style={{ background: `${color}20`, border: `1px solid ${color}40` }}
                   >
-                    <Icon className="w-2.5 h-2.5" style={{ color }} />
+                    <Icon className="w-2.5 h-2.5" style={{ color } as React.CSSProperties} />
                   </div>
 
                   <span className="text-[10px] font-semibold text-zinc-200">
