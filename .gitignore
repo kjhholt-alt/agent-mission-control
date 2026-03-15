@@ -41,6 +41,13 @@ yarn-error.log*
 __pycache__/
 *.egg-info/
 
+# daemon logs
+/logs/
+
+# scripts with secrets (one-off deploy scripts)
+deploy_*.sh
+scripts/start-daemon-hidden.ps1
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

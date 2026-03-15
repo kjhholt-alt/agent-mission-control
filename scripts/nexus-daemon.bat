@@ -1,26 +1,9 @@
 @echo off
-title Nexus Hive Daemon
-cd /d C:\Users\Kruz\Desktop\Projects\nexus
+REM Legacy launcher - now delegates to the PowerShell persistent wrapper.
+REM The daemon auto-starts at logon via Windows Startup folder (VBS launcher).
+REM To control manually, use: powershell -File scripts\daemon-ctl.ps1 [start|stop|status|restart]
 
-REM Load env vars from .env file if present
-if exist .env (
-    for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
-        set "%%A=%%B"
-    )
-)
-
-REM Override/set required vars (edit these or rely on .env)
-if not defined ANTHROPIC_API_KEY (
-    echo ERROR: ANTHROPIC_API_KEY not set. Add it to .env or set it in this file.
-    pause
-    exit /b 1
-)
-if not defined SUPABASE_URL set SUPABASE_URL=https://ytvtaorgityczrdhhzqv.supabase.co
-if not defined NEXUS_URL set NEXUS_URL=https://nexus.buildkit.store
-
-:loop
-echo [%date% %time%] Starting Nexus Hive Daemon...
-python -m swarm.daemon
-echo [%date% %time%] Daemon crashed! Restarting in 10 seconds...
-timeout /t 10
-goto loop
+echo Starting Nexus Hive Daemon (hidden)...
+wscript.exe "%~dp0nexus-daemon-launcher.vbs"
+echo Daemon launched in background. Check logs\daemon.log for output.
+echo Use "powershell -File scripts\daemon-ctl.ps1 status" to check status.
