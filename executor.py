@@ -163,12 +163,57 @@ def notify_discord(message, color=0x06b6d4):
 
 # ── Task execution ────────────────────────────────────────────────────
 
+MAX_FILE_SIZE = 100 * 1024  # 100KB per file
+
+def read_input_files(input_data):
+    """Read files specified in input_data and return their contents as context."""
+    files = input_data.get("files", [])
+    if not files:
+        return ""
+
+    context_parts = []
+    for file_path in files:
+        try:
+            if not os.path.isfile(file_path):
+                context_parts.append(f"[File not found: {file_path}]")
+                continue
+            size = os.path.getsize(file_path)
+            if size > MAX_FILE_SIZE:
+                context_parts.append(f"[File too large ({size} bytes): {file_path}]")
+                continue
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext not in ('.txt', '.csv', '.json', '.md', '.py', '.ts', '.tsx', '.js', '.sql', '.yaml', '.yml', '.toml', '.env'):
+                context_parts.append(f"[Unsupported file type: {file_path}]")
+                continue
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            context_parts.append(f"--- FILE: {file_path} ---\n{content}\n--- END FILE ---")
+        except Exception as e:
+            context_parts.append(f"[Error reading {file_path}: {e}]")
+
+    if context_parts:
+        return "\n\n".join(context_parts) + "\n\n"
+    return ""
+
+
 def execute_task(task):
     """Execute a single task via Claude Code CLI."""
     task_id = task["id"]
     title = task.get("title", "Untitled")
     project = task.get("project", "general")
     prompt = task.get("description") or task.get("title", "")
+
+    # Read input files if specified
+    input_data = task.get("input_data") or {}
+    if isinstance(input_data, str):
+        try:
+            input_data = json.loads(input_data)
+        except Exception:
+            input_data = {}
+
+    file_context = read_input_files(input_data)
+    if file_context:
+        prompt = f"Context from input files:\n\n{file_context}\n\nTask:\n{prompt}"
 
     # Resolve working directory
     cwd = PROJECT_DIRS.get(project, PROJECTS_ROOT)
