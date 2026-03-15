@@ -845,20 +845,46 @@ function ConstructionEffects({
   );
 }
 
+// ---- WORK POSITION CALCULATOR -----------------------------------------------
+// Workers stop at a perimeter position OUTSIDE the building, not at the center.
+// Each worker gets a deterministic slot around the building edge based on its index.
+
+function getWorkPosition(
+  buildingX: number,
+  buildingZ: number,
+  buildingSize: number,
+  workerIndex: number
+): [number, number, number] {
+  const offset = buildingSize * 0.9; // Just outside the building edge
+  const positions: [number, number, number][] = [
+    [buildingX + offset, 0.5, buildingZ],                               // Right side
+    [buildingX - offset, 0.5, buildingZ],                               // Left side
+    [buildingX, 0.5, buildingZ + offset],                               // Front
+    [buildingX, 0.5, buildingZ - offset],                               // Back
+    [buildingX + offset * 0.7, 0.5, buildingZ + offset * 0.7],         // Front-right corner
+    [buildingX - offset * 0.7, 0.5, buildingZ + offset * 0.7],         // Front-left corner
+    [buildingX + offset * 0.7, 0.5, buildingZ - offset * 0.7],         // Back-right corner
+    [buildingX - offset * 0.7, 0.5, buildingZ - offset * 0.7],         // Back-left corner
+  ];
+  return positions[workerIndex % positions.length];
+}
+
 // ---- SINGLE WORKER 3D COMPONENT ---------------------------------------------
 
 interface Worker3DProps {
   worker: Worker;
   buildings: Building[];
+  allWorkers: Worker[];
   isSelected: boolean;
   onClick: (id: string) => void;
 }
 
-export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DProps) {
+export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }: Worker3DProps) {
   const groupRef = useRef<THREE.Group>(null);
   const positionRef = useRef(new THREE.Vector3());
   const initialized = useRef(false);
   const timeRef = useRef(0);
+  const facingAngleRef = useRef(0);
 
   const config = WORKER_TYPE_CONFIG[worker.type];
 
@@ -867,6 +893,19 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
 
   // Building the worker is actively working at
   const workingBuilding = worker.status === "working" ? (currentBuilding || targetBuilding) : null;
+
+  // Determine this worker's index among all workers at the same building
+  // so multiple workers spread around the perimeter instead of stacking
+  const workerIndexAtBuilding = useMemo(() => {
+    if (!workingBuilding) return 0;
+    const workersAtSameBuilding = allWorkers.filter(
+      (w) =>
+        w.status === "working" &&
+        (w.currentBuildingId === workingBuilding.id || w.targetBuildingId === workingBuilding.id)
+    );
+    const idx = workersAtSameBuilding.findIndex((w) => w.id === worker.id);
+    return idx >= 0 ? idx : 0;
+  }, [workingBuilding, allWorkers, worker.id]);
 
   const fromPos = useMemo(() => {
     if (!currentBuilding) return new THREE.Vector3(5, 0.5, 5);
@@ -888,12 +927,28 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
     timeRef.current = t;
     const progress = worker.progress / 100;
 
-    const targetPos = _tmpV.lerpVectors(fromPos, toPos, progress);
-    targetPos.y = baseY;
+    let targetPos: THREE.Vector3;
 
-    // For working workers, offset from the building so they're visible next to it
     if (worker.status === "working" && workingBuilding) {
-      targetPos.x += workingBuilding.size * 0.9;
+      // Stop at a perimeter position outside the building
+      const [wx, wy, wz] = getWorkPosition(
+        workingBuilding.gridX,
+        workingBuilding.gridY,
+        workingBuilding.size,
+        workerIndexAtBuilding
+      );
+      targetPos = _tmpV.set(wx, wy, wz);
+      targetPos.y = baseY;
+
+      // Face toward the building center
+      facingAngleRef.current = Math.atan2(
+        workingBuilding.gridX - wx,
+        workingBuilding.gridY - wz
+      );
+    } else {
+      // Moving or idle — lerp between buildings
+      targetPos = _tmpV.lerpVectors(fromPos, toPos, progress);
+      targetPos.y = baseY;
     }
 
     if (!initialized.current) {
@@ -917,8 +972,16 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
       positionRef.current.z
     );
 
-    // Smooth rotation when not working (frame-rate independent)
-    if (worker.status !== "working") {
+    // When working, face the building; otherwise slow spin
+    if (worker.status === "working") {
+      // Smooth rotation toward facing angle
+      const currentY = groupRef.current.rotation.y;
+      let diff = facingAngleRef.current - currentY;
+      // Normalize to [-PI, PI]
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      groupRef.current.rotation.y += diff * Math.min(1, delta * 5);
+    } else {
       groupRef.current.rotation.y += delta * 0.5;
     }
   });

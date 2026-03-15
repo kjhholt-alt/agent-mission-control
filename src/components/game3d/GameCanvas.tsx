@@ -242,6 +242,7 @@ export default function GameCanvas({
           key={worker.id}
           worker={worker}
           buildings={BUILDINGS}
+          allWorkers={workers}
           isSelected={selectedWorker === worker.id}
           onClick={onClickWorker}
         />
