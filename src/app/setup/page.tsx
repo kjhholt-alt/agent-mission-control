@@ -185,7 +185,7 @@ export default function SetupPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-nexus-key": "nexus-hive-2026",
+          "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026",
         },
         body: JSON.stringify({
           goal: "Setup wizard test — say hello",
