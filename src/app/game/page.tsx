@@ -484,6 +484,27 @@ function BuildingPanel({
   isMobile?: boolean;
 }) {
   const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
+  const [recentTasks, setRecentTasks] = useState<ActivityTask[]>([]);
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
+  useEffect(() => {
+    async function fetchActivity() {
+      setLoadingActivity(true);
+      try {
+        const res = await fetch(`/api/building-activity?building=${encodeURIComponent(building.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRecentTasks(data.tasks ?? []);
+          setActivityStats(data.stats ?? null);
+        }
+      } catch {
+        // silently fail
+      }
+      setLoadingActivity(false);
+    }
+    fetchActivity();
+  }, [building.id]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setSwipeStartY(e.touches[0].clientY);
@@ -626,6 +647,13 @@ function BuildingPanel({
         </span>
       </div>
 
+      <ActivityFeed
+        tasks={recentTasks}
+        stats={activityStats}
+        loading={loadingActivity}
+        accentColor={building.color}
+      />
+
       <div className="absolute bottom-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${building.color}44`, borderBottom: `2px solid ${building.color}44` }} />
       <div className="absolute bottom-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${building.color}44`, borderBottom: `2px solid ${building.color}44` }} />
     </motion.div>
@@ -649,6 +677,27 @@ function WorkerPanel({
   const target = buildings.find((b) => b.id === worker.targetBuildingId);
   const config = WORKER_TYPE_CONFIG[worker.type];
   const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
+  const [recentTasks, setRecentTasks] = useState<ActivityTask[]>([]);
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
+  useEffect(() => {
+    async function fetchActivity() {
+      setLoadingActivity(true);
+      try {
+        const res = await fetch(`/api/building-activity?worker=${encodeURIComponent(worker.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRecentTasks(data.tasks ?? []);
+          setActivityStats(data.stats ?? null);
+        }
+      } catch {
+        // silently fail
+      }
+      setLoadingActivity(false);
+    }
+    fetchActivity();
+  }, [worker.id]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setSwipeStartY(e.touches[0].clientY);
@@ -829,6 +878,13 @@ function WorkerPanel({
           </div>
         </div>
       </div>
+
+      <ActivityFeed
+        tasks={recentTasks}
+        stats={activityStats}
+        loading={loadingActivity}
+        accentColor={config.color}
+      />
 
       <div
         className="p-4 grid grid-cols-3 gap-2"

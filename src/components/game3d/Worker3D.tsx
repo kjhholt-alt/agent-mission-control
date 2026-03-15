@@ -881,43 +881,45 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
   // Worker height depends on type (scout flies higher)
   const baseY = worker.type === "scout" ? 1.2 : 0.5;
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     if (!groupRef.current) return;
 
     const t = clock.getElapsedTime();
     timeRef.current = t;
     const progress = worker.progress / 100;
 
-    const targetPos = new THREE.Vector3().lerpVectors(fromPos, toPos, progress);
+    const targetPos = _tmpV.lerpVectors(fromPos, toPos, progress);
     targetPos.y = baseY;
+
+    // For working workers, offset from the building so they're visible next to it
+    if (worker.status === "working" && workingBuilding) {
+      targetPos.x += workingBuilding.size * 0.9;
+    }
 
     if (!initialized.current) {
       positionRef.current.copy(targetPos);
       initialized.current = true;
     }
 
-    positionRef.current.lerp(targetPos, 0.08);
+    // Exponential smoothing — never snap, always glide
+    // At 60fps delta≈0.0167 → smoothFactor≈0.065, silky smooth
+    const smoothFactor = 1 - Math.pow(0.001, delta);
+    positionRef.current.lerp(targetPos, smoothFactor);
 
-    // Hover bob
+    // Hover bob — smooth sine wave
     const bobSpeed = worker.status === "working" ? 4 : 2;
     const bobAmount = worker.status === "working" ? 0.08 : 0.05;
     const bob = Math.sin(t * bobSpeed + worker.id.charCodeAt(1) * 0.7) * bobAmount;
 
-    // For working workers, offset from the building so they're visible next to it
-    let workOffset = 0;
-    if (worker.status === "working" && workingBuilding) {
-      workOffset = workingBuilding.size * 0.9;
-    }
-
     groupRef.current.position.set(
-      positionRef.current.x + (worker.status === "working" ? workOffset : 0),
+      positionRef.current.x,
       positionRef.current.y + bob,
       positionRef.current.z
     );
 
-    // Slow rotation when not working
+    // Smooth rotation when not working (frame-rate independent)
     if (worker.status !== "working") {
-      groupRef.current.rotation.y += 0.008;
+      groupRef.current.rotation.y += delta * 0.5;
     }
   });
 
@@ -969,7 +971,8 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
         <Html
           position={[0, 0.55, 0]}
           center
-          transform={false}
+          transform
+          occlude={false}
           style={{ pointerEvents: "none" }}
         >
           <div
@@ -1019,7 +1022,8 @@ export function Worker3D({ worker, buildings, isSelected, onClick }: Worker3DPro
           <Html
             position={[0, 0.85, 0]}
             center
-            transform={false}
+            transform
+            occlude={false}
             style={{ pointerEvents: "none" }}
           >
             <div

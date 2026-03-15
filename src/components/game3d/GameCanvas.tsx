@@ -90,7 +90,10 @@ export default function GameCanvas({
 
   return (
     <Canvas
-      gl={{ antialias: true, alpha: false }}
+      gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
+      frameloop="always"
+      dpr={[1, 2]}
+      performance={{ min: 0.5 }}
       shadows={!isMobile}
       style={{ background: "#050508" }}
       onPointerMissed={handlePointerMissed}

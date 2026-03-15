@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Worker, WorkerType, Building, AlertEvent } from "./types";
 import { BUILDINGS, INITIAL_WORKERS, INITIAL_EVENTS, WORKER_TYPE_CONFIG } from "./constants";

@@ -95,14 +95,16 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
   const beltColor = belt.active ? "#2a2c38" : "#1a1c24";
   const itemCount = belt.active ? 4 : 0;
 
-  // Animate belt texture offset and items
-  useFrame(({ clock }) => {
-    if (!belt.active) return;
-    const t = clock.getElapsedTime();
+  // Animate belt texture offset and items (frame-rate independent)
+  const beltOffsetRef = useRef(0);
 
-    // Scroll belt texture
+  useFrame((_, delta) => {
+    if (!belt.active) return;
+
+    // Scroll belt texture — delta-based for consistent speed
+    beltOffsetRef.current -= delta * 0.3;
     if (beltMatRef.current && beltMatRef.current.map) {
-      beltMatRef.current.map.offset.x = -t * 0.3;
+      beltMatRef.current.map.offset.x = beltOffsetRef.current;
     }
 
     // Move items along belt
@@ -110,12 +112,13 @@ export function ConveyorBelt3D({ belt, buildings }: ConveyorBelt3DProps) {
       itemsRef.current.children.forEach((child, i) => {
         const mesh = child as THREE.Mesh;
         const phase = i / itemCount;
-        const progress = ((t * 0.25 + phase) % 1.0 + 1.0) % 1.0;
+        // Use accumulated offset for smooth wrapping
+        const progress = ((-beltOffsetRef.current * 0.833 + phase) % 1.0 + 1.0) % 1.0;
 
         const pos = new THREE.Vector3().lerpVectors(from, to, progress);
         pos.y = 0.12;
         mesh.position.copy(pos);
-        mesh.rotation.y += 0.02;
+        mesh.rotation.y += delta * 1.2; // Frame-rate independent spin
       });
     }
   });
