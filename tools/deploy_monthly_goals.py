@@ -355,6 +355,30 @@ GOALS = [
     ("Build a swarm configuration UI — edit config.py values from the dashboard", "nexus", 45, "light"),
     ("Add a task comparison view — compare outputs of similar tasks", "nexus", 40, "light"),
     ("Build an MCP server for the swarm — expose task CRUD as MCP tools", "mcp-servers", 65, "light"),
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PL ENGINE & MISC (20) — pad to 300
+    # ═══════════════════════════════════════════════════════════════════════
+    ("Add type hints to all remaining untyped functions in swarm/ package", "nexus", 45, "light"),
+    ("Build a Dockerfile for the swarm orchestrator — containerize for Railway deploy", "nexus", 55, "light"),
+    ("Add a /api/tasks endpoint — REST API for listing and filtering tasks", "nexus", 60, "light"),
+    ("Build a task bulk actions UI — select multiple tasks and cancel/retry/boost", "nexus", 50, "light"),
+    ("Add OpenTelemetry tracing spans to all worker task execution paths", "nexus", 45, "light"),
+    ("Build a swarm metrics Prometheus exporter — /metrics endpoint", "nexus", 50, "light"),
+    ("Add a dark mode favicon that matches the Nexus brand", "nexus", 25, "light"),
+    ("Build a project onboarding wizard — add new projects via the UI", "nexus", 55, "light"),
+    ("Add a task cost breakdown view — show token usage per task", "nexus", 45, "light"),
+    ("Build a worker log streaming view — live tail of worker output", "nexus", 50, "light"),
+    ("Create an MCP tool for email sending — wrap Resend API", "mcp-servers", 55, "light"),
+    ("Create an MCP tool for prospect lookup — search by company name", "mcp-servers", 55, "light"),
+    ("Build a swarm backup script — export all tasks and memory to JSON", "nexus", 40, "light"),
+    ("Add a /api/scout/trigger endpoint — manually trigger scout evaluation", "nexus", 50, "light"),
+    ("Build a task queue priority histogram — visualize priority distribution", "nexus", 40, "light"),
+    ("Add a worker type badge in the game view — color-coded by tier", "nexus", 35, "light"),
+    ("Build a task SLA tracker — alert when tasks exceed expected duration", "nexus", 50, "light"),
+    ("Add a daily standup summary — auto-generated from completed tasks", "nexus", 45, "light"),
+    ("Build a swarm restart button in the UI — graceful restart via API", "nexus", 55, "light"),
+    ("Add a task queue aging visualization — highlight tasks waiting too long", "nexus", 45, "light"),
 ]
 
 
