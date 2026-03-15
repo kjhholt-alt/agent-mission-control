@@ -31,6 +31,9 @@ function GlobalNav() {
         <a href="/" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-colors">
           Dashboard
         </a>
+        <a href="/command" className="px-3 py-1 text-[10px] uppercase tracking-wider text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors font-bold">
+          Command
+        </a>
         <a href="/ops" className="px-3 py-1 text-[10px] uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded transition-colors">
           Ops Center
         </a>
