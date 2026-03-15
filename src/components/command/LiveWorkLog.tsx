@@ -26,7 +26,7 @@ interface Props {
   onWorkerClick?: (workerId: string) => void;
 }
 
-const WORKER_ICONS: Record<string, React.ElementType> = {
+const WORKER_ICONS: Record<string, typeof Hammer> = {
   builder: Hammer,
   heavy: Hammer,
   inspector: Search,
