@@ -17,7 +17,10 @@ import { LiveFeed } from "@/components/live-feed";
 import { CommandBar } from "@/components/command-bar";
 import { SpawnModal } from "@/components/spawn-modal";
 import { RadiantQuests } from "@/components/radiant-quests";
+import { AchievementToast } from "@/components/achievement-toast";
 import { useNavigationHotkeys } from "@/lib/use-hotkeys";
+import { checkAchievements, type Achievement } from "@/lib/achievements";
+import { playSound, playSpawnSound, playCompleteSound } from "@/lib/audio";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -25,6 +28,34 @@ export default function MissionControl() {
   const [seeding, setSeeding] = useState(false);
   const [spawnOpen, setSpawnOpen] = useState(false);
   const [liveSessions, setLiveSessions] = useState<NexusSession[]>([]);
+  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
+
+  // Check achievements when data changes
+  useEffect(() => {
+    if (agents.length === 0 && liveSessions.length === 0) return;
+
+    const completedMissions = agents.filter((a) => a.status === "completed").length;
+    const failedMissions = agents.filter((a) => a.status === "failed").length;
+    const totalTools = liveSessions.reduce((s, ses) => s + (ses.tool_count || 0), 0);
+    const totalCost = liveSessions.reduce((s, ses) => s + (Number(ses.cost_usd) || 0), 0);
+    const totalTokens = liveSessions.reduce(
+      (s, ses) => s + (ses.input_tokens || 0) + (ses.output_tokens || 0), 0
+    );
+    const projects = new Set(liveSessions.map((s) => s.project_name).filter(Boolean));
+
+    const unlocked = checkAchievements({
+      total_missions: agents.length,
+      completed_missions: completedMissions,
+      failed_missions: failedMissions,
+      total_sessions: liveSessions.length,
+      total_cost: totalCost,
+      total_tools: totalTools,
+      total_tokens: totalTokens,
+      projects_used: projects.size,
+    });
+
+    if (unlocked.length > 0) setNewAchievements(unlocked);
+  }, [agents, liveSessions]);
 
   // Global keyboard shortcuts (1-7 navigate, N=new mission, R=refresh)
   useNavigationHotkeys([
@@ -168,7 +199,19 @@ export default function MissionControl() {
       />
 
       {/* Spawn modal */}
-      <SpawnModal open={spawnOpen} onClose={() => setSpawnOpen(false)} />
+      <SpawnModal
+        open={spawnOpen}
+        onClose={() => {
+          setSpawnOpen(false);
+          playSound(playSpawnSound);
+        }}
+      />
+
+      {/* Achievement toasts */}
+      <AchievementToast
+        achievements={newAchievements}
+        onDismiss={() => setNewAchievements([])}
+      />
 
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
