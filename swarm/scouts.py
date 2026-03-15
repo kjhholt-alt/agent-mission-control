@@ -232,8 +232,8 @@ class ScoutAgent:
 
         prompt = (
             f"{system}\n\n"
-            f"Evaluate the current state and suggest the top 3-5 goals for the swarm "
-            f"to pursue next. Return ONLY a valid JSON array, no markdown fences."
+            f"Evaluate the current state and suggest EXACTLY 5 goals for the swarm "
+            f"to pursue next. The Hive must NEVER idle. Return ONLY a valid JSON array, no markdown fences."
         )
 
         try:
@@ -330,7 +330,7 @@ class ScoutAgent:
             fired_lines.append(f"**{title}** ({project})")
 
         other_lines = []
-        for s in suggestions[2:]:
+        for s in suggestions[5:]:
             other_lines.append(
                 f"- {s.get('title', '?')} [{s.get('impact', '?')}]"
             )
