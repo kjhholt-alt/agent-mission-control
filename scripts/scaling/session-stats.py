@@ -9,7 +9,7 @@ SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 days = int(sys.argv[1]) if len(sys.argv) > 1 else 7
 cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
-req = urllib.request.Request(f"{SB_URL}/rest/v1/nexus_sessions?last_activity=gte.{cutoff}&order=last_activity.desc",
+req = urllib.request.Request(f"{SB_URL}/rest/v1/nexus_sessions?last_activity=gte.{cutoff[:19]}Z&order=last_activity.desc",
     headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"})
 sessions = json.loads(urllib.request.urlopen(req, timeout=10).read())
 
