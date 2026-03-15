@@ -1,0 +1,112 @@
+[
+  {
+    "id": "t-deere-1",
+    "name": "Analyze Spreadsheet Data",
+    "goal": "Read the specified Excel/CSV file. Analyze the data for: trends, outliers, totals, averages, and any notable patterns. Generate a clear summary with key findings and recommendations. Format output as a brief executive summary followed by detailed breakdown.",
+    "project": "nexus",
+    "worker_type": "inspector",
+    "category": "review",
+    "priority": 30,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-2",
+    "name": "Draft Professional Email",
+    "goal": "Draft a professional email for the specified context. Tone: professional but approachable. Include: clear subject line, greeting, body with key points, call-to-action, and sign-off. Keep it concise — under 200 words. If replying, reference the original message. Finance/operations context at John Deere.",
+    "project": "nexus",
+    "worker_type": "messenger",
+    "category": "build",
+    "priority": 40,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-3",
+    "name": "Meeting Prep Package",
+    "goal": "Prepare a meeting prep package for the specified meeting. Include: 1) Agenda with time allocations, 2) Key talking points for each topic, 3) Questions to ask, 4) Data points or metrics to reference, 5) Potential action items to propose. Format as a clean, printable document.",
+    "project": "nexus",
+    "worker_type": "scout",
+    "category": "research",
+    "priority": 30,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-4",
+    "name": "Monthly Close Checklist",
+    "goal": "Generate a month-end close checklist for operating finance. Include: reconciliation items, variance analysis steps, journal entries to review, reports to generate, deadlines, and sign-off requirements. Flag items that typically cause issues. Customize based on the current month and any specified focus areas.",
+    "project": "nexus",
+    "worker_type": "inspector",
+    "category": "maintenance",
+    "priority": 20,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-5",
+    "name": "Variance Analysis Report",
+    "goal": "Perform a variance analysis on the specified budget vs actual data. For each line item: calculate $ variance and % variance. Flag items exceeding 5% threshold. Provide root cause hypotheses for significant variances. Generate an executive summary with top 5 variances and recommended actions.",
+    "project": "nexus",
+    "worker_type": "inspector",
+    "category": "review",
+    "priority": 25,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-6",
+    "name": "Process Documentation",
+    "goal": "Document the specified process step-by-step. Include: process name, owner, frequency, inputs, outputs, systems used, decision points, exception handling, and approval requirements. Format as a standard operating procedure (SOP) with numbered steps. Include a RACI matrix if multiple roles are involved.",
+    "project": "nexus",
+    "worker_type": "scout",
+    "category": "research",
+    "priority": 50,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-7",
+    "name": "Presentation Builder",
+    "goal": "Create presentation content (slide-by-slide) for the specified topic. Each slide: title, 3-5 bullet points, speaker notes. Include: executive summary slide, data slides with chart descriptions, analysis slides, recommendation slide, next steps slide. Tone: executive-ready, data-driven, concise.",
+    "project": "nexus",
+    "worker_type": "builder",
+    "category": "build",
+    "priority": 40,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-8",
+    "name": "Side Project Sprint Plan",
+    "goal": "Review the specified side project's current state (git log, README, open issues). Generate a focused sprint plan: 5-8 tasks ranked by impact, each with clear acceptance criteria. Estimate effort (small/medium/large). Identify blockers. Output as a checklist ready to execute.",
+    "project": "nexus",
+    "worker_type": "scout",
+    "category": "research",
+    "priority": 50,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-9",
+    "name": "Code Review + Fix",
+    "goal": "Review the latest changes in the specified project. Check for: bugs, security issues, performance problems, code quality, test coverage gaps. For any issue found with HIGH confidence, fix it directly. Commit fixes. Report what was found and what was fixed.",
+    "project": "nexus",
+    "worker_type": "inspector",
+    "category": "review",
+    "priority": 35,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  },
+  {
+    "id": "t-deere-10",
+    "name": "Weekly Status Update",
+    "goal": "Generate a weekly status update email. Sections: 1) Key accomplishments this week, 2) In-progress items with % complete, 3) Blockers/risks, 4) Plan for next week, 5) Metrics/KPIs if applicable. Pull from git activity and task completions. Professional tone, bullet points, under 300 words.",
+    "project": "nexus",
+    "worker_type": "messenger",
+    "category": "build",
+    "priority": 40,
+    "created_at": "2026-03-15T00:00:00.000Z",
+    "updated_at": "2026-03-15T00:00:00.000Z"
+  }
+]
