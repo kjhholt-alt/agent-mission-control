@@ -90,7 +90,7 @@ TASK_LOG_TABLE = "swarm_task_log"
 class ScoutAgent:
     """Autonomous scout that evaluates project state and fires goals."""
 
-    SCOUT_INTERVAL = 4 * 60 * 60  # 4 hours in seconds
+    SCOUT_INTERVAL = 60 * 60  # 1 hour in seconds
 
     def __init__(
         self,
