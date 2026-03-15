@@ -213,7 +213,7 @@ export function LiveWorkLog({
       <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin pr-1">
         <AnimatePresence mode="popLayout">
           {allEntries.map((entry) => {
-            const Icon = WORKER_ICONS[entry.workerType] || Zap;
+            const IconComp = WORKER_ICONS[entry.workerType] || Zap;
             const color = WORKER_COLORS[entry.workerType] || "#6b7280";
             const projectColor = getProjectColor(entry.project);
             const isSelected = entry.id === selectedWorkerId;
@@ -238,7 +238,7 @@ export function LiveWorkLog({
                     className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
                     style={{ background: `${color}20`, border: `1px solid ${color}40` }}
                   >
-                    <Icon className="w-2.5 h-2.5" style={{ color } as React.CSSProperties} />
+                    <IconComp className="w-2.5 h-2.5" style={{ color }} />
                   </div>
 
                   <span className="text-[10px] font-semibold text-zinc-200">
