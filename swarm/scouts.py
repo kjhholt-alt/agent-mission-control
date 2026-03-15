@@ -115,11 +115,11 @@ class ScoutAgent:
 
         1. Gather recent completed work from memory
         2. Ask Claude what to do next
-        3. Auto-fire top 2 goals as meta-tasks
+        3. Auto-fire ALL 5 goals as meta-tasks (keep the Hive fed)
         4. Log what was fired and why
         5. Post summary to Discord
         """
-        logger.info("Scout evaluation starting")
+        logger.info("Scout evaluation starting (hourly, 5 goals)")
 
         # 1. Gather context
         recent_work = self._gather_recent_work()
@@ -140,9 +140,9 @@ class ScoutAgent:
 
         logger.info("Scout generated %d suggestions (after filtering blocked)", len(suggestions))
 
-        # 3. Auto-fire top 2
+        # 3. Auto-fire ALL suggestions (up to 5) — the Hive must never idle
         fired = []
-        for goal in suggestions[:2]:
+        for goal in suggestions[:5]:
             try:
                 task = self.task_manager.create_task(
                     task_type="meta",
