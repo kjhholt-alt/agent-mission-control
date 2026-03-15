@@ -100,10 +100,7 @@ class BudgetManager:
         if cents > 0:
             new_cents = row["api_spent_cents"] + cents
             update["api_spent_cents"] = int(round(float(new_cents)))
-        if minutes > 0:
-
-
-            ))
+        # minutes param ignored — CC is unlimited on Max plan
 
         if update:
             update["updated_at"] = datetime.now(timezone.utc).isoformat()
