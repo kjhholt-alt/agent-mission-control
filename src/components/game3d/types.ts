@@ -24,7 +24,8 @@ export type WorkerType =
   | "scout"
   | "deployer"
   | "messenger"
-  | "browser";
+  | "browser"
+  | "supervisor";
 
 export interface Worker {
   id: string;
@@ -70,7 +71,7 @@ export interface AlertEvent {
 export interface WorkerTypeConfig {
   color: string;
   icon: string;
-  shape: "square" | "diamond" | "circle" | "triangle" | "hexagon" | "bolt" | "dodecahedron";
+  shape: "square" | "diamond" | "circle" | "triangle" | "hexagon" | "bolt" | "dodecahedron" | "star";
   trailColor: string;
   label: string;
 }

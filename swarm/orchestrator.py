@@ -19,6 +19,7 @@ from swarm.config import (
 )
 from swarm.oracle import Oracle
 from swarm.scouts import ScoutAgent
+from swarm.supervisor import Supervisor
 from swarm.tasks.task_manager import TaskManager
 
 logger = logging.getLogger("swarm.orchestrator")
@@ -72,6 +73,11 @@ class SwarmOrchestrator:
         self.budget_manager = BudgetManager()
         self.scout = ScoutAgent(task_manager=self.task_manager)
         self.oracle = Oracle(supabase_client=self.sb)
+        self.supervisor = Supervisor(
+            supabase_client=self.sb,
+            task_manager=self.task_manager,
+            budget_manager=self.budget_manager,
+        )
         self.alive = True
         self.worker_processes: dict[str, multiprocessing.Process] = {}
         self._last_cleanup: float = 0
@@ -97,6 +103,15 @@ class SwarmOrchestrator:
                 self.scale_workers()
                 self.check_worker_health()
                 self.enforce_budgets()
+
+                # Supervisor patrol every 60 seconds
+                if self.supervisor.is_due():
+                    try:
+                        issues = self.supervisor.run_patrol()
+                        if issues > 0:
+                            logger.info("Supervisor resolved %d issues", issues)
+                    except Exception as e:
+                        logger.error("Supervisor patrol failed: %s", e, exc_info=True)
 
                 # Run scout every 4 hours
                 if self.scout.is_due():

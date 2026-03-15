@@ -699,6 +699,63 @@ function BrowserModel({ status, t, color }: { status: string; t: number; color: 
   );
 }
 
+// ---- SUPERVISOR (Warden) — Amber patrol star --------------------------------
+
+function SupervisorModel({ status, t, color }: { status: string; t: number; color: string }) {
+  const bodyRef = useRef<THREE.Mesh>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
+  const beaconRef = useRef<THREE.Mesh>(null);
+
+  useFrame(() => {
+    if (bodyRef.current) {
+      // Slow authoritative rotation — the foreman surveys
+      bodyRef.current.rotation.y = t * (status === "working" ? 3 : 0.8);
+      bodyRef.current.rotation.z = Math.sin(t * 0.7) * 0.1;
+    }
+    if (ringRef.current) {
+      // Patrol ring always visible, pulses when working
+      ringRef.current.rotation.x = Math.PI / 2;
+      ringRef.current.rotation.z = t * 1.5;
+      const mat = ringRef.current.material as THREE.MeshStandardMaterial;
+      if (mat) mat.opacity = status === "working" ? 0.6 + Math.sin(t * 4) * 0.3 : 0.4;
+    }
+    if (beaconRef.current) {
+      // Amber beacon on top pulses like a warning light
+      const mat = beaconRef.current.material as THREE.MeshStandardMaterial;
+      if (mat) mat.emissiveIntensity = 1.5 + Math.sin(t * 6) * 1.0;
+      beaconRef.current.position.y = 0.32 + Math.sin(t * 2) * 0.02;
+    }
+  });
+
+  // Create star shape via two intersecting tetrahedra (Star of David / merkaba)
+  return (
+    <group>
+      {/* Main body — octahedron stretched into a star-like shape */}
+      <mesh ref={bodyRef} castShadow>
+        <octahedronGeometry args={[0.22]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} metalness={0.7} roughness={0.2} />
+      </mesh>
+      {/* Patrol ring */}
+      <mesh ref={ringRef}>
+        <torusGeometry args={[0.35, 0.015, 6, 16]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} transparent opacity={0.5} toneMapped={false} />
+      </mesh>
+      {/* Beacon on top — amber warning light */}
+      <mesh ref={beaconRef} position={[0, 0.32, 0]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+      {/* Authority spikes — 4 small cones pointing outward */}
+      {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((angle, i) => (
+        <mesh key={`spike-${i}`} position={[Math.cos(angle) * 0.2, 0, Math.sin(angle) * 0.2]} rotation={[0, 0, angle + Math.PI / 2]}>
+          <coneGeometry args={[0.03, 0.1, 4]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} metalness={0.8} roughness={0.2} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // ---- MODEL DISPATCHER -------------------------------------------------------
 
 function WorkerModel({ type, status, t, color }: { type: WorkerType; status: string; t: number; color: string }) {
@@ -717,6 +774,8 @@ function WorkerModel({ type, status, t, color }: { type: WorkerType; status: str
       return <MessengerModel status={status} t={t} color={color} />;
     case "browser":
       return <BrowserModel status={status} t={t} color={color} />;
+    case "supervisor":
+      return <SupervisorModel status={status} t={t} color={color} />;
   }
 }
 
