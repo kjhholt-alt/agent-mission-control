@@ -20,7 +20,8 @@ import { RadiantQuests } from "@/components/radiant-quests";
 import { AchievementToast } from "@/components/achievement-toast";
 import { useNavigationHotkeys } from "@/lib/use-hotkeys";
 import { checkAchievements, type Achievement } from "@/lib/achievements";
-import { playSound, playSpawnSound, playCompleteSound } from "@/lib/audio";
+import { playSound, playSpawnSound } from "@/lib/audio";
+import { DaemonPanel } from "@/components/daemon-panel";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -445,6 +446,9 @@ export default function MissionControl() {
             <AgentHistory agents={agents} />
           </div>
         </motion.section>
+
+        {/* Daemon Panel (only visible in Tauri desktop app) */}
+        <DaemonPanel />
 
         {/* Footer */}
         <footer className="text-center text-xs text-zinc-700 py-4 border-t border-zinc-800/30">

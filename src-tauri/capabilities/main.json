@@ -1,0 +1,17 @@
+{
+  "identifier": "main",
+  "description": "Main window capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-spawn",
+    "shell:allow-execute",
+    "shell:allow-open",
+    "shell:allow-kill",
+    "notification:default",
+    "autostart:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
+  ]
+}

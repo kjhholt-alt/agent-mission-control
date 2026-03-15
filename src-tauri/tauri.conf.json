@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicholastmosher/tauri/refactor/api-capabilities-spec/.schema/config.schema.json",
+  "productName": "Nexus",
+  "version": "1.0.0",
+  "identifier": "store.buildkit.nexus",
+  "build": {
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../out",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NEXUS | Agent Command Center",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "center": true,
+        "decorations": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    },
+    "notification": {
+      "all": true
+    }
+  }
+}
