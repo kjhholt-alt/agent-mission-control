@@ -98,15 +98,23 @@ class Supervisor:
             )
             issues_found += 1
 
-        # 4. Check for queue backup
+        # 4. ZERO TOLERANCE FOR IDLE — if tasks exist and workers are idle, fix it
+        idle_fix = self._fix_idle_situation()
+        if idle_fix:
+            actions_taken.append(idle_fix)
+            issues_found += 1
+
+        # 5. Check for queue backup (no workers at all)
         queue_backup = self._check_queue_backup()
         if queue_backup:
             actions_taken.append(
-                f"Queue backup detected: {queue_backup} tasks queued with 0 active workers"
+                f"CRITICAL: {queue_backup} tasks queued with 0 active workers — need daemon restart"
             )
             issues_found += 1
+            # Send urgent Discord alert
+            self._send_urgent_alert(f"🚨 IDLE ALERT: {queue_backup} tasks waiting, 0 workers active! Daemon may need restart.")
 
-        # 5. Clean up dead workers older than 30 min
+        # 6. Clean up dead workers older than 30 min
         cleaned = self._cleanup_dead_workers()
         if cleaned > 0:
             actions_taken.append(f"Cleaned up {cleaned} dead workers")
@@ -291,6 +299,71 @@ class Supervisor:
             "status": "dead",
             "died_at": now,
         }).eq("id", worker["id"]).execute()
+
+    def _fix_idle_situation(self) -> str | None:
+        """ZERO TOLERANCE: If there are queued/blocked tasks and idle workers, wake them up."""
+        # Count queued tasks
+        queued = self.sb.table(self.TASKS_TABLE).select("id", count="exact").eq("status", "queued").execute()
+        blocked = self.sb.table(self.TASKS_TABLE).select("id", count="exact").eq("status", "blocked").execute()
+        queued_count = len(queued.data) if queued.data else 0
+        blocked_count = len(blocked.data) if blocked.data else 0
+        total_pending = queued_count + blocked_count
+
+        # Count idle workers
+        idle_workers = self.sb.table(self.WORKERS_TABLE).select("id").eq("status", "idle").execute()
+        idle_count = len(idle_workers.data) if idle_workers.data else 0
+
+        # Count active workers
+        active = self.sb.table(self.WORKERS_TABLE).select("id").in_("status", ["busy", "working"]).execute()
+        active_count = len(active.data) if active.data else 0
+
+        if total_pending > 0 and active_count == 0:
+            # Tasks exist but NOBODY is working — kill all idle workers so orchestrator respawns fresh ones
+            if idle_count > 0:
+                for w in idle_workers.data:
+                    self.sb.table(self.WORKERS_TABLE).update({
+                        "status": "dead",
+                        "died_at": datetime.now(timezone.utc).isoformat()
+                    }).eq("id", w["id"]).execute()
+                logger.warning(
+                    "Supervisor: IDLE FIX — killed %d idle workers to force respawn. %d tasks pending.",
+                    idle_count, total_pending
+                )
+                return f"IDLE FIX: Killed {idle_count} idle workers to force respawn ({total_pending} tasks pending)"
+            else:
+                logger.warning("Supervisor: NO WORKERS AT ALL — %d tasks pending, daemon may be down", total_pending)
+                return f"NO WORKERS: {total_pending} tasks pending, 0 workers — daemon may need restart"
+
+        elif total_pending > 0 and idle_count > active_count:
+            # More idle than active — something's wrong, kill idle to force rebalance
+            kill_count = min(idle_count, 3)  # Kill up to 3 idle workers
+            killed = 0
+            for w in idle_workers.data[:kill_count]:
+                self.sb.table(self.WORKERS_TABLE).update({
+                    "status": "dead",
+                    "died_at": datetime.now(timezone.utc).isoformat()
+                }).eq("id", w["id"]).execute()
+                killed += 1
+            if killed > 0:
+                logger.info("Supervisor: killed %d idle workers to rebalance (ratio: %d idle / %d active)", killed, idle_count, active_count)
+                return f"REBALANCE: Killed {killed} idle workers ({idle_count} idle vs {active_count} active, {total_pending} tasks pending)"
+
+        return None
+
+    def _send_urgent_alert(self, message: str):
+        """Send an urgent red alert to Discord."""
+        if not DISCORD_WEBHOOK_URL:
+            return
+        try:
+            requests.post(DISCORD_WEBHOOK_URL, json={
+                "embeds": [{
+                    "title": "🚨 NEXUS IDLE ALERT",
+                    "description": message,
+                    "color": 0xEF4444,  # Red
+                }]
+            }, timeout=5)
+        except Exception:
+            pass
 
     def _check_queue_backup(self) -> int:
         """Check if tasks are queued but no workers are running."""
