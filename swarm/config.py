@@ -62,7 +62,7 @@ BLOCKED_PROJECTS = ["MoneyPrinter", "moneyprinter", "moneyprinter-hud"]
 # ── Budget defaults ───────────────────────────────────────────────────────────
 BUDGET_DEFAULTS = {
     "daily_api_budget_cents": 500,  # $5/day
-    "daily_claude_code_minutes": 480,  # 8 hours
+    # CC minutes removed — not a real metric  # 8 hours
 }
 
 # ── Worker limits ─────────────────────────────────────────────────────────────

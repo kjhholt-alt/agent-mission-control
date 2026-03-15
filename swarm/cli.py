@@ -70,8 +70,8 @@ def show_status():
         f"${b['api_spent_cents']/100:.2f} / ${b['daily_api_budget_cents']/100:.2f} ({b['api_pct']:.1f}%)",
     )
     budget_table.add_row(
-        "Claude Code",
-        f"{b['claude_code_minutes_used']:.0f} / {b['daily_claude_code_minutes']} min ({b['cc_pct']:.1f}%)",
+
+
     )
     budget_table.add_row(
         "Tasks Today",
@@ -110,9 +110,9 @@ def show_budget():
         f"{b['api_pct']:.1f}%",
     )
     table.add_row(
-        "Claude Code",
-        f"{b['claude_code_minutes_used']:.0f} min",
-        f"{b['daily_claude_code_minutes']} min",
+
+
+
         f"{b['cc_pct']:.1f}%",
     )
     table.add_row(

@@ -50,9 +50,9 @@ class BudgetManager:
         row = {
             "budget_date": today,
             "api_spent_cents": 0,
-            "claude_code_minutes_used": 0,
+
             "daily_api_budget_cents": BUDGET_DEFAULTS["daily_api_budget_cents"],
-            "daily_claude_code_minutes": BUDGET_DEFAULTS["daily_claude_code_minutes"],
+
             "tasks_completed": 0,
             "tasks_failed": 0,
         }
@@ -85,7 +85,7 @@ class BudgetManager:
         row = self._get_today()
         if tier in ("heavy", "cc_light"):
             return (
-                row["claude_code_minutes_used"] < row["daily_claude_code_minutes"]
+
             )
         return row["api_spent_cents"] < row["daily_api_budget_cents"]
 
@@ -103,8 +103,8 @@ class BudgetManager:
             new_cents = row["api_spent_cents"] + cents
             update["api_spent_cents"] = int(round(float(new_cents)))
         if minutes > 0:
-            update["claude_code_minutes_used"] = int(round(
-                float(row["claude_code_minutes_used"]) + float(minutes)
+
+
             ))
 
         if update:
@@ -118,11 +118,11 @@ class BudgetManager:
             if new_row["daily_api_budget_cents"] > 0
             else 0
         )
-        cc_pct = (
-            new_row["claude_code_minutes_used"]
-            / new_row["daily_claude_code_minutes"]
+
+
+
             * 100
-            if new_row["daily_claude_code_minutes"] > 0
+
             else 0
         )
 
@@ -137,10 +137,10 @@ class BudgetManager:
                 f"API budget at {api_pct:.0f}% (${new_row['api_spent_cents']/100:.2f}/${new_row['daily_api_budget_cents']/100:.2f})",
             )
 
-        if cc_pct >= 90:
+
             self.send_alert(
                 "critical",
-                f"Claude Code budget at {cc_pct:.0f}% ({new_row['claude_code_minutes_used']:.0f}/{new_row['daily_claude_code_minutes']} min)",
+
             )
 
     def record_task_result(self, success: bool):
@@ -163,15 +163,15 @@ class BudgetManager:
             )
             if row["daily_api_budget_cents"] > 0
             else 0,
-            "claude_code_minutes_used": row["claude_code_minutes_used"],
-            "daily_claude_code_minutes": row["daily_claude_code_minutes"],
-            "cc_pct": round(
-                row["claude_code_minutes_used"]
-                / row["daily_claude_code_minutes"]
+
+
+
+
+
                 * 100,
                 1,
             )
-            if row["daily_claude_code_minutes"] > 0
+
             else 0,
             "tasks_completed": row["tasks_completed"],
             "tasks_failed": row["tasks_failed"],
