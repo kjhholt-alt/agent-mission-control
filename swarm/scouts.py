@@ -1,9 +1,9 @@
 """
-Scout Agent: autonomous goal evaluator that runs every 4 hours.
+Scout Agent: autonomous goal evaluator that runs every HOUR.
 
 Evaluates current project state and recent completed work from swarm_memory,
-suggests 3-5 goals ranked by impact, auto-fires the top 2 as meta-tasks,
-and posts a summary to Discord.
+suggests 5 goals ranked by impact, auto-fires ALL 5 as meta-tasks,
+and posts a summary to Discord. The Hive must NEVER be idle.
 """
 
 import json
