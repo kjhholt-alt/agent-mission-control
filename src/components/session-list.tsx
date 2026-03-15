@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Activity,
+  Download,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
@@ -196,7 +197,7 @@ export function SessionList({ compact, maxItems }: SessionListProps) {
         </div>
       )}
 
-      {/* Filter + refresh row */}
+      {/* Filter + refresh + export row */}
       {!compact && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -216,12 +217,46 @@ export function SessionList({ compact, maxItems }: SessionListProps) {
               ))}
             </select>
           </div>
-          <button
-            onClick={fetchSessions}
-            className="p-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const csv = [
+                  "Project,Model,Status,Tools,Input Tokens,Output Tokens,Cost USD,Duration,Started,Completed",
+                  ...sessions.map((s) =>
+                    [
+                      s.project_name || "",
+                      s.model || "",
+                      s.status,
+                      s.tool_count || 0,
+                      s.input_tokens || 0,
+                      s.output_tokens || 0,
+                      Number(s.cost_usd) || 0,
+                      formatDuration(s.started_at, s.completed_at),
+                      s.started_at,
+                      s.completed_at || "",
+                    ].join(",")
+                  ),
+                ].join("\n");
+                const blob = new Blob([csv], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `nexus-sessions-${new Date().toISOString().split("T")[0]}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 text-[10px] text-zinc-400 transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              CSV
+            </button>
+            <button
+              onClick={fetchSessions}
+              className="p-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
+            </button>
+          </div>
         </div>
       )}
 
