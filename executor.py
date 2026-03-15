@@ -106,10 +106,8 @@ def log_task_event(task_id, event_type, title, project="", details=""):
     """Log an event to swarm_task_log."""
     supabase_request("POST", "swarm_task_log", {
         "task_id": task_id,
-        "event_type": event_type,
-        "title": title,
-        "project": project,
-        "details": details,
+        "event": event_type,
+        "details": f"[{project}] {title}" + (f"\n{details}" if details else ""),
     })
 
 

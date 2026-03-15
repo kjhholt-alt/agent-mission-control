@@ -69,14 +69,8 @@ export async function POST(request: NextRequest) {
       .from("swarm_task_log")
       .insert({
         task_id: taskId,
-        event_type: "created",
-        title: `Mission spawned: ${goal}`,
-        details: JSON.stringify({
-          source: "nexus-dashboard",
-          worker_type: body.worker_type || "any",
-          priority: body.priority ?? 50,
-        }),
-        project: project,
+        event: "created",
+        details: `[${project}] Mission spawned: ${goal}`,
       })
       .then(() => {});
 
