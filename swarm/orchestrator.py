@@ -113,7 +113,7 @@ class SwarmOrchestrator:
                     except Exception as e:
                         logger.error("Supervisor patrol failed: %s", e, exc_info=True)
 
-                # Run scout every 4 hours
+                # Run scout every hour (5 goals per run)
                 if self.scout.is_due():
                     try:
                         self.scout.run_evaluation()
