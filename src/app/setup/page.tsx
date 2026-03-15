@@ -94,26 +94,28 @@ export default function SetupPage() {
     setCurrentStep(1);
     updateStep("tables", "checking");
     try {
-      const tables = [
-        "nexus_sessions",
-        "nexus_hook_events",
-        "swarm_tasks",
-        "swarm_workers",
-        "agent_activity",
+      const tableEndpoints = [
+        { name: "nexus_sessions", url: "/api/sessions?limit=0" },
+        { name: "swarm_tasks", url: "/api/tasks?limit=0" },
+        { name: "agent_activity", url: "/api/agents" },
+        { name: "nexus_hook_events", url: "/api/collector/agents" },
+        { name: "radiant_engine", url: "/api/radiant" },
       ];
       let ok = 0;
-      for (const table of tables) {
-        const res = await fetch(`/api/sessions?limit=0`);
-        if (res.ok) ok++;
+      for (const { url } of tableEndpoints) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) ok++;
+        } catch { /* table check failed */ }
       }
-      if (ok === tables.length) {
+      if (ok === tableEndpoints.length) {
         updateStep(
           "tables",
           "pass",
-          `All ${tables.length} core tables verified`
+          `All ${tableEndpoints.length} core tables verified`
         );
       } else {
-        updateStep("tables", "fail", `${ok}/${tables.length} tables found`);
+        updateStep("tables", "fail", `${ok}/${tableEndpoints.length} tables found`);
       }
     } catch {
       updateStep("tables", "fail", "Table check failed");
