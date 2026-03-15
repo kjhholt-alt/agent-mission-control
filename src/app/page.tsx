@@ -125,12 +125,33 @@ export default function MissionControl() {
             <LiveClock />
             <div className="flex items-center gap-2">
               <a
-                href="/oracle/chat"
+                href="/game"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors text-xs text-cyan-400"
+                title="3D Factory View"
+              >
+                🏭 Game
+              </a>
+              <a
+                href="/ops"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors text-xs text-emerald-400"
+                title="Operations Center"
+              >
+                ⚡ Ops
+              </a>
+              <a
+                href="/oracle"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors text-xs text-amber-400"
-                title="Talk to Oracle"
+                title="Oracle Dashboard"
               >
                 <Eye className="w-3 h-3" />
                 Oracle
+              </a>
+              <a
+                href="/mobile"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-700/30 border border-zinc-600/30 hover:bg-zinc-700/50 transition-colors text-xs text-zinc-400"
+                title="Mobile Terminal"
+              >
+                📱 Mobile
               </a>
               <button
                 onClick={fetchAgents}
