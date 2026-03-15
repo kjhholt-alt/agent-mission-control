@@ -51,6 +51,19 @@ class Supervisor:
         Returns the number of issues found and resolved.
         """
         self.last_check = time.time()
+        
+        # Keep supervisor visible on the game map
+        try:
+            self.sb.table("swarm_workers").upsert({
+                "id": "supervisor-warden-001",
+                "worker_name": "supervisor-warden-001",
+                "worker_type": "supervisor",
+                "tier": "system",
+                "status": "working",
+                "last_heartbeat": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+        except Exception:
+            pass
 
         issues_found = 0
         actions_taken: list[str] = []
