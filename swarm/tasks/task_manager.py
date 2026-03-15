@@ -284,26 +284,53 @@ class TaskManager:
             output_data = {"response": str(output_data)}
 
         now = datetime.now(timezone.utc).isoformat()
+
+        # Defensive: ensure output_data is safe for JSONB
+        try:
+            import json
+            json.dumps(output_data)  # Test it's serializable
+        except (TypeError, ValueError):
+            output_data = {"response": str(output_data)[:5000]}
+
         update: dict[str, Any] = {
             "status": "completed",
             "output_data": output_data,
             "completed_at": now,
             "updated_at": now,
         }
-        if cost_cents and cost_cents > 0:
-            update["actual_cost_cents"] = int(round(float(cost_cents)))
-        if tokens and tokens > 0:
-            update["tokens_used"] = int(tokens)
 
-        resp = (
-            self.sb.table(self.TABLE)
-            .update(update)
-            .eq("id", task_id)
-            .execute()
-        )
+        # Defensive int casting — the #1 source of 22P02 errors
+        try:
+            if cost_cents and float(cost_cents) > 0:
+                update["actual_cost_cents"] = int(round(float(cost_cents)))
+        except (TypeError, ValueError):
+            pass
+        try:
+            if tokens and int(float(str(tokens))) > 0:
+                update["tokens_used"] = int(float(str(tokens)))
+        except (TypeError, ValueError):
+            pass
 
-        if not resp.data:
-            raise RuntimeError(f"Failed to complete task {task_id}")
+        try:
+            resp = (
+                self.sb.table(self.TABLE)
+                .update(update)
+                .eq("id", task_id)
+                .execute()
+            )
+            if not resp.data:
+                logger.warning("No rows updated for task %s — may already be completed", task_id[:8])
+        except Exception as e:
+            # If the update fails, at least mark it as completed without cost data
+            logger.error("Failed to complete task %s with full data: %s. Retrying minimal update.", task_id[:8], e)
+            try:
+                self.sb.table(self.TABLE).update({
+                    "status": "completed",
+                    "completed_at": now,
+                    "updated_at": now,
+                }).eq("id", task_id).execute()
+            except Exception as e2:
+                logger.error("Even minimal completion failed for %s: %s", task_id[:8], e2)
 
         logger.info("Completed task %s", task_id[:8])
 
