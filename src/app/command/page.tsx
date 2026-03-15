@@ -9,6 +9,7 @@ import { useGameData } from "@/components/game3d/useGameData";
 import { MiniKanban } from "@/components/command/MiniKanban";
 import { LiveWorkLog } from "@/components/command/LiveWorkLog";
 import { TaskInputBar } from "@/components/command/TaskInputBar";
+import { DetectionList } from "@/components/ops/DetectionList";
 
 // Dynamic import for 3D canvas -- cannot SSR
 const GameCanvas = dynamic(() => import("@/components/game3d/GameCanvas"), {
@@ -222,15 +223,15 @@ export default function CommandCenter() {
             </div>
           </motion.div>
 
-          {/* BOTTOM RIGHT: Live Work Log */}
+          {/* BOTTOM RIGHT: Live Work Log + Detection List */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.4 }}
-            className="flex-1 min-h-0 p-2"
+            className="flex-1 min-h-0 p-2 flex flex-col gap-2"
           >
             <div
-              className="h-full rounded-lg border border-zinc-800/40 p-2"
+              className="flex-1 min-h-0 rounded-lg border border-zinc-800/40 p-2"
               style={{
                 background: "rgba(10,10,18,0.5)",
                 backdropFilter: "blur(8px)",
@@ -243,6 +244,16 @@ export default function CommandCenter() {
                 selectedWorkerId={selectedWorkerId}
                 onWorkerClick={handleWorkLogWorkerClick}
               />
+            </div>
+            <div
+              className="flex-shrink-0 rounded-lg border border-zinc-800/40 overflow-hidden"
+              style={{
+                background: "rgba(10,10,18,0.5)",
+                backdropFilter: "blur(8px)",
+                maxHeight: "280px",
+              }}
+            >
+              <DetectionList />
             </div>
           </motion.div>
         </div>
