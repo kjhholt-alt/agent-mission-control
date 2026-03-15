@@ -19,7 +19,7 @@
 - 0 failed tasks in queue (clean slate)
 
 ### What's Broken or Incomplete
-1. **Sessions show cost=$0.00** — Stop hook event doesn't send token counts (Claude Code doesn't expose them via hook stdin)
+1. ~~**Sessions show cost=$0.00**~~ — FIXED: New `session-cost.sh` hook parses JSONL file for real token usage on Stop event
 2. **Desktop app white screen** — WebView2 loads nexus.buildkit.store but React hydration may fail silently
 3. ~~**Executor not persistent**~~ — FIXED: Self-registers as swarm_worker, auto-starts via Task Scheduler with crash recovery
 4. **No Deere workflows exist** — Nexus has no finance/ops templates or data connectors
@@ -35,14 +35,14 @@
 The factory needs to run 24/7 without you babysitting it.
 
 ### Week 1-2: Fix the Foundation
-- [ ] **Fix desktop app white screen** — Debug WebView2 JS hydration, add devtools, test with local dev server fallback
+- [x] **Fix desktop app white screen** — Smart loader with connectivity check, local-first fallback, retry UI, devtools in debug builds
 - [x] **Make executor auto-start on boot** — Windows Task Scheduler entry via `scripts/register-executor-task.ps1`, crash recovery via `scripts/start-executor.ps1`
-- [ ] **Fix session cost tracking** — Parse Claude Code stats-cache.json on Stop event to get real token counts
+- [x] **Fix session cost tracking** — Stop hook now parses session JSONL for real token usage, sends to collector for cost calculation
 - [x] **Add error notifications** — executor.py sends Discord alerts on task failure, timeout, and startup/shutdown
 - [ ] **Clean up 1000 completed tasks** — Run archive script, keep last 100
 
 ### Week 3-4: Make It Useful Daily
-- [ ] **Morning briefing script** — Runs at 7am, posts to Discord: overnight task results, project health scores, cost summary, recommended actions
+- [x] **Morning briefing script** — `scripts/ops/morning-briefing.py` — scheduled daily at 7am via Task Scheduler, posts to Discord with sessions, costs, tasks, git activity, infra status, action items
 - [ ] **Add Deere project templates** — Templates for: "Analyze financial data", "Generate report", "Review spreadsheet", "Draft email response"
 - [ ] **Add personal project templates** — Templates for each side project's most common tasks
 - [ ] **Scheduled health checks** — n8n workflow runs health-check.py every 15 min, alerts on failure
