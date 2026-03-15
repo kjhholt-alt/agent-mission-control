@@ -126,14 +126,15 @@ function StatsTicker({
 
 // ── Highlight Card ──────────────────────────────────────────────────────────
 
-function HighlightCard({ task, workerType }: { task: SwarmTask; workerType: string }) {
+function HighlightCard({ task, workerType, onClick }: { task: SwarmTask; workerType: string; onClick?: (id: string) => void }) {
   const style = getWorkerStyle(workerType);
 
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="relative rounded-xl p-4 bg-zinc-900/80 backdrop-blur-md border border-amber-500/30 overflow-hidden"
+      onClick={() => onClick?.(task.id)}
+      className="relative rounded-xl p-4 bg-zinc-900/80 backdrop-blur-md border border-amber-500/30 overflow-hidden cursor-pointer"
       style={{
         boxShadow: "0 0 20px rgba(234, 179, 8, 0.08), 0 0 40px rgba(234, 179, 8, 0.04)",
       }}
@@ -185,7 +186,7 @@ function HighlightCard({ task, workerType }: { task: SwarmTask; workerType: stri
 
 // ── Feed Item ───────────────────────────────────────────────────────────────
 
-function FeedItem({ task, workerType }: { task: SwarmTask; workerType: string }) {
+function FeedItem({ task, workerType, onClick }: { task: SwarmTask; workerType: string; onClick?: (id: string) => void }) {
   const style = getWorkerStyle(workerType);
 
   return (
@@ -194,7 +195,8 @@ function FeedItem({ task, workerType }: { task: SwarmTask; workerType: string })
       animate={{ opacity: 1, y: 0, height: "auto" }}
       exit={{ opacity: 0, height: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`flex items-start gap-3 px-4 py-3 border-l-2 ${style.border} bg-zinc-900/40 hover:bg-zinc-900/60 transition-colors`}
+      onClick={() => onClick?.(task.id)}
+      className={`flex items-start gap-3 px-4 py-3 border-l-2 ${style.border} bg-zinc-900/40 hover:bg-zinc-900/60 transition-colors cursor-pointer`}
     >
       {/* Worker badge */}
       <div className="shrink-0 mt-0.5">
@@ -240,7 +242,7 @@ function FeedItem({ task, workerType }: { task: SwarmTask; workerType: string })
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export function LiveFeed() {
+export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void } = {}) {
   const [tasks, setTasks] = useState<SwarmTask[]>([]);
   const [workers, setWorkers] = useState<SwarmWorker[]>([]);
   const [highlights, setHighlights] = useState<SwarmTask[]>([]);
@@ -424,6 +426,7 @@ export function LiveFeed() {
                 key={task.id}
                 task={task}
                 workerType={getWorkerType(task)}
+                onClick={onTaskClick}
               />
             ))}
           </div>
@@ -460,6 +463,7 @@ export function LiveFeed() {
                   key={task.id}
                   task={task}
                   workerType={getWorkerType(task)}
+                  onClick={onTaskClick}
                 />
               ))}
             </AnimatePresence>

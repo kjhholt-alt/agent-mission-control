@@ -362,7 +362,7 @@ export default function MissionControl() {
             transition={{ delay: 0.25 }}
             className="lg:col-span-2"
           >
-            <LiveFeed />
+            <LiveFeed onTaskClick={(id) => setWorkbenchTaskId(id)} />
           </motion.section>
 
           <motion.section
