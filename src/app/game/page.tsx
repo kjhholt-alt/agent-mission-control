@@ -27,6 +27,150 @@ function formatTime(): string {
   return new Date().toLocaleTimeString("en-US", { hour12: false });
 }
 
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 60_000) return "now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+interface ActivityTask {
+  id: string;
+  title: string;
+  status: string;
+  task_type: string;
+  completed_at: string | null;
+  updated_at: string;
+}
+
+interface ActivityStats {
+  completed: number;
+  failed: number;
+  total: number;
+  lastActivity?: string | null;
+}
+
+const BUILDING_TO_PROJECT: Record<string, string> = {
+  "command-center": "nexus",
+  "buildkit": "buildkit-services",
+  "email-finder": "email-finder",
+  "barrelhouse": "BarrelHouseCRM",
+  "pc-bottleneck": "pc-bottleneck-analyzer",
+  "outdoor-crm": "outdoor-crm",
+  "chess-academy": "ai-chess-coach",
+  "finance-brief": "ai-finance-brief",
+  "automation-hub": "automation-playground",
+  "pl-engine": "pl-engine",
+  "mcp-array": "mcp-servers",
+  "nexus-hq": "nexus",
+};
+
+function StatusIcon({ status }: { status: string }) {
+  if (status === "completed") return <span style={{ color: "#22c55e" }}>&#10003;</span>;
+  if (status === "failed") return <span style={{ color: "#ef4444" }}>&#10007;</span>;
+  if (status === "running" || status === "in_progress") return <span style={{ color: "#eab308" }}>&#10227;</span>;
+  return <span style={{ color: "#6b7280" }}>&#8226;</span>;
+}
+
+function ActivityFeed({
+  tasks,
+  stats,
+  loading,
+  accentColor,
+}: {
+  tasks: ActivityTask[];
+  stats: ActivityStats | null;
+  loading: boolean;
+  accentColor: string;
+}) {
+  return (
+    <div
+      className="px-4 pb-3"
+      style={{ borderTop: `1px solid ${accentColor}15` }}
+    >
+      <div
+        className="text-[8px] uppercase tracking-[0.2em] font-bold pt-3 pb-2"
+        style={{ color: `${accentColor}99` }}
+      >
+        RECENT ACTIVITY
+      </div>
+
+      {loading ? (
+        <div className="text-[10px] py-3 text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+          Loading...
+        </div>
+      ) : tasks.length === 0 ? (
+        <div className="text-[10px] py-3 text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
+          No activity recorded
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          {tasks.map((task) => (
+            <div
+              key={task.id}
+              className="flex items-center gap-2 py-1 px-2"
+              style={{
+                background: "rgba(255,255,255,0.02)",
+                borderRadius: 3,
+                fontFamily: "monospace",
+              }}
+            >
+              <span className="text-xs flex-shrink-0 w-4 text-center">
+                <StatusIcon status={task.status} />
+              </span>
+              <span
+                className="text-[10px] flex-1 truncate"
+                style={{ color: "rgba(255,255,255,0.7)" }}
+                title={task.title}
+              >
+                {task.title.length > 40 ? task.title.slice(0, 40) + "..." : task.title}
+              </span>
+              <span
+                className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 flex-shrink-0"
+                style={{
+                  color: accentColor,
+                  background: `${accentColor}12`,
+                  border: `1px solid ${accentColor}25`,
+                  borderRadius: 2,
+                }}
+              >
+                {task.task_type}
+              </span>
+              <span
+                className="text-[9px] tabular-nums flex-shrink-0 w-12 text-right"
+                style={{ color: "rgba(255,255,255,0.35)" }}
+              >
+                {timeAgo(task.updated_at)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {stats && !loading && (
+        <div
+          className="flex items-center gap-3 mt-2 pt-2"
+          style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
+        >
+          <span className="text-[9px] tabular-nums" style={{ color: "#22c55e" }}>
+            {stats.completed} completed
+          </span>
+          <span className="text-[9px] tabular-nums" style={{ color: "#ef4444" }}>
+            {stats.failed} failed
+          </span>
+          {stats.lastActivity && (
+            <span className="text-[9px] ml-auto" style={{ color: "rgba(255,255,255,0.3)" }}>
+              Last: {timeAgo(stats.lastActivity)}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Minimap still uses isometric projection for the 2D overlay
 const TILE_W = 80;
 const TILE_H = 40;
