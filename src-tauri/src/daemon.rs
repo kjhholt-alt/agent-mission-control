@@ -130,8 +130,9 @@ pub fn spawn_daemon(state: &SharedDaemon, app: &AppHandle) -> Result<(), String>
     let python = find_python();
     let env_vars = load_env_vars(project_root);
 
+    let executor_path = format!("{}/executor.py", project_root);
     let mut cmd = Command::new(&python);
-    cmd.args(["-m", "swarm", "--daemon"])
+    cmd.args([&executor_path, "--loop", "--interval", "15"])
         .current_dir(project_root)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
