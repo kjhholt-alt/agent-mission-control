@@ -103,9 +103,9 @@ class BudgetManager:
             new_cents = row["api_spent_cents"] + cents
             update["api_spent_cents"] = int(round(float(new_cents)))
         if minutes > 0:
-            update["claude_code_minutes_used"] = round(
-                float(row["claude_code_minutes_used"]) + float(minutes), 2
-            )
+            update["claude_code_minutes_used"] = int(round(
+                float(row["claude_code_minutes_used"]) + float(minutes)
+            ))
 
         if update:
             update["updated_at"] = datetime.now(timezone.utc).isoformat()
