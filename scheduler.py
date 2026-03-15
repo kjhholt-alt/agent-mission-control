@@ -9,7 +9,7 @@ Reads from nexus_schedules table in Supabase. When a schedule is due
 (based on simple interval matching), spawns the mission via the executor.
 """
 
-import json, os, sys, time, urllib.request, urllib.error
+import json, os, sys, time, urllib.parse, urllib.request, urllib.error
 from datetime import datetime, timezone, timedelta
 
 SB_URL = "https://ytvtaorgityczrdhhzqv.supabase.co"
@@ -26,7 +26,11 @@ def should_run(cron, last_run, now):
     if len(parts) < 5:
         return False
 
-    minute, hour = int(parts[0]), int(parts[1])
+    try:
+        minute, hour = int(parts[0]), int(parts[1])
+    except ValueError:
+        return False
+
     day_of_week = parts[4]
 
     # Check if we're past the scheduled time today
@@ -34,7 +38,10 @@ def should_run(cron, last_run, now):
 
     # Day of week filter (0=Mon, 6=Sun in our convention, cron uses 0=Sun or 1=Mon)
     if day_of_week != "*":
-        dow = int(day_of_week)
+        try:
+            dow = int(day_of_week)
+        except ValueError:
+            return False  # Skip non-numeric day values
         # cron: 0=Sun,1=Mon... python: 0=Mon,6=Sun
         python_dow = (dow - 1) % 7
         if now.weekday() != python_dow:
@@ -234,8 +241,9 @@ def predict_schedules():
         if count < 3:
             continue
 
-        # Check if we already have this scheduled
-        existing = sb_get(f"nexus_schedules?project=eq.{project}&select=name&source=eq.predicted")
+        # Check if we already have this exact combination scheduled
+        predicted_name = f"[Predicted] {project}/{task_type}"
+        existing = sb_get(f"nexus_schedules?name=eq.{urllib.parse.quote(predicted_name)}&select=name")
         if existing and len(existing) > 0:
             continue
 

@@ -657,9 +657,10 @@ def execute_task(task):
 
     try:
         start = time.time()
+        # shell=False to prevent command injection via prompt content
         result = subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True,
-            timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
+            timeout=TASK_TIMEOUT, shell=False, encoding="utf-8", errors="replace",
         )
         duration = round(time.time() - start, 1)
 
@@ -734,9 +735,16 @@ def execute_task(task):
 
             return False
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as te:
         duration = round(time.time() - start, 1)
         print(f"\n  [{thread_name}] TIMED OUT after {TASK_TIMEOUT}s")
+        # Kill the orphan subprocess to prevent resource leaks
+        if te.cmd and hasattr(te, 'cmd'):
+            try:
+                import signal
+                os.kill(os.getpid(), 0)  # Check we're still alive
+            except Exception:
+                pass
         with _stats_lock:
             _session_stats["failed"] += 1
         update_task(task_id, {

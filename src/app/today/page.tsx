@@ -67,14 +67,19 @@ function StatBox({ label, value, icon, color }: {
 export default function TodayPage() {
   const [data, setData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/today");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
-    } catch {}
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch");
+    }
     setLoading(false);
   }, []);
 
@@ -110,7 +115,12 @@ export default function TodayPage() {
           </button>
         </motion.header>
 
-        {!data ? (
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-20 text-red-400 gap-3">
+            <p className="text-sm">Failed to load: {error}</p>
+            <button onClick={fetchData} className="text-xs text-cyan-400 hover:text-cyan-300">Retry</button>
+          </div>
+        ) : !data ? (
           <div className="flex items-center justify-center py-20 text-zinc-600">
             <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading...
           </div>

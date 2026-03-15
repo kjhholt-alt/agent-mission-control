@@ -13,7 +13,7 @@ const supabase = createClient(
 export async function GET() {
   try {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 
     const [tasksRes, workersRes, budgetRes, sessionsRes, specRes] = await Promise.all([
       supabase.from("swarm_tasks").select("*")
