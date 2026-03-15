@@ -21,12 +21,12 @@
 ### What's Broken or Incomplete
 1. **Sessions show cost=$0.00** — Stop hook event doesn't send token counts (Claude Code doesn't expose them via hook stdin)
 2. **Desktop app white screen** — WebView2 loads nexus.buildkit.store but React hydration may fail silently
-3. **Executor not persistent** — only runs when manually started or via Tauri (which has the white screen issue)
+3. ~~**Executor not persistent**~~ — FIXED: Self-registers as swarm_worker, auto-starts via Task Scheduler with crash recovery
 4. **No Deere workflows exist** — Nexus has no finance/ops templates or data connectors
 5. **Hooks only track tool names** — no context about WHAT the tool did (file paths, outcomes)
 6. **No automated testing** — scripts exist but no CI/CD runs them
 7. **Radiant quests are generic** — don't know about Deere priorities or deadlines
-8. **3D factory uses demo data** when no swarm workers are active (most of the time)
+8. ~~**3D factory uses demo data**~~ — FIXED: Shows real recent activity (ghost workers from completed sessions, live hook events feed). Demo mode only triggers when there's truly zero historical activity
 
 ---
 
@@ -36,9 +36,9 @@ The factory needs to run 24/7 without you babysitting it.
 
 ### Week 1-2: Fix the Foundation
 - [ ] **Fix desktop app white screen** — Debug WebView2 JS hydration, add devtools, test with local dev server fallback
-- [ ] **Make executor auto-start on boot** — Windows Task Scheduler entry for `python executor.py --loop`, independent of Tauri
+- [x] **Make executor auto-start on boot** — Windows Task Scheduler entry via `scripts/register-executor-task.ps1`, crash recovery via `scripts/start-executor.ps1`
 - [ ] **Fix session cost tracking** — Parse Claude Code stats-cache.json on Stop event to get real token counts
-- [ ] **Add error notifications** — executor.py sends Discord alert on task failure with error details
+- [x] **Add error notifications** — executor.py sends Discord alerts on task failure, timeout, and startup/shutdown
 - [ ] **Clean up 1000 completed tasks** — Run archive script, keep last 100
 
 ### Week 3-4: Make It Useful Daily

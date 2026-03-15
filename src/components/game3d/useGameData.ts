@@ -254,6 +254,29 @@ export interface GameData {
   completedTaskIds: Set<string>;
 }
 
+// ─── HOOK EVENT ROW TYPE ─────────────────────────────────────────────────────
+
+interface HookEventRow {
+  id: string;
+  session_id: string;
+  event_type: string;
+  tool_name: string | null;
+  project_name: string | null;
+  model: string | null;
+  created_at: string;
+}
+
+interface CompletedSessionRow {
+  session_id: string;
+  project_name: string | null;
+  model: string | null;
+  tool_count: number;
+  cost_usd: number;
+  completed_at: string;
+  last_activity: string;
+  current_tool: string | null;
+}
+
 export function useGameData() {
   const [swarmWorkers, setSwarmWorkers] = useState<SwarmWorker[]>([]);
   const [swarmTasks, setSwarmTasks] = useState<SwarmTask[]>([]);
@@ -261,6 +284,7 @@ export function useGameData() {
   const [agentActivity, setAgentActivity] = useState<AgentActivityRow[]>([]);
   const [liveEvents, setLiveEvents] = useState<AlertEvent[]>([]);
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(new Set());
+  const [recentSessions, setRecentSessions] = useState<CompletedSessionRow[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Track previous task statuses for completion detection
@@ -280,12 +304,18 @@ export function useGameData() {
   // ── Initial fetch ──
   useEffect(() => {
     async function fetchAll() {
-      const [workersRes, tasksRes, budgetRes, activityRes, sessionsRes] = await Promise.all([
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+      const [workersRes, tasksRes, budgetRes, activityRes, sessionsRes, recentSessionsRes, hookEventsRes] = await Promise.all([
         supabase.from("swarm_workers").select("*").order("spawned_at", { ascending: false }),
         supabase.from("swarm_tasks").select("*").order("updated_at", { ascending: false }).limit(50),
         supabase.from("swarm_budgets").select("*").order("budget_date", { ascending: false }).limit(1),
         supabase.from("agent_activity").select("*").order("updated_at", { ascending: false }).limit(20),
         supabase.from("nexus_sessions").select("*").eq("status", "active").order("last_activity", { ascending: false }).limit(10),
+        // Fetch recently completed sessions (last 24h) for "ghost" workers
+        supabase.from("nexus_sessions").select("session_id, project_name, model, tool_count, cost_usd, completed_at, last_activity, current_tool").eq("status", "completed").gte("completed_at", oneDayAgo).order("completed_at", { ascending: false }).limit(10),
+        // Fetch recent hook events for the event feed
+        supabase.from("nexus_hook_events").select("*").order("created_at", { ascending: false }).limit(25),
       ]);
 
       if (workersRes.data) setSwarmWorkers(workersRes.data);
@@ -298,6 +328,38 @@ export function useGameData() {
       }
       if (budgetRes.data && budgetRes.data.length > 0) setBudget(budgetRes.data[0]);
       if (activityRes.data) setAgentActivity(activityRes.data);
+      if (recentSessionsRes.data) setRecentSessions(recentSessionsRes.data);
+
+      // Seed event feed from real hook events instead of static demo data
+      if (hookEventsRes.data && hookEventsRes.data.length > 0) {
+        const seededEvents: AlertEvent[] = hookEventsRes.data.map((e: HookEventRow) => {
+          const project = e.project_name || "Unknown";
+          let message: string;
+          let type: AlertEvent["type"] = "info";
+
+          if (e.event_type === "Stop") {
+            message = `${project}: Session ended`;
+            type = "info";
+          } else if (e.event_type === "PreToolUse" && e.tool_name) {
+            message = `${project}: Using ${e.tool_name}`;
+            type = "info";
+          } else if (e.event_type === "PostToolUse" && e.tool_name) {
+            message = `${project}: Completed ${e.tool_name}`;
+            type = "success";
+          } else {
+            message = `${project}: ${e.event_type}${e.tool_name ? ` — ${e.tool_name}` : ""}`;
+            type = "info";
+          }
+
+          return {
+            id: e.id,
+            time: new Date(e.created_at).toLocaleTimeString("en-US", { hour12: false }),
+            message,
+            type,
+          };
+        });
+        setLiveEvents(seededEvents);
+      }
 
       // Convert active nexus_sessions to synthetic swarm workers so they appear in the factory
       if (sessionsRes.data) {
@@ -467,6 +529,28 @@ export function useGameData() {
           }
         });
       })
+      // nexus_hook_events — live event feed from Claude Code sessions
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "nexus_hook_events" }, (payload) => {
+        startTransition(() => {
+          const e = payload.new as HookEventRow;
+          const project = e.project_name || "Unknown";
+          let message: string;
+          let type: AlertEvent["type"] = "info";
+
+          if (e.event_type === "PreToolUse" && e.tool_name) {
+            message = `${project}: Using ${e.tool_name}`;
+          } else if (e.event_type === "PostToolUse" && e.tool_name) {
+            message = `${project}: Completed ${e.tool_name}`;
+            type = "success";
+          } else if (e.event_type === "Stop") {
+            message = `${project}: Session ended`;
+          } else {
+            message = `${project}: ${e.event_type}${e.tool_name ? ` — ${e.tool_name}` : ""}`;
+          }
+
+          addEvent(message, type);
+        });
+      })
       .subscribe();
 
     return () => {
@@ -478,7 +562,10 @@ export function useGameData() {
 
   // Filter to alive workers only
   const aliveWorkers = swarmWorkers.filter((w) => w.status !== "dead");
-  const isDemo = loaded && aliveWorkers.length === 0;
+  // Demo mode only when: no live workers AND no recent completed sessions
+  // Once the executor auto-starts, this will almost never be true
+  const hasRecentActivity = recentSessions.length > 0;
+  const isDemo = loaded && aliveWorkers.length === 0 && !hasRecentActivity;
 
   // Map swarm workers to game workers
   const liveGameWorkers: Worker[] = aliveWorkers.map((sw) => {
@@ -563,20 +650,50 @@ export function useGameData() {
     };
   });
 
-  // Build final workers list: live workers + optional ambient demo workers
+  // Build "ghost" workers from recently completed sessions (real activity, not fake demo)
+  const ghostWorkers: Worker[] = recentSessions.map((s, i) => {
+    const projectName = s.project_name || "general";
+    const buildingId = projectToBuilding(projectName);
+    const isOpus = s.model?.includes("opus");
+    const gameType: WorkerType = isOpus ? "builder" : "scout";
+    const config = WORKER_TYPE_CONFIG[gameType];
+    const toolCount = s.tool_count || 0;
+    const level = Math.min(Math.floor(toolCount / 10) + 1, 10);
+
+    // Time since completion
+    const completedTime = s.completed_at ? new Date(s.completed_at) : new Date();
+    const minutesAgo = Math.floor((Date.now() - completedTime.getTime()) / 60_000);
+    const timeLabel = minutesAgo < 60 ? `${minutesAgo}m ago` : `${Math.floor(minutesAgo / 60)}h ago`;
+
+    return {
+      id: `ghost-${s.session_id}-${i}`,
+      name: `${projectName.slice(0, 12)} (${timeLabel})`,
+      type: gameType,
+      color: config.color,
+      level,
+      xp: toolCount % 100,
+      currentBuildingId: buildingId,
+      targetBuildingId: buildingId,
+      task: `${toolCount} tools used`,
+      progress: 100,
+      speechBubble: null,
+      status: "idle" as const,
+      evolving: false,
+    };
+  });
+
+  // Build final workers list: live workers + ghost workers from recent activity
   let finalWorkers: Worker[];
-  if (isDemo) {
+  if (isDemo && ghostWorkers.length > 0) {
+    // No live workers, but we have recent real activity — show ghosts
+    finalWorkers = ghostWorkers.slice(0, 6);
+  } else if (isDemo) {
+    // No live workers AND no recent activity — show static demo as last resort
     finalWorkers = INITIAL_WORKERS;
-  } else if (liveGameWorkers.length < 3) {
-    // Mix: live workers + a couple demo workers for visual density
-    const demoFill = INITIAL_WORKERS.slice(0, Math.max(0, 3 - liveGameWorkers.length));
-    // Re-id demo workers to avoid collision
-    const renamedDemo = demoFill.map((w, i) => ({
-      ...w,
-      id: `demo-${i}`,
-      name: `${w.name} (demo)`,
-    }));
-    finalWorkers = [...liveGameWorkers, ...renamedDemo];
+  } else if (liveGameWorkers.length < 3 && ghostWorkers.length > 0) {
+    // Few live workers — fill with recent activity ghosts for visual density
+    const fill = ghostWorkers.slice(0, Math.max(0, 3 - liveGameWorkers.length));
+    finalWorkers = [...liveGameWorkers, ...fill];
   } else {
     finalWorkers = liveGameWorkers;
   }
@@ -645,8 +762,15 @@ export function useGameData() {
     };
   });
 
-  // ── Events ──
-  const events: AlertEvent[] = liveEvents.length > 0 ? liveEvents : INITIAL_EVENTS;
+  // ── Events — always prefer real data ──
+  const events: AlertEvent[] = liveEvents.length > 0
+    ? liveEvents
+    : [{
+        id: "no-activity",
+        time: new Date().toLocaleTimeString("en-US", { hour12: false }),
+        message: "No recent activity — start a Claude Code session to see live events",
+        type: "info" as const,
+      }];
 
   // ── Budget ──
   const budgetData = budget

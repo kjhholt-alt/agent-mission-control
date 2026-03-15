@@ -9,11 +9,16 @@ Usage:
 This is the bridge between the Nexus dashboard and actual work.
 When you click "New Mission" on the dashboard, the task goes into swarm_tasks.
 This script picks it up and runs it.
+
+The executor registers itself as a swarm_worker in Supabase so it appears
+in the 3D factory visualization. It sends heartbeats every poll cycle
+and updates its status when running tasks.
 """
 
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -35,6 +40,11 @@ DISCORD_WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "")
 CLAUDE_CLI = os.environ.get("CLAUDE_CLI_PATH", "C:/nvm4w/nodejs/claude.cmd")
 PROJECTS_ROOT = "C:/Users/Kruz/Desktop/Projects"
 TASK_TIMEOUT = 600  # 10 minutes max per task
+
+# Stable worker ID — survives restarts, unique per machine
+HOSTNAME = platform.node().lower().replace(" ", "-")[:16]
+WORKER_ID = f"executor-{HOSTNAME}"
+WORKER_NAME = f"heavy-{HOSTNAME[:8]}"
 
 # Project → directory mapping
 PROJECT_DIRS = {
@@ -161,6 +171,72 @@ def notify_discord(message, color=0x06b6d4):
         pass
 
 
+# ── Worker self-registration ─────────────────────────────────────────
+
+# Tracks cumulative stats across the session
+_session_stats = {"completed": 0, "failed": 0, "xp": 0}
+
+
+def register_worker():
+    """Register/update executor as a swarm_worker so it appears in the 3D factory."""
+    now = datetime.now(timezone.utc).isoformat()
+    worker_data = {
+        "id": WORKER_ID,
+        "worker_name": WORKER_NAME,
+        "worker_type": "heavy",
+        "tier": "executor",
+        "status": "idle",
+        "current_task_id": None,
+        "last_heartbeat": now,
+        "pid": os.getpid(),
+        "tasks_completed": _session_stats["completed"],
+        "tasks_failed": _session_stats["failed"],
+        "total_cost_cents": 0,
+        "total_tokens": 0,
+        "xp": _session_stats["xp"],
+        "spawned_at": now,
+        "died_at": None,
+    }
+
+    # Try PATCH first (worker already exists from previous run)
+    result = supabase_request("PATCH", f"swarm_workers?id=eq.{WORKER_ID}", {
+        "status": "idle",
+        "last_heartbeat": now,
+        "pid": os.getpid(),
+        "died_at": None,
+    })
+
+    if result is None or (isinstance(result, list) and len(result) == 0):
+        # Worker doesn't exist yet, create it
+        supabase_request("POST", "swarm_workers", worker_data)
+        print(f"  Registered as worker: {WORKER_ID}")
+    else:
+        print(f"  Reconnected as worker: {WORKER_ID}")
+
+
+def update_worker(status="idle", task_id=None, project=None):
+    """Update worker status in swarm_workers table."""
+    update = {
+        "status": status,
+        "current_task_id": task_id,
+        "last_heartbeat": datetime.now(timezone.utc).isoformat(),
+        "tasks_completed": _session_stats["completed"],
+        "tasks_failed": _session_stats["failed"],
+        "xp": _session_stats["xp"],
+    }
+    supabase_request("PATCH", f"swarm_workers?id=eq.{WORKER_ID}", update)
+
+
+def deregister_worker():
+    """Mark worker as idle on clean shutdown (don't delete — keeps history)."""
+    supabase_request("PATCH", f"swarm_workers?id=eq.{WORKER_ID}", {
+        "status": "idle",
+        "current_task_id": None,
+        "last_heartbeat": datetime.now(timezone.utc).isoformat(),
+    })
+    print(f"  Worker {WORKER_ID} marked idle")
+
+
 # ── Task execution ────────────────────────────────────────────────────
 
 MAX_FILE_SIZE = 100 * 1024  # 100KB per file
@@ -233,9 +309,13 @@ def execute_task(task):
         "status": "running",
         "started_at": now,
         "updated_at": now,
+        "assigned_worker_id": WORKER_ID,
     })
     log_task_event(task_id, "started", f"Executor started: {title}", project)
     send_heartbeat(f"Executor: {title[:40]}", project, "running", "Starting Claude Code...", 0, 3)
+
+    # Update swarm_worker status to busy
+    update_worker("busy", task_id, project)
 
     # Build Claude Code command
     cmd = [CLAUDE_CLI, "-p", prompt, "--output-format", "text"]
@@ -266,6 +346,9 @@ def execute_task(task):
             print(f"\n  COMPLETED in {duration}s")
             print(f"  Output: {stdout[:200]}...")
 
+            _session_stats["completed"] += 1
+            _session_stats["xp"] += 10  # +10 XP per completed task
+
             update_task(task_id, {
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -278,6 +361,7 @@ def execute_task(task):
             })
             log_task_event(task_id, "completed", f"Completed in {duration}s: {title}", project)
             send_heartbeat(f"Executor: {title[:40]}", project, "completed", "Done!", 3, 3, stdout[:500])
+            update_worker("idle")  # Back to idle after completing
             notify_discord(f"**Mission Complete:** {title}\nProject: {project} | Duration: {duration}s", 0x10b981)
             return True
         else:
@@ -285,6 +369,9 @@ def execute_task(task):
             error_msg = stderr[:500] or f"Exit code {result.returncode}"
             print(f"\n  FAILED (exit {result.returncode}) in {duration}s")
             print(f"  Error: {error_msg}")
+
+            _session_stats["failed"] += 1
+            _session_stats["xp"] += 2  # +2 XP even for failed tasks (still did work)
 
             update_task(task_id, {
                 "status": "failed",
@@ -299,12 +386,15 @@ def execute_task(task):
             })
             log_task_event(task_id, "failed", f"Failed: {title}", project, error_msg)
             send_heartbeat(f"Executor: {title[:40]}", project, "failed", error_msg, 3, 3)
+            update_worker("idle")  # Back to idle after failure
             notify_discord(f"**Mission Failed:** {title}\nProject: {project}\nError: {error_msg[:200]}", 0xef4444)
             return False
 
     except subprocess.TimeoutExpired:
         duration = round(time.time() - start, 1)
         print(f"\n  TIMED OUT after {TASK_TIMEOUT}s")
+
+        _session_stats["failed"] += 1
 
         update_task(task_id, {
             "status": "failed",
@@ -313,11 +403,15 @@ def execute_task(task):
         })
         log_task_event(task_id, "timeout", f"Timed out: {title}", project)
         send_heartbeat(f"Executor: {title[:40]}", project, "failed", f"Timed out after {TASK_TIMEOUT}s")
+        update_worker("idle")
         notify_discord(f"**Mission Timeout:** {title}\nProject: {project}", 0xe8a019)
         return False
 
     except Exception as e:
         print(f"\n  ERROR: {e}")
+
+        _session_stats["failed"] += 1
+
         update_task(task_id, {
             "status": "failed",
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -325,6 +419,7 @@ def execute_task(task):
         })
         log_task_event(task_id, "error", f"Error: {title}", project, str(e))
         send_heartbeat(f"Executor: {title[:40]}", project, "failed", str(e)[:200])
+        update_worker("idle")
         return False
 
 
@@ -338,18 +433,29 @@ def main():
 
     print("""
     ========================================
-        NEXUS EXECUTOR v1.0
+        NEXUS EXECUTOR v2.0
         Picks up missions, runs them.
+        Self-registers as swarm_worker.
     ========================================
     """)
-    print(f"  Claude CLI: {CLAUDE_CLI}")
-    print(f"  Nexus URL:  {NEXUS_URL}")
-    print(f"  Mode:       {'Daemon (loop)' if args.loop else 'Single run'}")
+    print(f"  Claude CLI:  {CLAUDE_CLI}")
+    print(f"  Nexus URL:   {NEXUS_URL}")
+    print(f"  Worker ID:   {WORKER_ID}")
+    print(f"  Mode:        {'Daemon (loop)' if args.loop else 'Single run'}")
     print()
 
     if args.loop:
+        # Register as a persistent swarm worker
+        register_worker()
+        notify_discord(
+            f"**Executor Online:** `{WORKER_ID}`\nPolling every {args.interval}s for missions.",
+            0x06b6d4,
+        )
+
         print(f"  Polling every {args.interval}s for queued tasks...")
         print("  Press Ctrl+C to stop.\n")
+
+        heartbeat_counter = 0
 
         try:
             while True:
@@ -359,9 +465,19 @@ def main():
                 else:
                     sys.stdout.write(".")
                     sys.stdout.flush()
+
+                # Send heartbeat every 4 poll cycles (~60s at default 15s interval)
+                heartbeat_counter += 1
+                if heartbeat_counter >= 4:
+                    update_worker("idle")
+                    heartbeat_counter = 0
+
                 time.sleep(args.interval)
         except KeyboardInterrupt:
-            print("\n\n  Executor stopped.")
+            print("\n\n  Shutting down gracefully...")
+            deregister_worker()
+            notify_discord(f"**Executor Offline:** `{WORKER_ID}` — clean shutdown", 0xe8a019)
+            print("  Executor stopped.")
     else:
         task = fetch_next_task()
         if task:
