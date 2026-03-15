@@ -21,6 +21,36 @@ export const metadata: Metadata = {
   description: "Real-time dashboard for watching AI agents work",
 };
 
+function GlobalNav() {
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-[100] flex items-center justify-between px-4 h-10 bg-[#0a0a12]/95 backdrop-blur-sm border-b border-white/5">
+      <a href="/" className="text-sm font-bold tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors">
+        NEXUS
+      </a>
+      <div className="flex items-center gap-1">
+        <a href="/" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-colors">
+          Dashboard
+        </a>
+        <a href="/ops" className="px-3 py-1 text-[10px] uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded transition-colors">
+          Ops Center
+        </a>
+        <a href="/game" className="px-3 py-1 text-[10px] uppercase tracking-wider text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded transition-colors">
+          Factory
+        </a>
+        <a href="/oracle" className="px-3 py-1 text-[10px] uppercase tracking-wider text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-colors">
+          Oracle
+        </a>
+        <a href="/oracle/chat" className="px-3 py-1 text-[10px] uppercase tracking-wider text-amber-400/60 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-colors">
+          Chat
+        </a>
+        <a href="/mobile" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white hover:bg-white/5 rounded transition-colors">
+          Terminal
+        </a>
+      </div>
+    </nav>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,7 +59,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${jetbrainsMono.variable} antialiased`}>
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <GlobalNav />
+          <div className="pt-10">{children}</div>
+        </TooltipProvider>
       </body>
     </html>
   );
