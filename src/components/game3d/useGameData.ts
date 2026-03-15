@@ -209,74 +209,82 @@ export function useGameData() {
       .channel("game-realtime")
       // swarm_workers changes
       .on("postgres_changes", { event: "*", schema: "public", table: "swarm_workers" }, (payload) => {
-        if (payload.eventType === "INSERT") {
-          const w = payload.new as SwarmWorker;
-          setSwarmWorkers((prev) => [w, ...prev]);
-          addEvent(`Worker ${workerDisplayName(w.worker_name)} spawned`, "info");
-        } else if (payload.eventType === "UPDATE") {
-          const w = payload.new as SwarmWorker;
-          setSwarmWorkers((prev) => prev.map((existing) => existing.id === w.id ? w : existing));
-          if (w.status === "dead") {
-            addEvent(`Worker ${workerDisplayName(w.worker_name)} died`, "warning");
+        startTransition(() => {
+          if (payload.eventType === "INSERT") {
+            const w = payload.new as SwarmWorker;
+            setSwarmWorkers((prev) => [w, ...prev]);
+            addEvent(`Worker ${workerDisplayName(w.worker_name)} spawned`, "info");
+          } else if (payload.eventType === "UPDATE") {
+            const w = payload.new as SwarmWorker;
+            setSwarmWorkers((prev) => prev.map((existing) => existing.id === w.id ? w : existing));
+            if (w.status === "dead") {
+              addEvent(`Worker ${workerDisplayName(w.worker_name)} died`, "warning");
+            }
+          } else if (payload.eventType === "DELETE") {
+            const old = payload.old as { id: string };
+            setSwarmWorkers((prev) => prev.filter((w) => w.id !== old.id));
           }
-        } else if (payload.eventType === "DELETE") {
-          const old = payload.old as { id: string };
-          setSwarmWorkers((prev) => prev.filter((w) => w.id !== old.id));
-        }
+        });
       })
       // swarm_tasks changes
       .on("postgres_changes", { event: "*", schema: "public", table: "swarm_tasks" }, (payload) => {
-        if (payload.eventType === "INSERT") {
-          const t = payload.new as SwarmTask;
-          setSwarmTasks((prev) => [t, ...prev].slice(0, 50));
-          prevTaskStatuses.current[t.id] = t.status;
-        } else if (payload.eventType === "UPDATE") {
-          const t = payload.new as SwarmTask;
-          const prevStatus = prevTaskStatuses.current[t.id];
-          setSwarmTasks((prev) => prev.map((existing) => existing.id === t.id ? t : existing));
+        startTransition(() => {
+          if (payload.eventType === "INSERT") {
+            const t = payload.new as SwarmTask;
+            setSwarmTasks((prev) => [t, ...prev].slice(0, 50));
+            prevTaskStatuses.current[t.id] = t.status;
+          } else if (payload.eventType === "UPDATE") {
+            const t = payload.new as SwarmTask;
+            const prevStatus = prevTaskStatuses.current[t.id];
+            setSwarmTasks((prev) => prev.map((existing) => existing.id === t.id ? t : existing));
 
-          // Detect task completion
-          if (t.status === "completed" && prevStatus !== "completed") {
-            const shortTitle = t.title.length > 50 ? t.title.slice(0, 47) + "..." : t.title;
-            addEvent(`Task completed: ${shortTitle}`, "success");
-            setCompletedTaskIds((prev) => {
-              const next = new Set(prev);
-              next.add(t.id);
-              // Auto-clear after 3 seconds (for particle burst timing)
-              setTimeout(() => {
-                setCompletedTaskIds((p) => {
-                  const n = new Set(p);
-                  n.delete(t.id);
-                  return n;
-                });
-              }, 3000);
-              return next;
-            });
-          } else if (t.status === "failed" && prevStatus !== "failed") {
-            const shortTitle = t.title.length > 50 ? t.title.slice(0, 47) + "..." : t.title;
-            addEvent(`Task failed: ${shortTitle}`, "error");
-          } else if (t.status === "in_progress" && prevStatus !== "in_progress") {
-            const shortTitle = t.title.length > 40 ? t.title.slice(0, 37) + "..." : t.title;
-            addEvent(`Task started: ${shortTitle}`, "info");
+            // Detect task completion
+            if (t.status === "completed" && prevStatus !== "completed") {
+              const shortTitle = t.title.length > 50 ? t.title.slice(0, 47) + "..." : t.title;
+              addEvent(`Task completed: ${shortTitle}`, "success");
+              setCompletedTaskIds((prev) => {
+                const next = new Set(prev);
+                next.add(t.id);
+                // Auto-clear after 3 seconds (for particle burst timing)
+                setTimeout(() => {
+                  setCompletedTaskIds((p) => {
+                    const n = new Set(p);
+                    n.delete(t.id);
+                    return n;
+                  });
+                }, 3000);
+                return next;
+              });
+            } else if (t.status === "failed" && prevStatus !== "failed") {
+              const shortTitle = t.title.length > 50 ? t.title.slice(0, 47) + "..." : t.title;
+              addEvent(`Task failed: ${shortTitle}`, "error");
+            } else if (t.status === "in_progress" && prevStatus !== "in_progress") {
+              const shortTitle = t.title.length > 40 ? t.title.slice(0, 37) + "..." : t.title;
+              addEvent(`Task started: ${shortTitle}`, "info");
+            }
+
+            prevTaskStatuses.current[t.id] = t.status;
           }
-
-          prevTaskStatuses.current[t.id] = t.status;
-        }
+        });
       })
       // swarm_budgets changes
       .on("postgres_changes", { event: "*", schema: "public", table: "swarm_budgets" }, (payload) => {
-        if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
-          setBudget(payload.new as SwarmBudget);
-        }
+        startTransition(() => {
+          if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
+            setBudget(payload.new as SwarmBudget);
+          }
+        });
       })
       // agent_activity changes
       .on("postgres_changes", { event: "*", schema: "public", table: "agent_activity" }, (payload) => {
-        if (payload.eventType === "INSERT") {
-          setAgentActivity((prev) => [payload.new as AgentActivityRow, ...prev].slice(0, 20));
-        } else if (payload.eventType === "UPDATE") {
-          const a = payload.new as AgentActivityRow;
-          setAgentActivity((prev) => prev.map((existing) => existing.id === a.id ? a : existing));
-        }
+        startTransition(() => {
+          if (payload.eventType === "INSERT") {
+            setAgentActivity((prev) => [payload.new as AgentActivityRow, ...prev].slice(0, 20));
+          } else if (payload.eventType === "UPDATE") {
+            const a = payload.new as AgentActivityRow;
+            setAgentActivity((prev) => prev.map((existing) => existing.id === a.id ? a : existing));
+          }
+        });
       })
       .subscribe();
 
