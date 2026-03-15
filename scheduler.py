@@ -204,9 +204,70 @@ def seed_defaults():
     print(f"  Seeded {len(defaults)} default schedules")
 
 
+def predict_schedules():
+    """Analyze task history and suggest recurring schedules (Feature 7)."""
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+
+    # Fetch completed tasks from last 30 days
+    tasks = sb_get(f"swarm_tasks?status=eq.completed&created_at=gte.{thirty_days_ago}&select=project,task_type,title,created_at")
+    if not tasks:
+        return 0
+
+    # Group by project+task_type+day_of_week
+    from collections import Counter
+    day_counts = Counter()
+    for t in tasks:
+        try:
+            created = datetime.fromisoformat(t["created_at"].replace("Z", "+00:00"))
+            dow = created.weekday()  # 0=Mon, 6=Sun
+            key = (t.get("project", "?"), t.get("task_type", "?"), dow)
+            day_counts[key] += 1
+        except Exception:
+            pass
+
+    # If a task type runs >3 times on the same day of week, suggest it
+    suggested = 0
+    for (project, task_type, dow), count in day_counts.items():
+        if count < 3:
+            continue
+
+        # Check if we already have this scheduled
+        existing = sb_get(f"nexus_schedules?project=eq.{project}&select=name&source=eq.predicted")
+        if existing and len(existing) > 0:
+            continue
+
+        # Create a draft schedule (disabled)
+        cron_dow = (dow + 1) % 7  # Python 0=Mon → cron 1=Mon
+        schedule = {
+            "name": f"[Predicted] {project}/{task_type}",
+            "goal": f"Run {task_type} task for {project} (predicted from {count} occurrences on this day of week)",
+            "project": project,
+            "worker_type": task_type if task_type in ("scout", "inspector", "builder", "deployer") else "scout",
+            "priority": 50,
+            "cron_expression": f"0 9 * * {cron_dow}",
+            "enabled": False,
+            "source": "predicted",
+        }
+
+        data = json.dumps(schedule).encode()
+        req = urllib.request.Request(f"{SB_URL}/rest/v1/nexus_schedules",
+            data, headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=10)
+            print(f"  PREDICTED: {project}/{task_type} on day {dow} ({count} occurrences)")
+            suggested += 1
+        except Exception:
+            pass
+
+    return suggested
+
+
 def main():
     print("  ========================================")
-    print("      NEXUS SCHEDULER")
+    print("      NEXUS SCHEDULER v2")
     print("  ========================================\n")
 
     seed_defaults()
@@ -216,6 +277,7 @@ def main():
     if loop:
         print("  Running in daemon mode (checking every 60s)")
         print("  Press Ctrl+C to stop\n")
+        predict_counter = 0
         try:
             while True:
                 try:
@@ -225,6 +287,15 @@ def main():
                     else:
                         sys.stdout.write(".")
                         sys.stdout.flush()
+
+                    # Run predictive scheduling every ~6 hours (360 cycles * 60s)
+                    predict_counter += 1
+                    if predict_counter >= 360:
+                        suggested = predict_schedules()
+                        if suggested:
+                            print(f"  [{datetime.now().strftime('%H:%M')}] Predicted {suggested} new schedules")
+                        predict_counter = 0
+
                 except Exception as e:
                     print(f"\n  Error: {e}")
                 time.sleep(60)
@@ -232,7 +303,8 @@ def main():
             print("\n\n  Scheduler stopped")
     else:
         ran = check_schedules()
-        print(f"\n  Checked schedules: {ran} tasks spawned")
+        suggested = predict_schedules()
+        print(f"\n  Checked schedules: {ran} tasks spawned, {suggested} predicted")
 
 
 if __name__ == "__main__":
