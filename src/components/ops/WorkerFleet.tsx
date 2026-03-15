@@ -114,7 +114,7 @@ function WorkerCard({
     >
       {/* Header */}
       <div className="flex items-center gap-2 mb-1.5">
-        <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color }} />
+        <span style={{ color }}><Icon className="w-3.5 h-3.5" /></span>
         <span className="text-[11px] font-semibold text-zinc-200 truncate">
           {workerDisplayName(worker.worker_name)}
         </span>
