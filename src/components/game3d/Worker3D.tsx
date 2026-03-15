@@ -11,6 +11,62 @@ import { WORKER_TYPE_CONFIG } from "./constants";
 
 const _tmpV = new THREE.Vector3();
 
+// ---- SHARED DETAIL COMPONENTS -----------------------------------------------
+
+/** Small bolt detail — tiny metallic sphere placed on corners/edges */
+function Bolt({ position }: { position: [number, number, number] }) {
+  return (
+    <mesh position={position}>
+      <sphereGeometry args={[0.015, 4, 4]} />
+      <meshStandardMaterial color="#7a7c88" metalness={0.95} roughness={0.1} />
+    </mesh>
+  );
+}
+
+/** Panel line — thin edge strip for visual detail */
+function PanelLine({
+  position,
+  args,
+  rotation,
+}: {
+  position: [number, number, number];
+  args: [number, number, number];
+  rotation?: [number, number, number];
+}) {
+  return (
+    <mesh position={position} rotation={rotation || [0, 0, 0]}>
+      <boxGeometry args={args} />
+      <meshStandardMaterial color="#0a0b14" metalness={0.6} roughness={0.5} />
+    </mesh>
+  );
+}
+
+/** Exhaust vent — small cylinder on back of workers */
+function ExhaustVent({
+  position,
+  color = "#3a3c48",
+}: {
+  position: [number, number, number];
+  color?: string;
+}) {
+  return (
+    <mesh position={position}>
+      <cylinderGeometry args={[0.025, 0.03, 0.06, 6]} />
+      <meshStandardMaterial color={color} metalness={0.8} roughness={0.3} />
+    </mesh>
+  );
+}
+
+/** Joint sphere — shiny metallic sphere at articulation points */
+function JointSphere({ position, size = 0.03 }: { position: [number, number, number]; size?: number }) {
+  return (
+    <mesh position={position}>
+      <sphereGeometry args={[size, 6, 6]} />
+      <meshStandardMaterial color="#8a8c98" metalness={0.95} roughness={0.1} />
+    </mesh>
+  );
+}
+
 // ---- BUILDER (Forge) — Welding Mech ----------------------------------------
 
 function BuilderModel({ status, t, color }: { status: string; t: number; color: string }) {
@@ -20,8 +76,15 @@ function BuilderModel({ status, t, color }: { status: string; t: number; color: 
   const hoverRef = useRef<THREE.Mesh>(null);
   const sparkGroupRef = useRef<THREE.Group>(null);
   const visorRef = useRef<THREE.MeshStandardMaterial>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    // Breathing animation for all states
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2.5) * 0.015;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
+
     if (status === "working") {
       if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(t * 6) * 0.8;
       if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(t * 6 + Math.PI) * 0.3;
@@ -30,20 +93,20 @@ function BuilderModel({ status, t, color }: { status: string; t: number; color: 
         sparkGroupRef.current.visible = true;
         sparkGroupRef.current.children.forEach((child, i) => {
           const mesh = child as THREE.Mesh;
-          const st = (t * 10 + i * 1.5) % 1.0;
-          const angle = st * Math.PI * 4 + i * 2.1;
+          const st = (t * 12 + i * 0.9) % 1.0;
+          const angle = st * Math.PI * 5 + i * 1.8;
           mesh.position.set(
-            0.25 + Math.cos(angle) * 0.1,
-            -0.15 + st * 0.3,
-            Math.sin(angle) * 0.1
+            0.25 + Math.cos(angle) * 0.15,
+            -0.15 + st * 0.4,
+            Math.sin(angle) * 0.15
           );
-          const s = st < 0.5 ? 0.025 : 0.025 * (1 - (st - 0.5) * 2);
+          const s = st < 0.5 ? 0.035 : 0.035 * (1 - (st - 0.5) * 2);
           mesh.scale.setScalar(Math.max(0.001, s));
           const mat = mesh.material as THREE.MeshStandardMaterial;
           if (mat) mat.opacity = st < 0.7 ? 1.0 : (1 - st) * 3.3;
         });
       }
-      if (visorRef.current) visorRef.current.emissiveIntensity = 2.0 + Math.sin(t * 8) * 0.5;
+      if (visorRef.current) visorRef.current.emissiveIntensity = 2.5 + Math.sin(t * 8) * 1.0;
     } else {
       if (rightArmRef.current) rightArmRef.current.rotation.x = 0;
       if (leftArmRef.current) leftArmRef.current.rotation.x = 0;
@@ -57,7 +120,6 @@ function BuilderModel({ status, t, color }: { status: string; t: number; color: 
         const mat = hoverRef.current.material as THREE.MeshStandardMaterial;
         if (mat) mat.emissiveIntensity = 2.0;
       }
-      // Leg animation
       if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(t * 8) * 0.4;
       if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(t * 8 + Math.PI) * 0.4;
     } else if (status === "idle") {
@@ -70,61 +132,105 @@ function BuilderModel({ status, t, color }: { status: string; t: number; color: 
   });
 
   return (
-    <group>
-      {/* Body / torso */}
+    <group ref={breatheRef}>
+      {/* Body / torso — main color */}
       <mesh ref={bodyRef} position={[0, 0.1, 0]} castShadow>
         <boxGeometry args={[0.3, 0.35, 0.25]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} metalness={0.7} roughness={0.3} />
       </mesh>
+      {/* Chest plate accent (darker shade) */}
+      <mesh position={[0, 0.12, 0.126]}>
+        <boxGeometry args={[0.22, 0.18, 0.005]} />
+        <meshStandardMaterial color="#1a1c28" metalness={0.8} roughness={0.2} />
+      </mesh>
+      {/* Panel lines on body */}
+      <PanelLine position={[0, 0.0, 0.127]} args={[0.28, 0.005, 0.005]} />
+      <PanelLine position={[0, 0.2, 0.127]} args={[0.28, 0.005, 0.005]} />
+      {/* Corner bolts on body */}
+      <Bolt position={[0.14, 0.26, 0.13]} />
+      <Bolt position={[-0.14, 0.26, 0.13]} />
+      <Bolt position={[0.14, -0.04, 0.13]} />
+      <Bolt position={[-0.14, -0.04, 0.13]} />
       {/* Head */}
       <mesh position={[0, 0.38, 0]}>
-        <boxGeometry args={[0.2, 0.15, 0.2]} />
+        <boxGeometry args={[0.22, 0.16, 0.22]} />
         <meshStandardMaterial color="#2a2c38" metalness={0.8} roughness={0.2} />
       </mesh>
-      {/* Visor */}
-      <mesh position={[0, 0.37, 0.11]}>
-        <boxGeometry args={[0.16, 0.04, 0.02]} />
+      {/* Visor — glows when working */}
+      <mesh position={[0, 0.37, 0.12]}>
+        <boxGeometry args={[0.18, 0.05, 0.02]} />
         <meshStandardMaterial ref={visorRef} color={color} emissive={color} emissiveIntensity={1.5} toneMapped={false} />
       </mesh>
-      {/* Right arm (welding arm) */}
+      {/* Head bolts */}
+      <Bolt position={[0.1, 0.44, 0.12]} />
+      <Bolt position={[-0.1, 0.44, 0.12]} />
+      {/* Tool belt (torus around waist) */}
+      <mesh position={[0, -0.04, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.18, 0.02, 6, 12]} />
+        <meshStandardMaterial color="#4a3c28" metalness={0.6} roughness={0.5} />
+      </mesh>
+      {/* Right arm (welding arm) — with shoulder joint */}
+      <JointSphere position={[0.19, 0.2, 0]} size={0.04} />
       <group ref={rightArmRef} position={[0.22, 0.15, 0]}>
         <mesh position={[0, -0.12, 0]}>
-          <cylinderGeometry args={[0.035, 0.035, 0.25, 6]} />
+          <cylinderGeometry args={[0.04, 0.035, 0.25, 6]} />
           <meshStandardMaterial color="#4a4c58" metalness={0.8} roughness={0.3} />
         </mesh>
+        {/* Elbow joint */}
+        <JointSphere position={[0, -0.25, 0]} size={0.03} />
         {/* Welding torch tip */}
-        <mesh position={[0, -0.28, 0]} rotation={[Math.PI, 0, 0]}>
-          <coneGeometry args={[0.03, 0.08, 6]} />
+        <mesh position={[0, -0.3, 0]} rotation={[Math.PI, 0, 0]}>
+          <coneGeometry args={[0.04, 0.1, 6]} />
           <meshStandardMaterial color="#fbbf24" emissive="#ff6600" emissiveIntensity={2} toneMapped={false} />
         </mesh>
       </group>
-      {/* Left arm */}
+      {/* Left arm — with shoulder joint */}
+      <JointSphere position={[-0.19, 0.2, 0]} size={0.04} />
       <group ref={leftArmRef} position={[-0.22, 0.15, 0]}>
         <mesh position={[0, -0.12, 0]}>
-          <cylinderGeometry args={[0.035, 0.035, 0.25, 6]} />
+          <cylinderGeometry args={[0.04, 0.035, 0.25, 6]} />
           <meshStandardMaterial color="#4a4c58" metalness={0.8} roughness={0.3} />
         </mesh>
+        <JointSphere position={[0, -0.25, 0]} size={0.03} />
       </group>
       {/* Legs */}
       <mesh position={[0.08, -0.18, 0]}>
-        <boxGeometry args={[0.06, 0.2, 0.06]} />
+        <boxGeometry args={[0.07, 0.22, 0.07]} />
         <meshStandardMaterial color="#3a3c48" metalness={0.7} roughness={0.3} />
       </mesh>
       <mesh position={[-0.08, -0.18, 0]}>
-        <boxGeometry args={[0.06, 0.2, 0.06]} />
+        <boxGeometry args={[0.07, 0.22, 0.07]} />
         <meshStandardMaterial color="#3a3c48" metalness={0.7} roughness={0.3} />
+      </mesh>
+      {/* Knee joints */}
+      <JointSphere position={[0.08, -0.12, 0.04]} size={0.025} />
+      <JointSphere position={[-0.08, -0.12, 0.04]} size={0.025} />
+      {/* Exhaust vents on back */}
+      <ExhaustVent position={[0.08, 0.2, -0.14]} />
+      <ExhaustVent position={[-0.08, 0.2, -0.14]} />
+      {/* Engine port on back — emissive */}
+      <mesh position={[0, 0.08, -0.13]}>
+        <boxGeometry args={[0.1, 0.08, 0.02]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.0} toneMapped={false} />
       </mesh>
       {/* Hover pad */}
       <mesh ref={hoverRef} position={[0, -0.32, 0]}>
-        <cylinderGeometry args={[0.18, 0.18, 0.04, 8]} />
+        <cylinderGeometry args={[0.2, 0.2, 0.05, 8]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.0} toneMapped={false} />
       </mesh>
-      {/* Welding sparks */}
+      {/* Welding sparks — BIGGER and MORE (10 particles) */}
       <group ref={sparkGroupRef} visible={false}>
-        {[0, 1, 2, 3, 4].map((i) => (
+        {Array.from({ length: 10 }).map((_, i) => (
           <mesh key={`bs-${i}`}>
             <sphereGeometry args={[1, 4, 4]} />
-            <meshStandardMaterial color="#fbbf24" emissive="#ff8800" emissiveIntensity={4} transparent opacity={0.9} toneMapped={false} />
+            <meshStandardMaterial
+              color={i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#fbbf24" : "#ff6600"}
+              emissive={i % 2 === 0 ? "#ff8800" : "#ffcc00"}
+              emissiveIntensity={5}
+              transparent
+              opacity={0.9}
+              toneMapped={false}
+            />
           </mesh>
         ))}
       </group>
@@ -139,20 +245,33 @@ function InspectorModel({ status, t, color }: { status: string; t: number; color
   const scannerRef = useRef<THREE.Mesh>(null);
   const bodyRef = useRef<THREE.Mesh>(null);
   const scanBeamRef = useRef<THREE.Mesh>(null);
+  const radarRef = useRef<THREE.Group>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    // Breathing
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2) * 0.012;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
+
     if (status === "working") {
       if (sensorRingRef.current) sensorRingRef.current.rotation.y = t * 5;
       if (bodyRef.current) bodyRef.current.rotation.y = t * 0.5;
       if (scanBeamRef.current) {
         scanBeamRef.current.visible = true;
+        // Sweep scan beam back and forth
+        scanBeamRef.current.rotation.z = Math.sin(t * 3) * 0.4;
         const mat = scanBeamRef.current.material as THREE.MeshStandardMaterial;
-        if (mat) mat.opacity = 0.4 + Math.sin(t * 6) * 0.3;
+        if (mat) mat.opacity = 0.5 + Math.sin(t * 6) * 0.3;
       }
+      // Radar dish spin
+      if (radarRef.current) radarRef.current.rotation.y = t * 8;
     } else {
       if (sensorRingRef.current) sensorRingRef.current.rotation.y = t * 0.3;
       if (bodyRef.current) bodyRef.current.rotation.y = t * 0.15;
       if (scanBeamRef.current) scanBeamRef.current.visible = false;
+      if (radarRef.current) radarRef.current.rotation.y = t * 1;
     }
     if (status === "moving" && bodyRef.current) {
       bodyRef.current.rotation.z = Math.sin(t * 3) * 0.15;
@@ -160,32 +279,74 @@ function InspectorModel({ status, t, color }: { status: string; t: number; color
   });
 
   return (
-    <group>
+    <group ref={breatheRef}>
       {/* Body — flat diamond */}
       <mesh ref={bodyRef} castShadow>
         <octahedronGeometry args={[0.25]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} metalness={0.6} roughness={0.3} />
       </mesh>
+      {/* Panel details on body */}
+      <Bolt position={[0.12, 0.12, 0.12]} />
+      <Bolt position={[-0.12, 0.12, 0.12]} />
+      <Bolt position={[0.12, -0.12, 0.12]} />
+      <Bolt position={[-0.12, -0.12, 0.12]} />
       {/* Scanner housing underneath */}
       <mesh ref={scannerRef} position={[0, -0.2, 0]}>
-        <cylinderGeometry args={[0.06, 0.04, 0.15, 6]} />
+        <cylinderGeometry args={[0.07, 0.04, 0.18, 6]} />
         <meshStandardMaterial color="#4a4c58" metalness={0.8} roughness={0.2} />
+      </mesh>
+      {/* Scanner lens (emissive) */}
+      <mesh position={[0, -0.3, 0]}>
+        <sphereGeometry args={[0.035, 6, 6]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2.0} toneMapped={false} />
       </mesh>
       {/* Antenna spike on top */}
       <mesh position={[0, 0.3, 0]}>
-        <cylinderGeometry args={[0.01, 0.02, 0.12, 4]} />
+        <cylinderGeometry args={[0.01, 0.02, 0.15, 4]} />
         <meshStandardMaterial color="#e2e8f0" emissive={color} emissiveIntensity={0.5} />
       </mesh>
+      {/* Rotating radar dish */}
+      <group ref={radarRef} position={[0, 0.35, 0]}>
+        <mesh rotation={[0.3, 0, 0]}>
+          <circleGeometry args={[0.06, 6]} />
+          <meshStandardMaterial
+            color="#e2e8f0"
+            emissive={color}
+            emissiveIntensity={0.8}
+            metalness={0.7}
+            roughness={0.2}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
+        </mesh>
+        {/* Radar arm */}
+        <mesh position={[0, -0.04, 0.03]} rotation={[0.3, 0, 0]}>
+          <cylinderGeometry args={[0.005, 0.005, 0.08, 4]} />
+          <meshStandardMaterial color="#8a8c98" metalness={0.9} roughness={0.1} />
+        </mesh>
+      </group>
       {/* Sensor ring */}
       <mesh ref={sensorRingRef} position={[0, 0, 0]}>
-        <torusGeometry args={[0.32, 0.015, 6, 16]} />
+        <torusGeometry args={[0.32, 0.018, 6, 16]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} transparent opacity={0.7} toneMapped={false} />
       </mesh>
-      {/* Scanner beam */}
+      {/* Scanner beam — visible cone of light */}
       <mesh ref={scanBeamRef} position={[0, -0.55, 0]} visible={false}>
-        <cylinderGeometry args={[0.02, 0.08, 0.6, 6]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} transparent opacity={0.4} toneMapped={false} />
+        <coneGeometry args={[0.2, 0.7, 8, 1, true]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={2}
+          transparent
+          opacity={0.15}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
       </mesh>
+      {/* Exhaust vents */}
+      <ExhaustVent position={[0.15, 0, -0.15]} />
+      <ExhaustVent position={[-0.15, 0, -0.15]} />
     </group>
   );
 }
@@ -193,35 +354,46 @@ function InspectorModel({ status, t, color }: { status: string; t: number; color
 // ---- MINER (Digger) — Drill Rig --------------------------------------------
 
 function MinerModel({ status, t, color }: { status: string; t: number; color: string }) {
-  const drillRef = useRef<THREE.Mesh>(null);
+  const drillRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
   const scoopRef = useRef<THREE.Mesh>(null);
   const debrisRef = useRef<THREE.Group>(null);
   const treadLeftRef = useRef<THREE.Mesh>(null);
   const treadRightRef = useRef<THREE.Mesh>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    // Breathing
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2.2) * 0.01;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
+
     if (status === "working") {
       if (drillRef.current) drillRef.current.rotation.y = t * 15;
       if (bodyRef.current) {
-        bodyRef.current.position.x = Math.sin(t * 20) * 0.01;
-        bodyRef.current.position.z = Math.cos(t * 25) * 0.01;
+        bodyRef.current.position.x = Math.sin(t * 20) * 0.015;
+        bodyRef.current.position.z = Math.cos(t * 25) * 0.015;
       }
       if (scoopRef.current) scoopRef.current.rotation.x = Math.sin(t * 3) * 0.3 - 0.2;
       if (debrisRef.current) {
         debrisRef.current.visible = true;
         debrisRef.current.children.forEach((child, i) => {
           const mesh = child as THREE.Mesh;
-          const dt = (t * 5 + i * 1.3) % 1.5;
+          const dt = (t * 6 + i * 1.1) % 1.5;
           mesh.position.set(
-            Math.sin(i * 2.3) * 0.15,
-            dt * 0.5,
-            Math.cos(i * 2.3) * 0.15 + 0.15
+            Math.sin(i * 2.3) * 0.18,
+            dt * 0.55,
+            Math.cos(i * 2.3) * 0.18 + 0.15
           );
-          const s = dt < 0.8 ? 0.02 : 0.02 * (1 - (dt - 0.8) / 0.7);
+          // Different sized chunks
+          const baseSize = i % 3 === 0 ? 0.03 : i % 3 === 1 ? 0.02 : 0.015;
+          const s = dt < 0.8 ? baseSize : baseSize * (1 - (dt - 0.8) / 0.7);
           mesh.scale.setScalar(Math.max(0.001, s));
+          mesh.rotation.x = t * 5 + i;
+          mesh.rotation.z = t * 3 + i * 2;
           const mat = mesh.material as THREE.MeshStandardMaterial;
-          if (mat) mat.opacity = dt < 1.0 ? 0.8 : Math.max(0, (1.5 - dt) * 1.6);
+          if (mat) mat.opacity = dt < 1.0 ? 0.85 : Math.max(0, (1.5 - dt) * 1.6);
         });
       }
     } else {
@@ -239,45 +411,110 @@ function MinerModel({ status, t, color }: { status: string; t: number; color: st
   });
 
   return (
-    <group>
+    <group ref={breatheRef}>
       <group ref={bodyRef}>
         {/* Main housing */}
         <mesh position={[0, 0.1, 0]} castShadow>
-          <cylinderGeometry args={[0.18, 0.2, 0.3, 8]} />
+          <cylinderGeometry args={[0.2, 0.22, 0.32, 8]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} metalness={0.7} roughness={0.3} />
         </mesh>
-        {/* Drill */}
-        <mesh ref={drillRef} position={[0.12, -0.1, 0.12]} rotation={[0.3, 0, 0.3]}>
-          <coneGeometry args={[0.08, 0.25, 6]} />
-          <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.1} emissive="#aaaaaa" emissiveIntensity={0.3} />
+        {/* Top cap (darker accent) */}
+        <mesh position={[0, 0.27, 0]}>
+          <cylinderGeometry args={[0.18, 0.2, 0.04, 8]} />
+          <meshStandardMaterial color="#2a2c38" metalness={0.8} roughness={0.2} />
         </mesh>
+        {/* Panel lines */}
+        <PanelLine position={[0.21, 0.1, 0]} args={[0.005, 0.28, 0.005]} />
+        <PanelLine position={[-0.21, 0.1, 0]} args={[0.005, 0.28, 0.005]} />
+        {/* Bolts */}
+        <Bolt position={[0.18, 0.22, 0.1]} />
+        <Bolt position={[-0.18, 0.22, 0.1]} />
+        <Bolt position={[0.18, 0.22, -0.1]} />
+        <Bolt position={[-0.18, 0.22, -0.1]} />
+        {/* Drill — multi-cone spiral effect */}
+        <group ref={drillRef} position={[0.14, -0.1, 0.14]} rotation={[0.3, 0, 0.3]}>
+          {/* Main drill cone */}
+          <mesh>
+            <coneGeometry args={[0.09, 0.28, 6]} />
+            <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.1} emissive="#aaaaaa" emissiveIntensity={0.3} />
+          </mesh>
+          {/* Spiral grooves (smaller cones offset around the drill) */}
+          {[0, 1, 2].map((i) => (
+            <mesh key={`groove-${i}`} position={[Math.cos(i * 2.1) * 0.04, -0.05 + i * 0.06, Math.sin(i * 2.1) * 0.04]}>
+              <coneGeometry args={[0.025, 0.08, 4]} />
+              <meshStandardMaterial color="#ccccdd" metalness={0.9} roughness={0.15} />
+            </mesh>
+          ))}
+          {/* Drill tip — emissive */}
+          <mesh position={[0, -0.15, 0]}>
+            <sphereGeometry args={[0.02, 4, 4]} />
+            <meshStandardMaterial color="#ffffff" emissive={color} emissiveIntensity={2} toneMapped={false} />
+          </mesh>
+        </group>
         {/* Treads */}
-        <mesh ref={treadLeftRef} position={[-0.15, -0.12, 0]}>
-          <boxGeometry args={[0.06, 0.08, 0.35]} />
+        <mesh ref={treadLeftRef} position={[-0.17, -0.12, 0]}>
+          <boxGeometry args={[0.07, 0.1, 0.38]} />
           <meshStandardMaterial color="#2a2c38" metalness={0.8} roughness={0.4} />
         </mesh>
-        <mesh ref={treadRightRef} position={[0.15, -0.12, 0]}>
-          <boxGeometry args={[0.06, 0.08, 0.35]} />
+        <mesh ref={treadRightRef} position={[0.17, -0.12, 0]}>
+          <boxGeometry args={[0.07, 0.1, 0.38]} />
           <meshStandardMaterial color="#2a2c38" metalness={0.8} roughness={0.4} />
         </mesh>
+        {/* Tread detail — roller bumps */}
+        {[-0.15, -0.05, 0.05, 0.15].map((z, i) => (
+          <group key={`tread-detail-${i}`}>
+            <mesh position={[-0.17, -0.12, z]}>
+              <boxGeometry args={[0.075, 0.02, 0.04]} />
+              <meshStandardMaterial color="#1a1c28" metalness={0.9} roughness={0.3} />
+            </mesh>
+            <mesh position={[0.17, -0.12, z]}>
+              <boxGeometry args={[0.075, 0.02, 0.04]} />
+              <meshStandardMaterial color="#1a1c28" metalness={0.9} roughness={0.3} />
+            </mesh>
+          </group>
+        ))}
         {/* Scoop */}
-        <mesh ref={scoopRef} position={[0, -0.05, 0.22]}>
-          <boxGeometry args={[0.2, 0.02, 0.1]} />
+        <mesh ref={scoopRef} position={[0, -0.05, 0.24]}>
+          <boxGeometry args={[0.22, 0.03, 0.12]} />
           <meshStandardMaterial color="#4a4c58" metalness={0.8} roughness={0.3} />
         </mesh>
-        {/* Top exhaust */}
-        <mesh position={[-0.08, 0.3, 0]}>
-          <cylinderGeometry args={[0.03, 0.04, 0.1, 6]} />
+        {/* Exhaust pipes on back — twin stacks */}
+        <mesh position={[-0.08, 0.32, -0.08]}>
+          <cylinderGeometry args={[0.03, 0.04, 0.14, 6]} />
           <meshStandardMaterial color="#3a3c48" metalness={0.7} roughness={0.4} />
         </mesh>
+        <mesh position={[0.08, 0.34, -0.08]}>
+          <cylinderGeometry args={[0.025, 0.035, 0.16, 6]} />
+          <meshStandardMaterial color="#3a3c48" metalness={0.7} roughness={0.4} />
+        </mesh>
+        {/* Exhaust caps */}
+        <mesh position={[-0.08, 0.4, -0.08]}>
+          <cylinderGeometry args={[0.035, 0.03, 0.02, 6]} />
+          <meshStandardMaterial color="#555566" metalness={0.8} roughness={0.3} />
+        </mesh>
+        <mesh position={[0.08, 0.43, -0.08]}>
+          <cylinderGeometry args={[0.03, 0.025, 0.02, 6]} />
+          <meshStandardMaterial color="#555566" metalness={0.8} roughness={0.3} />
+        </mesh>
+        {/* Engine port (back, emissive) */}
+        <mesh position={[0, 0.05, -0.23]}>
+          <boxGeometry args={[0.12, 0.1, 0.02]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} toneMapped={false} />
+        </mesh>
       </group>
-      {/* Debris particles */}
+      {/* Debris particles — mixed sizes */}
       <group ref={debrisRef} visible={false}>
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+        {Array.from({ length: 8 }).map((_, i) => (
           <mesh key={`db-${i}`}>
-            <sphereGeometry args={[1, 4, 4]} />
+            {i % 3 === 0 ? (
+              <boxGeometry args={[1, 0.7, 1]} />
+            ) : i % 3 === 1 ? (
+              <tetrahedronGeometry args={[1]} />
+            ) : (
+              <sphereGeometry args={[1, 4, 4]} />
+            )}
             <meshStandardMaterial
-              color={i % 2 === 0 ? "#8B7355" : "#6b7280"}
+              color={i % 3 === 0 ? "#8B7355" : i % 3 === 1 ? "#6b7280" : "#9a8a6a"}
               emissive={i % 2 === 0 ? "#8B7355" : "#6b7280"}
               emissiveIntensity={0.5}
               transparent
@@ -299,8 +536,14 @@ function ScoutModel({ status, t, color }: { status: string; t: number; color: st
   const rightWingRef = useRef<THREE.Mesh>(null);
   const engineRef = useRef<THREE.Mesh>(null);
   const scanRingsRef = useRef<THREE.Group>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 1.8) * 0.01;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
+
     if (radarRef.current) {
       radarRef.current.rotation.y = status === "working" ? t * 8 : t * 1.5;
     }
@@ -339,26 +582,40 @@ function ScoutModel({ status, t, color }: { status: string; t: number; color: st
   });
 
   return (
-    <group>
+    <group ref={breatheRef}>
       <group ref={bodyRef}>
         {/* Stealth body — flat cone */}
         <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
           <coneGeometry args={[0.15, 0.4, 3]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} metalness={0.8} roughness={0.2} />
         </mesh>
+        {/* Body panel lines */}
+        <Bolt position={[0, 0.08, -0.1]} />
+        <Bolt position={[0.08, -0.05, 0.05]} />
+        <Bolt position={[-0.08, -0.05, 0.05]} />
         {/* Left wing */}
         <mesh ref={leftWingRef} position={[-0.2, 0, 0]} rotation={[0, 0, -0.05]}>
           <boxGeometry args={[0.25, 0.015, 0.2]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} metalness={0.7} roughness={0.3} />
+        </mesh>
+        {/* Wing tip light (left) */}
+        <mesh position={[-0.33, 0, 0]}>
+          <sphereGeometry args={[0.015, 4, 4]} />
+          <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} toneMapped={false} />
         </mesh>
         {/* Right wing */}
         <mesh ref={rightWingRef} position={[0.2, 0, 0]} rotation={[0, 0, 0.05]}>
           <boxGeometry args={[0.25, 0.015, 0.2]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} metalness={0.7} roughness={0.3} />
         </mesh>
+        {/* Wing tip light (right) */}
+        <mesh position={[0.33, 0, 0]}>
+          <sphereGeometry args={[0.015, 4, 4]} />
+          <meshStandardMaterial color="#00ff00" emissive="#00ff00" emissiveIntensity={2} toneMapped={false} />
+        </mesh>
         {/* Radar dome on top */}
         <mesh ref={radarRef} position={[0, 0.1, 0]}>
-          <sphereGeometry args={[0.06, 8, 8]} />
+          <sphereGeometry args={[0.07, 8, 8]} />
           <meshStandardMaterial color="#e2e8f0" emissive={color} emissiveIntensity={1} toneMapped={false} />
         </mesh>
         {/* Engine at rear */}
@@ -366,6 +623,9 @@ function ScoutModel({ status, t, color }: { status: string; t: number; color: st
           <cylinderGeometry args={[0.05, 0.04, 0.08, 6]} />
           <meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={1.5} toneMapped={false} />
         </mesh>
+        {/* Exhaust vents */}
+        <ExhaustVent position={[0.06, -0.03, 0.18]} />
+        <ExhaustVent position={[-0.06, -0.03, 0.18]} />
       </group>
       {/* Scan rings (working only) */}
       <group ref={scanRingsRef} visible={false} position={[0, -0.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -388,8 +648,14 @@ function DeployerModel({ status, t, color }: { status: string; t: number; color:
   const payloadRef = useRef<THREE.Mesh>(null);
   const exhaustRef = useRef<THREE.Group>(null);
   const steamRef = useRef<THREE.Group>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2.3) * 0.01;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
+
     if (status === "working") {
       if (bodyRef.current) {
         bodyRef.current.position.x = Math.sin(t * 18) * 0.008;
@@ -448,7 +714,7 @@ function DeployerModel({ status, t, color }: { status: string; t: number; color:
       }
     }
     if (status === "moving" && bodyRef.current) {
-      bodyRef.current.rotation.x = Math.PI / 2; // Horizontal flight
+      bodyRef.current.rotation.x = Math.PI / 2;
       if (nozzleRef.current) {
         const mat = nozzleRef.current.material as THREE.MeshStandardMaterial;
         if (mat) mat.emissiveIntensity = 2.5;
@@ -475,13 +741,18 @@ function DeployerModel({ status, t, color }: { status: string; t: number; color:
   });
 
   return (
-    <group>
+    <group ref={breatheRef}>
       <group ref={bodyRef}>
         {/* Rocket body */}
         <mesh castShadow>
           <cylinderGeometry args={[0.1, 0.14, 0.5, 8]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} metalness={0.7} roughness={0.3} />
         </mesh>
+        {/* Body panel detail */}
+        <Bolt position={[0.1, 0.15, 0.05]} />
+        <Bolt position={[-0.1, 0.15, 0.05]} />
+        <Bolt position={[0.1, -0.1, 0.05]} />
+        <Bolt position={[-0.1, -0.1, 0.05]} />
         {/* Nose cone */}
         <mesh position={[0, 0.3, 0]}>
           <coneGeometry args={[0.1, 0.15, 8]} />
@@ -504,15 +775,20 @@ function DeployerModel({ status, t, color }: { status: string; t: number; color:
           <torusGeometry args={[0.08, 0.025, 6, 12]} />
           <meshStandardMaterial color="#ff4400" emissive="#ff4400" emissiveIntensity={0.5} toneMapped={false} />
         </mesh>
+        {/* Engine port */}
+        <mesh position={[0, -0.08, 0.14]}>
+          <boxGeometry args={[0.06, 0.06, 0.01]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} toneMapped={false} />
+        </mesh>
         {/* Exhaust particles */}
         <group ref={exhaustRef} visible={false}>
-          {[0, 1, 2, 3, 4, 5].map((i) => (
+          {Array.from({ length: 8 }).map((_, i) => (
             <mesh key={`ex-${i}`}>
               <sphereGeometry args={[1, 4, 4]} />
               <meshStandardMaterial
-                color={i % 2 === 0 ? "#ff6600" : "#ff2200"}
-                emissive={i % 2 === 0 ? "#ff6600" : "#ff2200"}
-                emissiveIntensity={3}
+                color={i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#ff6600" : "#ff2200"}
+                emissive={i % 3 === 0 ? "#ffcc00" : i % 3 === 1 ? "#ff6600" : "#ff2200"}
+                emissiveIntensity={4}
                 transparent
                 opacity={0.8}
                 toneMapped={false}
@@ -541,12 +817,17 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
   const signalRingsRef = useRef<THREE.Group>(null);
   const antennaTipsRef = useRef<(THREE.MeshStandardMaterial | null)[]>([]);
   const arcRef = useRef<THREE.Group>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2.5) * 0.015;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
+
     if (coreRef.current) {
       const mat = coreRef.current.material as THREE.MeshStandardMaterial;
       if (status === "working") {
-        // Color shifting
         const hue = (t * 0.1) % 1;
         mat.emissive.setHSL(hue, 0.8, 0.5);
         mat.emissiveIntensity = 1.5 + Math.sin(t * 4) * 0.5;
@@ -555,7 +836,6 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
         mat.emissiveIntensity = status === "idle" ? 0.5 + Math.sin(t * 1.5) * 0.2 : 0.8;
       }
     }
-    // Signal rings
     if (signalRingsRef.current) {
       if (status === "working") {
         signalRingsRef.current.visible = true;
@@ -579,7 +859,6 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
         signalRingsRef.current.visible = false;
       }
     }
-    // Antenna tip blinking
     antennaTipsRef.current.forEach((mat, i) => {
       if (!mat) return;
       if (status === "working") {
@@ -588,7 +867,6 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
         mat.emissiveIntensity = 0.8;
       }
     });
-    // Lightning arcs
     if (arcRef.current) {
       arcRef.current.visible = status === "working";
       if (status === "working") {
@@ -603,12 +881,16 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
   const antennaAngles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
 
   return (
-    <group>
+    <group ref={breatheRef}>
       {/* Crystalline core */}
       <mesh ref={coreRef} castShadow>
         <icosahedronGeometry args={[0.18]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} metalness={0.4} roughness={0.2} toneMapped={false} />
       </mesh>
+      {/* Core bolts */}
+      <Bolt position={[0.1, 0.1, 0.1]} />
+      <Bolt position={[-0.1, 0.1, 0.1]} />
+      <Bolt position={[0, -0.15, 0.1]} />
       {/* Antennae */}
       {antennaAngles.map((angle, i) => {
         const dx = Math.cos(angle) * 0.15;
@@ -617,17 +899,16 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
         const tipDz = Math.sin(angle) * 0.32;
         return (
           <group key={`ant-${i}`}>
-            {/* Antenna rod */}
+            <JointSphere position={[dx, 0.05, dz]} size={0.02} />
             <mesh
               position={[(dx + tipDx) / 2, 0.08, (dz + tipDz) / 2]}
               rotation={[0, 0, Math.PI / 2 - 0.3]}
             >
-              <cylinderGeometry args={[0.008, 0.008, 0.2, 4]} />
+              <cylinderGeometry args={[0.01, 0.01, 0.2, 4]} />
               <meshStandardMaterial color="#e2e8f0" metalness={0.8} roughness={0.2} />
             </mesh>
-            {/* Antenna tip */}
             <mesh position={[tipDx, 0.12, tipDz]}>
-              <sphereGeometry args={[0.025, 6, 6]} />
+              <sphereGeometry args={[0.03, 6, 6]} />
               <meshStandardMaterial
                 ref={(el) => { antennaTipsRef.current[i] = el; }}
                 color={color}
@@ -643,7 +924,7 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
       <group ref={signalRingsRef} visible={false}>
         {[0, 1, 2].map((i) => (
           <mesh key={`sg-${i}`} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.25, 0.008, 6, 20]} />
+            <torusGeometry args={[0.25, 0.01, 6, 20]} />
             <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2} transparent opacity={0.5} toneMapped={false} />
           </mesh>
         ))}
@@ -657,7 +938,7 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
           const midZ = (Math.sin(a1) * 0.32 + Math.sin(a2) * 0.32) / 2;
           return (
             <mesh key={`arc-${i}`} position={[midX, 0.12, midZ]}>
-              <sphereGeometry args={[0.015, 4, 4]} />
+              <sphereGeometry args={[0.02, 4, 4]} />
               <meshStandardMaterial color="#ffffff" emissive="#aaddff" emissiveIntensity={5} toneMapped={false} />
             </mesh>
           );
@@ -672,8 +953,13 @@ function MessengerModel({ status, t, color }: { status: string; t: number; color
 function BrowserModel({ status, t, color }: { status: string; t: number; color: string }) {
   const bodyRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2) * 0.012;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
     if (bodyRef.current) {
       bodyRef.current.rotation.y = t * (status === "working" ? 2 : 0.5);
       bodyRef.current.rotation.x = Math.sin(t * 1.5) * 0.1;
@@ -686,13 +972,20 @@ function BrowserModel({ status, t, color }: { status: string; t: number; color: 
   });
 
   return (
-    <group>
+    <group ref={breatheRef}>
       <mesh ref={bodyRef} castShadow>
         <dodecahedronGeometry args={[0.22]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} metalness={0.6} roughness={0.3} />
       </mesh>
+      {/* Detail bolts */}
+      <Bolt position={[0.15, 0.1, 0.1]} />
+      <Bolt position={[-0.15, 0.1, 0.1]} />
+      <Bolt position={[0, -0.18, 0.1]} />
+      {/* Exhaust vents */}
+      <ExhaustVent position={[0.1, 0, -0.18]} />
+      <ExhaustVent position={[-0.1, 0, -0.18]} />
       <mesh ref={ringRef} visible={false}>
-        <torusGeometry args={[0.35, 0.012, 6, 20]} />
+        <torusGeometry args={[0.35, 0.015, 6, 20]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} transparent opacity={0.6} toneMapped={false} />
       </mesh>
     </group>
@@ -705,53 +998,62 @@ function SupervisorModel({ status, t, color }: { status: string; t: number; colo
   const bodyRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
   const beaconRef = useRef<THREE.Mesh>(null);
+  const breatheRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
+    if (breatheRef.current) {
+      const breathe = 1 + Math.sin(t * 2) * 0.012;
+      breatheRef.current.scale.set(breathe, breathe, breathe);
+    }
     if (bodyRef.current) {
-      // Slow authoritative rotation — the foreman surveys
       bodyRef.current.rotation.y = t * (status === "working" ? 3 : 0.8);
       bodyRef.current.rotation.z = Math.sin(t * 0.7) * 0.1;
     }
     if (ringRef.current) {
-      // Patrol ring always visible, pulses when working
       ringRef.current.rotation.x = Math.PI / 2;
       ringRef.current.rotation.z = t * 1.5;
       const mat = ringRef.current.material as THREE.MeshStandardMaterial;
       if (mat) mat.opacity = status === "working" ? 0.6 + Math.sin(t * 4) * 0.3 : 0.4;
     }
     if (beaconRef.current) {
-      // Amber beacon on top pulses like a warning light
       const mat = beaconRef.current.material as THREE.MeshStandardMaterial;
       if (mat) mat.emissiveIntensity = 1.5 + Math.sin(t * 6) * 1.0;
       beaconRef.current.position.y = 0.32 + Math.sin(t * 2) * 0.02;
     }
   });
 
-  // Create star shape via two intersecting tetrahedra (Star of David / merkaba)
   return (
-    <group>
-      {/* Main body — octahedron stretched into a star-like shape */}
+    <group ref={breatheRef}>
+      {/* Main body */}
       <mesh ref={bodyRef} castShadow>
         <octahedronGeometry args={[0.22]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} metalness={0.7} roughness={0.2} />
       </mesh>
+      {/* Bolts */}
+      <Bolt position={[0.12, 0.12, 0.12]} />
+      <Bolt position={[-0.12, 0.12, 0.12]} />
+      <Bolt position={[0.12, -0.12, 0.12]} />
+      <Bolt position={[-0.12, -0.12, 0.12]} />
       {/* Patrol ring */}
       <mesh ref={ringRef}>
-        <torusGeometry args={[0.35, 0.015, 6, 16]} />
+        <torusGeometry args={[0.35, 0.018, 6, 16]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} transparent opacity={0.5} toneMapped={false} />
       </mesh>
-      {/* Beacon on top — amber warning light */}
+      {/* Beacon on top */}
       <mesh ref={beaconRef} position={[0, 0.32, 0]}>
-        <sphereGeometry args={[0.06, 8, 8]} />
+        <sphereGeometry args={[0.07, 8, 8]} />
         <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={2} toneMapped={false} />
       </mesh>
-      {/* Authority spikes — 4 small cones pointing outward */}
+      {/* Authority spikes */}
       {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((angle, i) => (
         <mesh key={`spike-${i}`} position={[Math.cos(angle) * 0.2, 0, Math.sin(angle) * 0.2]} rotation={[0, 0, angle + Math.PI / 2]}>
-          <coneGeometry args={[0.03, 0.1, 4]} />
+          <coneGeometry args={[0.035, 0.12, 4]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} metalness={0.8} roughness={0.2} />
         </mesh>
       ))}
+      {/* Exhaust vents */}
+      <ExhaustVent position={[0.12, 0, -0.15]} />
+      <ExhaustVent position={[-0.12, 0, -0.15]} />
     </group>
   );
 }
@@ -806,7 +1108,6 @@ function ConstructionEffects({
   });
 
   const scaffoldPositions: [number, number, number][] = [
-    // Vertical bars at corners
     [width / 2 + 0.1, 0, depth / 2 + 0.1],
     [-width / 2 - 0.1, 0, depth / 2 + 0.1],
     [width / 2 + 0.1, 0, -depth / 2 - 0.1],
@@ -815,7 +1116,6 @@ function ConstructionEffects({
 
   return (
     <group position={[building.gridX, height / 2, building.gridY]}>
-      {/* Scaffolding lines */}
       <group ref={scaffoldRef}>
         {scaffoldPositions.map((pos, i) => (
           <mesh key={`scf-${i}`} position={pos}>
@@ -823,7 +1123,6 @@ function ConstructionEffects({
             <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} transparent opacity={0.4} toneMapped={false} />
           </mesh>
         ))}
-        {/* Horizontal bars */}
         <mesh position={[0, height / 2 + 0.15, depth / 2 + 0.1]}>
           <boxGeometry args={[width + 0.2, 0.015, 0.015]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} transparent opacity={0.4} toneMapped={false} />
@@ -846,8 +1145,6 @@ function ConstructionEffects({
 }
 
 // ---- WORK POSITION CALCULATOR -----------------------------------------------
-// Workers stop at a perimeter position OUTSIDE the building, not at the center.
-// Each worker gets a deterministic slot around the building edge based on its index.
 
 function getWorkPosition(
   buildingX: number,
@@ -855,16 +1152,16 @@ function getWorkPosition(
   buildingSize: number,
   workerIndex: number
 ): [number, number, number] {
-  const offset = buildingSize * 0.9; // Just outside the building edge
+  const offset = buildingSize * 0.9;
   const positions: [number, number, number][] = [
-    [buildingX + offset, 0.5, buildingZ],                               // Right side
-    [buildingX - offset, 0.5, buildingZ],                               // Left side
-    [buildingX, 0.5, buildingZ + offset],                               // Front
-    [buildingX, 0.5, buildingZ - offset],                               // Back
-    [buildingX + offset * 0.7, 0.5, buildingZ + offset * 0.7],         // Front-right corner
-    [buildingX - offset * 0.7, 0.5, buildingZ + offset * 0.7],         // Front-left corner
-    [buildingX + offset * 0.7, 0.5, buildingZ - offset * 0.7],         // Back-right corner
-    [buildingX - offset * 0.7, 0.5, buildingZ - offset * 0.7],         // Back-left corner
+    [buildingX + offset, 0.5, buildingZ],
+    [buildingX - offset, 0.5, buildingZ],
+    [buildingX, 0.5, buildingZ + offset],
+    [buildingX, 0.5, buildingZ - offset],
+    [buildingX + offset * 0.7, 0.5, buildingZ + offset * 0.7],
+    [buildingX - offset * 0.7, 0.5, buildingZ + offset * 0.7],
+    [buildingX + offset * 0.7, 0.5, buildingZ - offset * 0.7],
+    [buildingX - offset * 0.7, 0.5, buildingZ - offset * 0.7],
   ];
   return positions[workerIndex % positions.length];
 }
@@ -891,11 +1188,8 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
   const currentBuilding = buildings.find((b) => b.id === worker.currentBuildingId);
   const targetBuilding = buildings.find((b) => b.id === worker.targetBuildingId);
 
-  // Building the worker is actively working at
   const workingBuilding = worker.status === "working" ? (currentBuilding || targetBuilding) : null;
 
-  // Determine this worker's index among all workers at the same building
-  // so multiple workers spread around the perimeter instead of stacking
   const workerIndexAtBuilding = useMemo(() => {
     if (!workingBuilding) return 0;
     const workersAtSameBuilding = allWorkers.filter(
@@ -917,7 +1211,6 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
     return new THREE.Vector3(targetBuilding.gridX, 0.5, targetBuilding.gridY);
   }, [targetBuilding]);
 
-  // Worker height depends on type (scout flies higher)
   const baseY = worker.type === "scout" ? 1.2 : 0.5;
 
   useFrame(({ clock }, delta) => {
@@ -930,7 +1223,6 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
     let targetPos: THREE.Vector3;
 
     if (worker.status === "working" && workingBuilding) {
-      // Stop at a perimeter position outside the building
       const [wx, wy, wz] = getWorkPosition(
         workingBuilding.gridX,
         workingBuilding.gridY,
@@ -940,13 +1232,11 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
       targetPos = _tmpV.set(wx, wy, wz);
       targetPos.y = baseY;
 
-      // Face toward the building center
       facingAngleRef.current = Math.atan2(
         workingBuilding.gridX - wx,
         workingBuilding.gridY - wz
       );
     } else {
-      // Moving or idle — lerp between buildings
       targetPos = _tmpV.lerpVectors(fromPos, toPos, progress);
       targetPos.y = baseY;
     }
@@ -956,12 +1246,9 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
       initialized.current = true;
     }
 
-    // Exponential smoothing — never snap, always glide
-    // At 60fps delta≈0.0167 → smoothFactor≈0.065, silky smooth
     const smoothFactor = 1 - Math.pow(0.001, delta);
     positionRef.current.lerp(targetPos, smoothFactor);
 
-    // Hover bob — smooth sine wave
     const bobSpeed = worker.status === "working" ? 4 : 2;
     const bobAmount = worker.status === "working" ? 0.08 : 0.05;
     const bob = Math.sin(t * bobSpeed + worker.id.charCodeAt(1) * 0.7) * bobAmount;
@@ -972,12 +1259,9 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick }:
       positionRef.current.z
     );
 
-    // When working, face the building; otherwise slow spin
     if (worker.status === "working") {
-      // Smooth rotation toward facing angle
       const currentY = groupRef.current.rotation.y;
       let diff = facingAngleRef.current - currentY;
-      // Normalize to [-PI, PI]
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       groupRef.current.rotation.y += diff * Math.min(1, delta * 5);
