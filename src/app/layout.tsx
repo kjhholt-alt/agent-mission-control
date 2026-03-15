@@ -49,6 +49,9 @@ function GlobalNav() {
         <a href="/templates" className="px-3 py-1 text-[10px] uppercase tracking-wider text-orange-400 hover:text-orange-300 hover:bg-orange-500/10 rounded transition-colors">
           Templates
         </a>
+        <a href="/workflows" className="px-3 py-1 text-[10px] uppercase tracking-wider text-purple-400/60 hover:text-purple-300 hover:bg-purple-500/10 rounded transition-colors">
+          Flows
+        </a>
         <a href="/fusion" className="px-3 py-1 text-[10px] uppercase tracking-wider text-cyan-400/60 hover:text-cyan-300 hover:bg-cyan-500/10 rounded transition-colors">
           Fusion
         </a>
