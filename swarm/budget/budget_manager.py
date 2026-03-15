@@ -1,5 +1,6 @@
 """
-Budget manager: tracks daily API spend and Claude Code usage against limits.
+Budget manager: tracks daily API spend against limits.
+Claude Code (Max plan) is unlimited — only API spend is tracked.
 """
 
 import logging
@@ -29,8 +30,6 @@ class BudgetManager:
         self.sb = create_client(SUPABASE_URL, SUPABASE_KEY)
         self._ensure_today()
 
-    # ── Internal helpers ──────────────────────────────────────────────────
-
     @staticmethod
     def _today_str() -> str:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -38,21 +37,14 @@ class BudgetManager:
     def _ensure_today(self) -> dict[str, Any]:
         """Ensure a budget row exists for today; create if missing."""
         today = self._today_str()
-        resp = (
-            self.sb.table(self.TABLE)
-            .select("*")
-            .eq("budget_date", today)
-            .execute()
-        )
+        resp = self.sb.table(self.TABLE).select("*").eq("budget_date", today).execute()
         if resp.data:
             return resp.data[0]
 
         row = {
             "budget_date": today,
             "api_spent_cents": 0,
-
             "daily_api_budget_cents": BUDGET_DEFAULTS["daily_api_budget_cents"],
-
             "tasks_completed": 0,
             "tasks_failed": 0,
         }
@@ -61,52 +53,31 @@ class BudgetManager:
 
     def _get_today(self) -> dict[str, Any]:
         today = self._today_str()
-        resp = (
-            self.sb.table(self.TABLE)
-            .select("*")
-            .eq("budget_date", today)
-            .execute()
-        )
+        resp = self.sb.table(self.TABLE).select("*").eq("budget_date", today).execute()
         if not resp.data:
             return self._ensure_today()
         return resp.data[0]
 
-    # ── Public API ────────────────────────────────────────────────────────
-
     def can_spend(self, tier: str) -> bool:
-        """Check whether the swarm is within budget for a given cost tier.
-
-        Args:
-            tier: "light" or "heavy"
-
-        Returns:
-            True if within budget
-        """
-        row = self._get_today()
+        """Check whether the swarm is within budget for a given cost tier."""
         if tier in ("heavy", "cc_light"):
-            return True  # No budget limit on Claude Code (included in Max plan)
+            return True  # Claude Code is unlimited on Max plan
+        row = self._get_today()
         return row["api_spent_cents"] < row["daily_api_budget_cents"]
 
     def record_spend(self, cents: float = 0, tokens: int = 0, minutes: float = 0):
-        """Record API spend and/or Claude Code minutes for today.
-
-        Args:
-            cents: API cost in cents to add
-            tokens: Token count to add (tracked at task level, not budget table)
-            minutes: Claude Code minutes to add
-        """
+        """Record API spend for today. Minutes param ignored (CC is unlimited)."""
         row = self._get_today()
         update: dict[str, Any] = {}
         if cents > 0:
             new_cents = row["api_spent_cents"] + cents
             update["api_spent_cents"] = int(round(float(new_cents)))
-        # minutes param ignored — CC is unlimited on Max plan
 
         if update:
             update["updated_at"] = datetime.now(timezone.utc).isoformat()
             self.sb.table(self.TABLE).update(update).eq("id", row["id"]).execute()
 
-        # Check thresholds after recording
+        # Check thresholds
         new_row = self._get_today()
         api_pct = (
             new_row["api_spent_cents"] / new_row["daily_api_budget_cents"] * 100
@@ -115,15 +86,9 @@ class BudgetManager:
         )
 
         if api_pct >= 90:
-            self.send_alert(
-                "critical",
-                f"API budget at {api_pct:.0f}% (${new_row['api_spent_cents']/100:.2f}/${new_row['daily_api_budget_cents']/100:.2f})",
-            )
+            self.send_alert("critical", f"API budget at {api_pct:.0f}% (${new_row['api_spent_cents']/100:.2f}/${new_row['daily_api_budget_cents']/100:.2f})")
         elif api_pct >= 75:
-            self.send_alert(
-                "warning",
-                f"API budget at {api_pct:.0f}% (${new_row['api_spent_cents']/100:.2f}/${new_row['daily_api_budget_cents']/100:.2f})",
-            )
+            self.send_alert("warning", f"API budget at {api_pct:.0f}% (${new_row['api_spent_cents']/100:.2f}/${new_row['daily_api_budget_cents']/100:.2f})")
 
     def record_task_result(self, success: bool):
         """Increment tasks_completed or tasks_failed for today."""
@@ -134,45 +99,27 @@ class BudgetManager:
         ).eq("id", row["id"]).execute()
 
     def get_status(self) -> dict[str, Any]:
-        """Return current budget status for today."""
+        """Return current budget status. Only real API spend — no fake CC metrics."""
         row = self._get_today()
+        api_pct = round(
+            row["api_spent_cents"] / row["daily_api_budget_cents"] * 100, 1
+        ) if row["daily_api_budget_cents"] > 0 else 0
         return {
             "date": row["budget_date"],
             "api_spent_cents": row["api_spent_cents"],
             "daily_api_budget_cents": row["daily_api_budget_cents"],
-            "api_pct": round(
-                row["api_spent_cents"] / row["daily_api_budget_cents"] * 100, 1
-            )
-            if row["daily_api_budget_cents"] > 0
-            else 0,
-
-
-
-
-
-                * 100,
-                1,
-            )
-
-            else 0,
+            "api_pct": api_pct,
             "tasks_completed": row["tasks_completed"],
             "tasks_failed": row["tasks_failed"],
         }
 
     def send_alert(self, level: str, message: str):
-        """Send budget alert to Discord webhook.
-
-        Args:
-            level: "info", "warning", or "critical"
-            message: Alert message body
-        """
+        """Send budget alert to Discord webhook."""
         if not DISCORD_WEBHOOK_URL:
             logger.warning("No DISCORD_WEBHOOK_URL set, skipping alert: %s", message)
             return
 
-        emoji = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udea8"}.get(
-            level, "\u2139\ufe0f"
-        )
+        emoji = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udea8"}.get(level, "\u2139\ufe0f")
         payload = {
             "content": f"{emoji} **Swarm Budget {level.upper()}**: {message}",
             "username": "Swarm Budget",
