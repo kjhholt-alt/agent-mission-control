@@ -114,13 +114,6 @@ class BudgetManager:
             else 0
         )
 
-
-
-            * 100
-
-            else 0
-        )
-
         if api_pct >= 90:
             self.send_alert(
                 "critical",
@@ -130,12 +123,6 @@ class BudgetManager:
             self.send_alert(
                 "warning",
                 f"API budget at {api_pct:.0f}% (${new_row['api_spent_cents']/100:.2f}/${new_row['daily_api_budget_cents']/100:.2f})",
-            )
-
-
-            self.send_alert(
-                "critical",
-
             )
 
     def record_task_result(self, success: bool):
