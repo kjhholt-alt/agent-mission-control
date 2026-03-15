@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Satellite, Zap, RefreshCw, Eye } from "lucide-react";
+import { Satellite, Zap, RefreshCw, Rocket, Cpu } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { AgentActivity } from "@/lib/types";
+import type { NexusSession } from "@/lib/collector-types";
+import { formatCost } from "@/lib/pricing";
 import { ParticleBackground } from "@/components/particles";
 import { LiveClock } from "@/components/live-clock";
 import { StatsBar } from "@/components/stats-bar";
@@ -12,11 +14,15 @@ import { AgentCard } from "@/components/agent-card";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { AgentHistory } from "@/components/agent-history";
 import { LiveFeed } from "@/components/live-feed";
+import { CommandBar } from "@/components/command-bar";
+import { SpawnModal } from "@/components/spawn-modal";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
   const [connected, setConnected] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [spawnOpen, setSpawnOpen] = useState(false);
+  const [liveSessions, setLiveSessions] = useState<NexusSession[]>([]);
 
   const fetchAgents = useCallback(async () => {
     const res = await fetch("/api/agents");
@@ -26,22 +32,31 @@ export default function MissionControl() {
     }
   }, []);
 
+  const fetchLiveSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/collector/agents");
+      if (res.ok) {
+        const data = await res.json();
+        setLiveSessions(data.sessions || []);
+      }
+    } catch {
+      // Collector might not have data yet
+    }
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     fetchAgents();
-  }, [fetchAgents]);
+    fetchLiveSessions();
+  }, [fetchAgents, fetchLiveSessions]);
 
-  // Supabase realtime subscription
+  // Supabase realtime — agent_activity
   useEffect(() => {
     const channel = supabase
       .channel("agent_activity_changes")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "agent_activity",
-        },
+        { event: "*", schema: "public", table: "agent_activity" },
         (payload) => {
           if (payload.eventType === "INSERT") {
             setAgents((prev) => [payload.new as AgentActivity, ...prev]);
@@ -71,7 +86,40 @@ export default function MissionControl() {
     };
   }, []);
 
+  // Supabase realtime — nexus_sessions (live Claude Code sessions)
+  useEffect(() => {
+    const channel = supabase
+      .channel("nexus_sessions_live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "nexus_sessions" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setLiveSessions((prev) => [
+              payload.new as NexusSession,
+              ...prev,
+            ]);
+          } else if (payload.eventType === "UPDATE") {
+            setLiveSessions((prev) =>
+              prev.map((s) =>
+                s.session_id ===
+                (payload.new as NexusSession).session_id
+                  ? (payload.new as NexusSession)
+                  : s
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const activeAgents = agents.filter((a) => a.status === "running");
+  const activeSessions = liveSessions.filter((s) => s.status === "active");
 
   const seedDemo = async () => {
     setSeeding(true);
@@ -84,12 +132,29 @@ export default function MissionControl() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: "#0a0a0f" }}>
+    <div
+      className="min-h-screen relative overflow-hidden"
+      style={{ backgroundColor: "#0a0a0f" }}
+    >
       {/* Scanline overlay */}
       <div className="fixed inset-0 scanline-overlay pointer-events-none z-50 opacity-[0.015]" />
 
       {/* Particle background */}
-      <ParticleBackground activeCount={activeAgents.length} />
+      <ParticleBackground
+        activeCount={activeAgents.length + activeSessions.length}
+      />
+
+      {/* Command bar (Ctrl+K) */}
+      <CommandBar
+        onSpawn={() => setSpawnOpen(true)}
+        onRefresh={() => {
+          fetchAgents();
+          fetchLiveSessions();
+        }}
+      />
+
+      {/* Spawn modal */}
+      <SpawnModal open={spawnOpen} onClose={() => setSpawnOpen(false)} />
 
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -121,59 +186,107 @@ export default function MissionControl() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <LiveClock />
+
+            {/* New Mission button */}
+            <button
+              onClick={() => setSpawnOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors text-sm text-cyan-400 font-medium"
+            >
+              <Rocket className="w-4 h-4" />
+              New Mission
+            </button>
+
+            {/* Quick actions */}
             <div className="flex items-center gap-2">
-              <a
-                href="/game"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors text-xs text-cyan-400"
-                title="3D Factory View"
-              >
-                🏭 Game
-              </a>
-              <a
-                href="/ops"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors text-xs text-emerald-400"
-                title="Operations Center"
-              >
-                ⚡ Ops
-              </a>
-              <a
-                href="/oracle"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors text-xs text-amber-400"
-                title="Oracle Dashboard"
-              >
-                <Eye className="w-3 h-3" />
-                Oracle
-              </a>
-              <a
-                href="/mobile"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-700/30 border border-zinc-600/30 hover:bg-zinc-700/50 transition-colors text-xs text-zinc-400"
-                title="Mobile Terminal"
-              >
-                📱 Mobile
-              </a>
               <button
-                onClick={fetchAgents}
+                onClick={() => {
+                  fetchAgents();
+                  fetchLiveSessions();
+                }}
                 className="p-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors"
-                title="Refresh"
+                title="Refresh (Ctrl+K → R)"
               >
                 <RefreshCw className="w-4 h-4 text-zinc-400" />
               </button>
               <button
                 onClick={seedDemo}
                 disabled={seeding}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors text-xs text-cyan-400 disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors text-xs text-zinc-400 disabled:opacity-50"
               >
                 <Zap className="w-3 h-3" />
-                {seeding ? "Seeding..." : "Seed Demo"}
+                {seeding ? "..." : "Demo"}
               </button>
             </div>
+
+            {/* Ctrl+K hint */}
+            <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] text-zinc-600 px-2 py-1 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+              Ctrl+K
+            </kbd>
           </div>
         </motion.header>
 
         {/* Stats Bar */}
         <StatsBar agents={agents} />
+
+        {/* Live Claude Code Sessions */}
+        {activeSessions.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Cpu className="w-4 h-4 text-purple-400" />
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                Live Sessions
+              </h2>
+              <span className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20">
+                {activeSessions.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activeSessions.map((session) => (
+                <div
+                  key={session.session_id}
+                  className="bg-zinc-900/50 border border-purple-500/10 rounded-xl p-4 hover:border-purple-500/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-white">
+                      {session.project_name || "unknown"}
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-purple-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                      ACTIVE
+                    </span>
+                  </div>
+                  {session.current_tool && (
+                    <p className="text-xs text-zinc-500 mb-2 truncate">
+                      Using:{" "}
+                      <span className="text-cyan-400">
+                        {session.current_tool}
+                      </span>
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 text-[10px] text-zinc-600">
+                    <span>{session.tool_count || 0} tools</span>
+                    <span className="text-zinc-800">|</span>
+                    <span>{formatCost(Number(session.cost_usd) || 0)}</span>
+                    <span className="text-zinc-800">|</span>
+                    <span className="text-zinc-500">
+                      {session.model?.includes("opus")
+                        ? "Opus"
+                        : session.model?.includes("haiku")
+                          ? "Haiku"
+                          : "Sonnet"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
 
         {/* Live Feed */}
         <motion.section
@@ -218,7 +331,13 @@ export default function MissionControl() {
                   <Satellite className="w-8 h-8 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">No active agents</p>
                   <p className="text-xs text-zinc-700 mt-1">
-                    Agents will appear here when they report via heartbeat
+                    Hit{" "}
+                    <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded text-cyan-400 text-[10px]">
+                      Ctrl+K
+                    </kbd>{" "}
+                    or click{" "}
+                    <span className="text-cyan-400">New Mission</span> to
+                    deploy one
                   </p>
                 </motion.div>
               )}
@@ -256,8 +375,9 @@ export default function MissionControl() {
 
         {/* Footer */}
         <footer className="text-center text-xs text-zinc-700 py-4 border-t border-zinc-800/30">
-          NEXUS v1.0 &middot; Powered by Supabase Realtime &middot;{" "}
-          {agents.length} agents tracked
+          NEXUS v2.0 &middot; Powered by Supabase Realtime &middot;{" "}
+          {agents.length} agents &middot; {liveSessions.length} sessions
+          tracked
         </footer>
       </div>
     </div>

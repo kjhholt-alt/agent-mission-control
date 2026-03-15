@@ -43,8 +43,11 @@ function GlobalNav() {
         <a href="/oracle" className="px-3 py-1 text-[10px] uppercase tracking-wider text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-colors">
           Oracle
         </a>
-        <a href="/oracle/chat" className="px-3 py-1 text-[10px] uppercase tracking-wider text-amber-400/60 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-colors">
-          Chat
+        <a href="/sessions" className="px-3 py-1 text-[10px] uppercase tracking-wider text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded transition-colors">
+          Sessions
+        </a>
+        <a href="/templates" className="px-3 py-1 text-[10px] uppercase tracking-wider text-orange-400 hover:text-orange-300 hover:bg-orange-500/10 rounded transition-colors">
+          Templates
         </a>
         <a href="/mobile" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white hover:bg-white/5 rounded transition-colors">
           Terminal

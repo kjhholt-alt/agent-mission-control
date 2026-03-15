@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(request: NextRequest) {
-  // Skip auth for public pages
+  // Skip auth for non-API routes (pages)
   if (!request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
 
-  // Skip auth for specific public endpoints
-  const publicPaths = ["/api/agents/seed", "/api/oracle", "/api/oracle/chat"];
-  if (publicPaths.includes(request.nextUrl.pathname)) return NextResponse.next();
+  // GET requests are always public (dashboard reads)
+  if (request.method === "GET") return NextResponse.next();
 
+  // Public POST endpoints (no auth required)
+  const publicPosts = [
+    "/api/agents/seed",
+    "/api/collector/event",   // Claude Code hooks need this
+    "/api/heartbeat",         // Agent heartbeats
+    "/api/oracle",
+    "/api/oracle/chat",
+    "/api/oracle/decisions",
+  ];
+  if (publicPosts.some((p) => request.nextUrl.pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
+  // All other POST/PUT/DELETE require API key
   const apiKey =
     request.headers.get("x-nexus-key") ||
     request.headers.get("authorization")?.replace("Bearer ", "");
