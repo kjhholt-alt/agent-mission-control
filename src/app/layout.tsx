@@ -55,6 +55,9 @@ function GlobalNav() {
         <a href="/achievements" className="px-3 py-1 text-[10px] uppercase tracking-wider text-amber-400/60 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-colors">
           Trophies
         </a>
+        <a href="/setup" className="px-3 py-1 text-[10px] uppercase tracking-wider text-emerald-400/60 hover:text-emerald-300 hover:bg-emerald-500/10 rounded transition-colors">
+          Setup
+        </a>
         <a href="/settings" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white hover:bg-white/5 rounded transition-colors">
           Settings
         </a>

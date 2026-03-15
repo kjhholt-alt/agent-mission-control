@@ -22,6 +22,7 @@ import { useNavigationHotkeys } from "@/lib/use-hotkeys";
 import { checkAchievements, type Achievement } from "@/lib/achievements";
 import { playSound, playSpawnSound } from "@/lib/audio";
 import { DaemonPanel } from "@/components/daemon-panel";
+import { Workbench } from "@/components/workbench";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -30,6 +31,7 @@ export default function MissionControl() {
   const [spawnOpen, setSpawnOpen] = useState(false);
   const [liveSessions, setLiveSessions] = useState<NexusSession[]>([]);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
+  const [workbenchTaskId, setWorkbenchTaskId] = useState<string | null>(null);
 
   // Check achievements when data changes
   useEffect(() => {
@@ -206,6 +208,12 @@ export default function MissionControl() {
           setSpawnOpen(false);
           playSound(playSpawnSound);
         }}
+      />
+
+      {/* Workbench deep-dive panel */}
+      <Workbench
+        taskId={workbenchTaskId}
+        onClose={() => setWorkbenchTaskId(null)}
       />
 
       {/* Achievement toasts */}

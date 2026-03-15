@@ -280,11 +280,12 @@ export function useGameData() {
   // ── Initial fetch ──
   useEffect(() => {
     async function fetchAll() {
-      const [workersRes, tasksRes, budgetRes, activityRes] = await Promise.all([
+      const [workersRes, tasksRes, budgetRes, activityRes, sessionsRes] = await Promise.all([
         supabase.from("swarm_workers").select("*").order("spawned_at", { ascending: false }),
         supabase.from("swarm_tasks").select("*").order("updated_at", { ascending: false }).limit(50),
         supabase.from("swarm_budgets").select("*").order("budget_date", { ascending: false }).limit(1),
         supabase.from("agent_activity").select("*").order("updated_at", { ascending: false }).limit(20),
+        supabase.from("nexus_sessions").select("*").eq("status", "active").order("last_activity", { ascending: false }).limit(10),
       ]);
 
       if (workersRes.data) setSwarmWorkers(workersRes.data);
@@ -297,6 +298,45 @@ export function useGameData() {
       }
       if (budgetRes.data && budgetRes.data.length > 0) setBudget(budgetRes.data[0]);
       if (activityRes.data) setAgentActivity(activityRes.data);
+
+      // Convert active nexus_sessions to synthetic swarm workers so they appear in the factory
+      if (sessionsRes.data) {
+        const sessionWorkers: SwarmWorker[] = sessionsRes.data.map((s: { session_id: string; project_name: string | null; model: string | null; current_tool: string | null; tool_count: number; last_activity: string; cost_usd: number }) => ({
+          id: `session-${s.session_id}`,
+          worker_name: `cc_light-${s.session_id.slice(0, 8)}`,
+          worker_type: s.model?.includes("opus") ? "heavy" : "light",
+          tier: "cc_light",
+          status: "busy",
+          current_task_id: null,
+          last_heartbeat: s.last_activity,
+          pid: null,
+          tasks_completed: s.tool_count || 0,
+          tasks_failed: 0,
+          total_cost_cents: Math.round((Number(s.cost_usd) || 0) * 100),
+          total_tokens: 0,
+          xp: (s.tool_count || 0) * 5,
+          spawned_at: s.last_activity,
+          died_at: null,
+        }));
+        setSwarmWorkers((prev) => [...prev, ...sessionWorkers]);
+
+        // Add synthetic tasks so workers appear at the right buildings
+        const sessionTasks: SwarmTask[] = sessionsRes.data.map((s: { session_id: string; project_name: string | null; current_tool: string | null; last_activity: string }) => ({
+          id: `session-task-${s.session_id}`,
+          task_type: "eval",
+          title: s.current_tool ? `Using ${s.current_tool}` : "Claude Code session",
+          description: null,
+          project: s.project_name,
+          status: "in_progress",
+          assigned_worker_id: `session-${s.session_id}`,
+          worker_type: "builder",
+          started_at: s.last_activity,
+          completed_at: null,
+          updated_at: s.last_activity,
+          created_at: s.last_activity,
+        }));
+        setSwarmTasks((prev) => [...sessionTasks, ...prev]);
+      }
 
       setLoaded(true);
     }
@@ -373,6 +413,46 @@ export function useGameData() {
         startTransition(() => {
           if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
             setBudget(payload.new as SwarmBudget);
+          }
+        });
+      })
+      // nexus_sessions changes (live Claude Code sessions appear as workers)
+      .on("postgres_changes", { event: "*", schema: "public", table: "nexus_sessions" }, (payload) => {
+        startTransition(() => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const s = payload.new as { session_id: string; project_name: string | null; model: string | null; current_tool: string | null; tool_count: number; status: string; last_activity: string; cost_usd: number };
+            const syntheticId = `session-${s.session_id}`;
+            if (s.status === "active") {
+              // Upsert synthetic worker
+              const worker: SwarmWorker = {
+                id: syntheticId,
+                worker_name: `cc_light-${s.session_id.slice(0, 8)}`,
+                worker_type: s.model?.includes("opus") ? "heavy" : "light",
+                tier: "cc_light",
+                status: "busy",
+                current_task_id: null,
+                last_heartbeat: s.last_activity,
+                pid: null,
+                tasks_completed: s.tool_count || 0,
+                tasks_failed: 0,
+                total_cost_cents: Math.round((Number(s.cost_usd) || 0) * 100),
+                total_tokens: 0,
+                xp: (s.tool_count || 0) * 5,
+                spawned_at: s.last_activity,
+                died_at: null,
+              };
+              setSwarmWorkers((prev) => {
+                const exists = prev.some((w) => w.id === syntheticId);
+                return exists ? prev.map((w) => w.id === syntheticId ? worker : w) : [...prev, worker];
+              });
+              if (s.current_tool) {
+                addEvent(`Session using ${s.current_tool} on ${s.project_name || "unknown"}`, "info");
+              }
+            } else if (s.status === "completed") {
+              // Remove synthetic worker when session ends
+              setSwarmWorkers((prev) => prev.filter((w) => w.id !== syntheticId));
+              addEvent(`Session completed on ${s.project_name || "unknown"}`, "success");
+            }
           }
         });
       })
