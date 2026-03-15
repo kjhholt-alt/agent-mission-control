@@ -8,7 +8,7 @@ SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 
 # Get all sessions this month
 now = datetime.now(timezone.utc)
-month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 req = urllib.request.Request(
     f"{SB_URL}/rest/v1/nexus_sessions?last_activity=gte.{month_start}&select=cost_usd,last_activity",

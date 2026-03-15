@@ -8,7 +8,7 @@ SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 DISCORD = "https://discordapp.com/api/webhooks/1477500882529554624/Cumn_pkEtvf6NU5jOvFfVy33jJ9_ePOpSnIfm9aBRAQUr4JMZwxhqoytRIAWQM4sJ7FW"
 
 now = datetime.now(timezone.utc)
-week_ago = (now - timedelta(days=7)).isoformat()
+week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def sb_get(path):
     req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}",

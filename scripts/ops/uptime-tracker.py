@@ -41,7 +41,7 @@ except Exception:
 # Active workers
 try:
     from datetime import timedelta
-    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
     req = urllib.request.Request(f"{SB_URL}/rest/v1/swarm_workers?status=neq.dead&last_heartbeat=gte.{cutoff}&select=id",
         headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Prefer": "count=exact"})
     resp = urllib.request.urlopen(req, timeout=5)

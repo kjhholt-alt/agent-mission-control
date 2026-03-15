@@ -6,7 +6,7 @@ SB_URL = "https://ytvtaorgityczrdhhzqv.supabase.co"
 SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0dnRhb3JnaXR5Y3pyZGhoenF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MzY4MTEsImV4cCI6MjA4NjUxMjgxMX0.A2uG-yVQ1HSV9-zlNDAztHHVw25g1cQ43180y3TfwGk"
 
 days = int(sys.argv[1]) if len(sys.argv) > 1 else 7
-cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 print(f"  Deleting hook events older than {days} days")
 
 req = urllib.request.Request(
