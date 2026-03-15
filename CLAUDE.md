@@ -57,6 +57,8 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/oracle/decisions` | GET/POST | Public | Decision management |
 | `/api/discord/notify` | POST | API Key | Discord notifications |
 | `/api/workflows` | POST | API Key | Execute workflow pipeline |
+| `/api/tasks/approve` | POST | API Key | Approve/reject pending tasks |
+| `/api/git-activity` | GET | Public | Recent GitHub commits |
 | `/api/schedules` | GET/POST/DELETE | Public | Schedule management |
 | `/api/building-activity` | GET | Public | Building stats |
 

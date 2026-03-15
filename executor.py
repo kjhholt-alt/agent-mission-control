@@ -97,7 +97,16 @@ def supabase_request(method, path, data=None):
 
 
 def fetch_next_task():
-    """Get the highest-priority queued task."""
+    """Get the highest-priority queued or approved task."""
+    # Check for approved tasks first (they've been waiting)
+    result = supabase_request(
+        "GET",
+        "swarm_tasks?status=eq.approved&order=priority.asc&limit=1"
+    )
+    if result and len(result) > 0:
+        return result[0]
+
+    # Then check for queued tasks
     result = supabase_request(
         "GET",
         "swarm_tasks?status=eq.queued&order=priority.asc&limit=1"
@@ -240,6 +249,96 @@ def deregister_worker():
 # ── Task execution ────────────────────────────────────────────────────
 
 MAX_FILE_SIZE = 100 * 1024  # 100KB per file
+OUTPUT_DIR = f"{PROJECTS_ROOT}/nexus/output"
+CONTEXTS_DIR = f"{PROJECTS_ROOT}/nexus/contexts"
+
+
+def read_xlsx(file_path):
+    """Read an Excel file and return its contents as CSV-like text."""
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+        parts = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                rows.append(",".join(str(c) if c is not None else "" for c in row))
+            if rows:
+                parts.append(f"=== Sheet: {sheet_name} ({len(rows)} rows) ===\n" + "\n".join(rows[:500]))
+        wb.close()
+        return "\n\n".join(parts)
+    except ImportError:
+        return "[openpyxl not installed — cannot read .xlsx]"
+    except Exception as e:
+        return f"[Error reading xlsx: {e}]"
+
+
+def read_pdf(file_path):
+    """Read a PDF file and return its text content."""
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(file_path)
+        pages = []
+        for i, page in enumerate(reader.pages[:50]):  # Max 50 pages
+            text = page.extract_text() or ""
+            if text.strip():
+                pages.append(f"--- Page {i+1} ---\n{text}")
+        return "\n\n".join(pages) if pages else "[PDF has no extractable text]"
+    except ImportError:
+        return "[PyPDF2 not installed — cannot read .pdf]"
+    except Exception as e:
+        return f"[Error reading pdf: {e}]"
+
+
+def save_output(task_id, project, content):
+    """Save task output to a file in the output directory."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"{project}_{task_id[:8]}_{timestamp}.md"
+    filepath = os.path.join(OUTPUT_DIR, filename)
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"  Output saved: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"  Failed to save output: {e}")
+        return None
+
+
+def load_context_files(project, task_type=None):
+    """Auto-load relevant context files from the contexts directory."""
+    if not os.path.isdir(CONTEXTS_DIR):
+        return ""
+
+    context_parts = []
+    for filename in sorted(os.listdir(CONTEXTS_DIR)):
+        if not filename.endswith('.md'):
+            continue
+
+        # Load global context files (no prefix) and project-specific ones
+        name_lower = filename.lower()
+        is_global = not any(name_lower.startswith(p) for p in [
+            "nexus-", "moneyprinter-", "deere-", "buildkit-", "finance-"])
+        is_project = name_lower.startswith(f"{project.lower()}-") or name_lower.startswith("deere-")
+        is_finance = name_lower.startswith("finance-") and task_type in ("scout", "inspector", "miner")
+
+        if is_global or is_project or is_finance:
+            filepath = os.path.join(CONTEXTS_DIR, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                if len(content) > 10000:
+                    content = content[:10000] + "\n[...truncated...]"
+                context_parts.append(f"--- CONTEXT: {filename} ---\n{content}\n--- END CONTEXT ---")
+            except Exception:
+                pass
+
+    if context_parts:
+        return "\n\n".join(context_parts) + "\n\n"
+    return ""
+
 
 def read_input_files(input_data):
     """Read files specified in input_data and return their contents as context."""
@@ -258,7 +357,21 @@ def read_input_files(input_data):
                 context_parts.append(f"[File too large ({size} bytes): {file_path}]")
                 continue
             ext = os.path.splitext(file_path)[1].lower()
-            if ext not in ('.txt', '.csv', '.json', '.md', '.py', '.ts', '.tsx', '.js', '.sql', '.yaml', '.yml', '.toml', '.env'):
+
+            # Excel files
+            if ext in ('.xlsx', '.xls'):
+                content = read_xlsx(file_path)
+                context_parts.append(f"--- SPREADSHEET: {file_path} ---\n{content}\n--- END SPREADSHEET ---")
+                continue
+
+            # PDF files
+            if ext == '.pdf':
+                content = read_pdf(file_path)
+                context_parts.append(f"--- PDF: {file_path} ---\n{content}\n--- END PDF ---")
+                continue
+
+            # Text-based files
+            if ext not in ('.txt', '.csv', '.json', '.md', '.py', '.ts', '.tsx', '.js', '.sql', '.yaml', '.yml', '.toml', '.env', '.log', '.html', '.xml'):
                 context_parts.append(f"[Unsupported file type: {file_path}]")
                 continue
             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
@@ -272,12 +385,70 @@ def read_input_files(input_data):
     return ""
 
 
+def check_approval_gate(task):
+    """Check if a task needs approval before execution. Returns True if approved/not needed."""
+    # Check if this task has the approval flag via its metadata or depends_on chain
+    input_data = task.get("input_data") or {}
+    if isinstance(input_data, str):
+        try:
+            input_data = json.loads(input_data)
+        except Exception:
+            input_data = {}
+
+    needs_approval = input_data.get("wait_for_approval", False)
+
+    # Also check if the task title contains [APPROVAL] marker (set by workflow engine)
+    title = task.get("title", "")
+    if "[approval]" in title.lower():
+        needs_approval = True
+
+    if not needs_approval:
+        return True  # No approval needed
+
+    # Check if already approved
+    if task.get("status") == "approved":
+        return True
+
+    # Set to pending_approval and notify
+    task_id = task["id"]
+    project = task.get("project", "general")
+
+    update_task(task_id, {
+        "status": "pending_approval",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    log_task_event(task_id, "approval_pending", f"Awaiting approval: {title}", project)
+
+    # Send Discord notification with approval info
+    notify_discord(
+        f"**Approval Required**\n"
+        f"Task: {title}\n"
+        f"Project: {project}\n\n"
+        f"Approve via dashboard or API:\n"
+        f"`POST /api/tasks/approve` with `{{\"task_id\": \"{task_id}\"}}`",
+        0xe8a019,  # amber
+    )
+
+    print(f"  APPROVAL REQUIRED: {title} — waiting for approval via API or dashboard")
+    return False  # Don't execute yet
+
+
 def execute_task(task):
     """Execute a single task via Claude Code CLI."""
     task_id = task["id"]
     title = task.get("title", "Untitled")
     project = task.get("project", "general")
+    task_type = task.get("task_type", "builder")
     prompt = task.get("description") or task.get("title", "")
+
+    # Check approval gate
+    if not check_approval_gate(task):
+        return True  # Not a failure, just waiting
+
+    # Auto-load context files for the project
+    context = load_context_files(project, task_type)
+    if context:
+        prompt = f"Reference context (use as background knowledge):\n\n{context}\n\nTask:\n{prompt}"
 
     # Read input files if specified
     input_data = task.get("input_data") or {}
@@ -289,7 +460,7 @@ def execute_task(task):
 
     file_context = read_input_files(input_data)
     if file_context:
-        prompt = f"Context from input files:\n\n{file_context}\n\nTask:\n{prompt}"
+        prompt = f"Context from input files:\n\n{file_context}\n\n{prompt}"
 
     # Resolve working directory
     cwd = PROJECT_DIRS.get(project, PROJECTS_ROOT)
@@ -349,6 +520,9 @@ def execute_task(task):
             _session_stats["completed"] += 1
             _session_stats["xp"] += 10  # +10 XP per completed task
 
+            # Save output to file
+            output_path = save_output(task_id, project, stdout) if len(stdout) > 100 else None
+
             update_task(task_id, {
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -357,6 +531,7 @@ def execute_task(task):
                     "response": stdout,
                     "duration_seconds": duration,
                     "exit_code": 0,
+                    "output_file": output_path,
                 }),
             })
             log_task_event(task_id, "completed", f"Completed in {duration}s: {title}", project)
