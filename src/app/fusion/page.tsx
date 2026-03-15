@@ -19,6 +19,15 @@ import {
 import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
 
+interface GitCommit {
+  repo: string;
+  sha: string;
+  message: string;
+  author: string;
+  date: string;
+  url: string;
+}
+
 interface FusionData {
   sessions: {
     total: number;
@@ -94,6 +103,7 @@ function StatCard({
 export default function FusionPage() {
   const [data, setData] = useState<FusionData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gitCommits, setGitCommits] = useState<GitCommit[]>([]);
 
   const fetchFusionData = useCallback(async () => {
     setLoading(true);
@@ -216,11 +226,21 @@ export default function FusionPage() {
     }
   }, []);
 
+  const fetchGitActivity = useCallback(async () => {
+    try {
+      const res = await fetch("/api/git-activity");
+      const json = await res.json();
+      if (json.commits) setGitCommits(json.commits);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     fetchFusionData();
+    fetchGitActivity();
     const interval = setInterval(fetchFusionData, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchFusionData]);
+    const gitInterval = setInterval(fetchGitActivity, 300_000); // every 5 min
+    return () => { clearInterval(interval); clearInterval(gitInterval); };
+  }, [fetchFusionData, fetchGitActivity]);
 
   return (
     <div className="min-h-screen relative" style={{ backgroundColor: "#0a0a0f" }}>
@@ -462,6 +482,61 @@ export default function FusionPage() {
                 </motion.div>
               </div>
             </div>
+            {/* Git Activity */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden"
+            >
+              <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-purple-400" />
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                  Recent Commits
+                </h2>
+                <span className="text-[10px] text-zinc-600 ml-auto">
+                  across all projects
+                </span>
+              </div>
+              <div className="divide-y divide-zinc-800/30">
+                {gitCommits.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-zinc-600 text-sm">
+                    No git activity loaded
+                  </div>
+                ) : (
+                  gitCommits.slice(0, 15).map((commit, i) => {
+                    const commitDate = new Date(commit.date);
+                    const hoursAgo = Math.floor((Date.now() - commitDate.getTime()) / 3600000);
+                    const timeLabel = hoursAgo < 1 ? "just now"
+                      : hoursAgo < 24 ? `${hoursAgo}h ago`
+                      : `${Math.floor(hoursAgo / 24)}d ago`;
+
+                    return (
+                      <div
+                        key={`${commit.sha}-${i}`}
+                        className="flex items-start gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors"
+                      >
+                        <code className="text-[10px] text-purple-400 font-mono mt-0.5 shrink-0">
+                          {commit.sha}
+                        </code>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white truncate">
+                            {commit.message}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-600">
+                            <span className="text-cyan-400/60">{commit.repo}</span>
+                            <span>{commit.author}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-zinc-600 shrink-0 mt-0.5">
+                          {timeLabel}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
           </>
         )}
       </div>
