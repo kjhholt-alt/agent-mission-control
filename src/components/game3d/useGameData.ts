@@ -717,18 +717,19 @@ export function useGameData() {
       );
     });
 
-    // Check if a task failed at this building
-    const recentFailure = swarmTasks.some((t) => {
+    // Check if tasks failed at this building — count for severity
+    const recentFailures = swarmTasks.filter((t) => {
       if (t.status !== "failed") return false;
       return (
         projectToBuilding(t.project) === b.id &&
         new Date(t.updated_at).getTime() > oneHourAgo
       );
-    });
+    }).length;
 
     let status: Building["status"] = b.status; // Keep original as default
     if (!isDemo) {
-      if (recentFailure) status = "warning";
+      if (recentFailures >= 3) status = "error"; // Threat zone — 3+ failures
+      else if (recentFailures >= 1) status = "warning";
       else if (hasActiveWorker || recentCompletion) status = "active";
       else status = "idle";
     }
@@ -757,7 +758,7 @@ export function useGameData() {
         : {
             tests: b.stats.tests,
             deploys: completedCount || b.stats.deploys,
-            uptime: recentFailure ? "WARN" : hasActiveWorker ? "LIVE" : b.stats.uptime,
+            uptime: recentFailures ? "WARN" : hasActiveWorker ? "LIVE" : b.stats.uptime,
           },
     };
   });
