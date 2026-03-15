@@ -17,7 +17,7 @@ interface Props {
 function AnimatedCounter({ value, label, icon: Icon, color }: {
   value: number;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   color: string;
 }) {
   const [displayed, setDisplayed] = useState(0);
