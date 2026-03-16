@@ -674,17 +674,24 @@ def execute_task(task):
 
     # 5. Model routing (cost optimization)
     model = select_model(task)
-    cmd = [CLAUDE_CLI, "--output-format", "text", "-p", "-"]
-    if model:
-        cmd.extend(["--model", model])
-        print(f"  Model: {model}")
     print(f"  Prompt length: {len(prompt)} chars")
+
+    # Write prompt to temp file to avoid Windows .cmd argument mangling
+    import tempfile
+    prompt_file = os.path.join(tempfile.gettempdir(), f"nexus-prompt-{task_id[:8]}.txt")
+    with open(prompt_file, "w", encoding="utf-8") as pf:
+        pf.write(prompt)
+
+    # Build shell command that pipes the prompt file to claude CLI
+    model_flag = f' --model {model}' if model else ""
+    shell_cmd = f'type "{prompt_file}" | "{CLAUDE_CLI}" --output-format text -p -{model_flag}'
+    if model:
+        print(f"  Model: {model}")
 
     try:
         start = time.time()
-        # Pass prompt via stdin (-p - reads from stdin) to avoid Windows .cmd arg mangling
         result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, input=prompt,
+            shell_cmd, cwd=cwd, capture_output=True, text=True,
             timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
         )
         duration = round(time.time() - start, 1)
@@ -849,6 +856,14 @@ def execute_task(task):
         log_task_event(task_id, "error", f"Error: {title}", project, str(e))
         update_worker("idle")
         return False
+
+    finally:
+        # Clean up temp prompt file
+        try:
+            if prompt_file and os.path.exists(prompt_file):
+                os.remove(prompt_file)
+        except Exception:
+            pass
 
 
 # ── Main ──────────────────────────────────────────────────────────────
