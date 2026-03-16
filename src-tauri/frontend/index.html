@@ -16,9 +16,7 @@
       height: 100vh;
       overflow: hidden;
     }
-    .loader {
-      text-align: center;
-    }
+    .loader { text-align: center; max-width: 500px; padding: 0 24px; }
     h1 {
       font-size: 48px;
       letter-spacing: 12px;
@@ -30,11 +28,11 @@
       color: #52525b;
       letter-spacing: 4px;
       text-transform: uppercase;
+      margin-bottom: 24px;
     }
     .dot {
       display: inline-block;
-      width: 6px;
-      height: 6px;
+      width: 6px; height: 6px;
       background: #06b6d4;
       border-radius: 50%;
       margin: 0 3px;
@@ -46,21 +44,187 @@
       0%, 100% { opacity: 0.3; transform: scale(0.8); }
       50% { opacity: 1; transform: scale(1.2); }
     }
+    .error { display: none; margin-top: 20px; }
+    .error p { font-size: 11px; color: #ef4444; margin-bottom: 12px; line-height: 1.6; }
+    .error .detail { font-size: 10px; color: #52525b; margin-bottom: 16px; }
+    .btn {
+      display: inline-block;
+      padding: 8px 20px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: 1px solid #06b6d4;
+      color: #06b6d4;
+      background: transparent;
+      cursor: pointer;
+      font-family: inherit;
+      margin: 0 6px;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: rgba(6, 182, 212, 0.1); }
+    .btn.secondary { border-color: #3f3f46; color: #71717a; }
+    .btn.secondary:hover { background: rgba(63, 63, 70, 0.2); }
+    .progress {
+      width: 200px;
+      height: 2px;
+      background: #18181b;
+      margin: 16px auto 0;
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: #06b6d4;
+      transition: width 0.3s;
+    }
+    .log {
+      margin-top: 20px;
+      font-size: 10px;
+      color: #3f3f46;
+      text-align: left;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .log div { padding: 2px 0; }
+    .log .ok { color: #10b981; }
+    .log .fail { color: #ef4444; }
+    .log .info { color: #52525b; }
   </style>
 </head>
 <body>
   <div class="loader">
     <h1>NEXUS</h1>
-    <div class="status">
-      Loading dashboard
+    <div class="status" id="status">
+      Initializing
       <span class="dot"></span>
       <span class="dot"></span>
       <span class="dot"></span>
     </div>
+    <div class="progress"><div class="progress-bar" id="progress"></div></div>
+    <div class="log" id="log"></div>
+    <div class="error" id="error">
+      <p id="errorMsg">Could not connect to dashboard</p>
+      <div class="detail" id="errorDetail"></div>
+      <button class="btn" onclick="startLoading()">Retry</button>
+      <button class="btn secondary" onclick="tryLocal()">Try Local</button>
+      <button class="btn secondary" onclick="openExternal()">Open in Browser</button>
+    </div>
   </div>
+
   <script>
-    // Navigate to the live Nexus dashboard
-    window.location.href = 'https://nexus.buildkit.store';
+    const REMOTE_URL = 'https://nexus.buildkit.store';
+    const LOCAL_URL = 'http://localhost:3000';
+    const TIMEOUT_MS = 12000;
+
+    function log(msg, type = 'info') {
+      const el = document.getElementById('log');
+      const div = document.createElement('div');
+      div.className = type;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setProgress(pct) {
+      document.getElementById('progress').style.width = pct + '%';
+    }
+
+    function showError(msg, detail) {
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('errorMsg').textContent = msg;
+      document.getElementById('errorDetail').textContent = detail || '';
+    }
+
+    async function checkUrl(url, label) {
+      log(`Checking ${label}...`);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, {
+          mode: 'no-cors',
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        log(`${label}: reachable`, 'ok');
+        return true;
+      } catch (e) {
+        log(`${label}: ${e.message || 'unreachable'}`, 'fail');
+        return false;
+      }
+    }
+
+    async function startLoading() {
+      // Reset UI
+      document.getElementById('status').style.display = 'block';
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('log').innerHTML = '';
+      setProgress(10);
+
+      log('Nexus Desktop v2.0 starting...');
+      setProgress(20);
+
+      // Try local dev server first (faster, better for dev)
+      const localOk = await checkUrl(LOCAL_URL, 'Local dev server');
+      setProgress(50);
+
+      if (localOk) {
+        log('Using local dev server', 'ok');
+        setProgress(100);
+        setTimeout(() => { window.location.href = LOCAL_URL; }, 300);
+        return;
+      }
+
+      // Try remote
+      const remoteOk = await checkUrl(REMOTE_URL, 'Remote dashboard');
+      setProgress(80);
+
+      if (remoteOk) {
+        log('Using remote dashboard', 'ok');
+        setProgress(100);
+        // Navigate with a hydration watchdog
+        setupHydrationWatchdog();
+        setTimeout(() => { window.location.href = REMOTE_URL; }, 300);
+        return;
+      }
+
+      // Both failed
+      setProgress(100);
+      showError(
+        'Could not connect to Nexus dashboard',
+        'Neither localhost:3000 nor nexus.buildkit.store responded. Start the dev server with "npm run dev" or check your internet connection.'
+      );
+    }
+
+    function setupHydrationWatchdog() {
+      // After navigating to remote, if the page is still blank after 15s,
+      // something went wrong. Store a flag to detect this on reload.
+      sessionStorage.setItem('nexus-nav-time', Date.now().toString());
+    }
+
+    function tryLocal() {
+      window.location.href = LOCAL_URL;
+    }
+
+    function openExternal() {
+      // Use Tauri's shell open if available, otherwise window.open
+      if (window.__TAURI__) {
+        window.__TAURI__.shell.open(REMOTE_URL);
+      } else {
+        window.open(REMOTE_URL, '_blank');
+      }
+    }
+
+    // Check if we bounced back from a failed navigation
+    const navTime = sessionStorage.getItem('nexus-nav-time');
+    if (navTime && (Date.now() - parseInt(navTime)) < 30000) {
+      sessionStorage.removeItem('nexus-nav-time');
+      log('Previous navigation may have failed — retrying', 'fail');
+    }
+
+    // Start loading on page load
+    startLoading();
   </script>
 </body>
 </html>

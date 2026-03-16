@@ -12,7 +12,6 @@
     "windows": [
       {
         "title": "NEXUS | Agent Command Center",
-        "url": "https://nexus.buildkit.store",
         "width": 1400,
         "height": 900,
         "minWidth": 1024,

@@ -83,6 +83,26 @@ def spawn_mission(goal, project, worker_type, priority):
     return None
 
 
+def run_workflow(workflow_steps, workflow_name):
+    """Run a multi-step workflow via Nexus API (try local first, then prod)."""
+    data = json.dumps({
+        "steps": workflow_steps,
+        "workflow_name": workflow_name,
+        "workflow_id": f"sched-{workflow_name.lower().replace(' ', '-')}",
+    }).encode()
+    headers = {"Content-Type": "application/json", "x-nexus-key": API_KEY}
+
+    for base in [NEXUS_LOCAL, NEXUS_PROD]:
+        try:
+            req = urllib.request.Request(f"{base}/api/workflows", data, headers)
+            resp = json.loads(urllib.request.urlopen(req, timeout=15).read())
+            if resp.get("ok"):
+                return resp
+        except Exception:
+            continue
+    return None
+
+
 def check_schedules():
     """Check all enabled schedules and run any that are due."""
     now = datetime.now(timezone.utc)
@@ -92,21 +112,35 @@ def check_schedules():
     for schedule in schedules:
         if should_run(schedule["cron_expression"], schedule.get("last_run_at"), now):
             print(f"  RUNNING: {schedule['name']}")
-            result = spawn_mission(
-                schedule["goal"],
-                schedule.get("project", "nexus"),
-                schedule.get("worker_type", "scout"),
-                schedule.get("priority", 50),
-            )
-            if result:
-                print(f"    Spawned: {result.get('task_id', '?')[:8]}...")
-                sb_patch(f"nexus_schedules?id=eq.{schedule['id']}", {
-                    "last_run_at": now.isoformat(),
-                    "run_count": (schedule.get("run_count") or 0) + 1,
-                })
-                ran += 1
+
+            # Workflow-type schedules have steps array
+            workflow_steps = schedule.get("workflow_steps")
+            if workflow_steps and isinstance(workflow_steps, list):
+                result = run_workflow(workflow_steps, schedule["name"])
+                if result:
+                    step_count = result.get("steps_created", "?")
+                    print(f"    Workflow started: {step_count} steps queued")
+                else:
+                    print(f"    Failed to start workflow")
+                    continue
             else:
-                print(f"    Failed to spawn")
+                result = spawn_mission(
+                    schedule["goal"],
+                    schedule.get("project", "nexus"),
+                    schedule.get("worker_type", "scout"),
+                    schedule.get("priority", 50),
+                )
+                if result:
+                    print(f"    Spawned: {result.get('task_id', '?')[:8]}...")
+                else:
+                    print(f"    Failed to spawn")
+                    continue
+
+            sb_patch(f"nexus_schedules?id=eq.{schedule['id']}", {
+                "last_run_at": now.isoformat(),
+                "run_count": (schedule.get("run_count") or 0) + 1,
+            })
+            ran += 1
 
     return ran
 
@@ -118,9 +152,48 @@ def seed_defaults():
         return
 
     defaults = [
-        {"name": "Morning Briefing", "goal": "Generate a morning briefing: check all project health, recent git activity, task queue status, and API costs. Summarize in under 200 words.", "project": "nexus", "worker_type": "scout", "priority": 40, "cron_expression": "0 7 * * *"},
-        {"name": "Weekly Status Report", "goal": "Generate a weekly status report: accomplishments this week, in-progress items, blockers, plan for next week. Pull from git commits and task completions.", "project": "nexus", "worker_type": "scout", "priority": 50, "cron_expression": "0 8 * * 1"},
-        {"name": "End-of-Day Digest", "goal": "Generate end-of-day digest: tasks completed today, costs incurred, any failures or issues. Keep it brief.", "project": "nexus", "worker_type": "scout", "priority": 60, "cron_expression": "0 18 * * *"},
+        {
+            "name": "Morning Standup",
+            "goal": "Morning standup workflow — git check, health check, daily brief",
+            "project": "nexus",
+            "worker_type": "scout",
+            "priority": 40,
+            "cron_expression": "0 7 * * *",
+            "workflow_steps": [
+                {
+                    "template_name": "Git Activity Check",
+                    "goal": "Check git log for all projects in the last 24 hours. List commits by project with authors and descriptions. Check https://api.github.com/users/kjhholt-alt/events for recent pushes.",
+                    "project": "nexus",
+                    "worker_type": "scout",
+                    "priority": 40,
+                    "use_previous_output": False,
+                    "wait_for_approval": False,
+                    "timeout_minutes": 5,
+                },
+                {
+                    "template_name": "Health Check",
+                    "goal": "Check the health of all deployed services: nexus.buildkit.store, services.buildkit.store, pcbottleneck.buildkit.store, emailfinder.buildkit.store. Report HTTP status of each. Check Supabase tables for recent activity.",
+                    "project": "nexus",
+                    "worker_type": "inspector",
+                    "priority": 40,
+                    "use_previous_output": False,
+                    "wait_for_approval": False,
+                    "timeout_minutes": 5,
+                },
+                {
+                    "template_name": "Daily Brief",
+                    "goal": "Based on the git activity and health status from previous steps, write a concise daily briefing (under 200 words). Include: key accomplishments, issues requiring attention, and top 3 priorities for today. Post the result to Discord.",
+                    "project": "nexus",
+                    "worker_type": "scout",
+                    "priority": 30,
+                    "use_previous_output": True,
+                    "wait_for_approval": False,
+                    "timeout_minutes": 5,
+                },
+            ],
+        },
+        {"name": "Weekly Status Report", "goal": "Generate a weekly status report: accomplishments this week, in-progress items, blockers, plan for next week. Pull from git commits and task completions across all projects (nexus, buildkit-services, pc-bottleneck-analyzer, MoneyPrinter, email-finder-app). Format as a structured report.", "project": "nexus", "worker_type": "scout", "priority": 50, "cron_expression": "0 8 * * 1"},
+        {"name": "End-of-Day Digest", "goal": "Generate end-of-day digest: tasks completed today, costs incurred, any failures or issues. Check swarm_tasks for today's activity and nexus_sessions for cost tracking. Keep it brief.", "project": "nexus", "worker_type": "scout", "priority": 60, "cron_expression": "0 18 * * *"},
     ]
 
     for d in defaults:

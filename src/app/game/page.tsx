@@ -911,7 +911,7 @@ function WorkerPanel({
                 if (!confirm("Stop this worker?")) return;
                 await fetch("/api/webhook", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", "x-nexus-key": "nexus-hive-2026" },
+                  headers: { "Content-Type": "application/json", "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026" },
                   body: JSON.stringify({ event: "stop_worker", data: { worker_id: worker.id } }),
                 });
                 onClose();
@@ -920,7 +920,7 @@ function WorkerPanel({
                 if (!newGoal) return;
                 await fetch("/api/webhook", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", "x-nexus-key": "nexus-hive-2026" },
+                  headers: { "Content-Type": "application/json", "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026" },
                   body: JSON.stringify({ goal: newGoal, project: "nexus" }),
                 });
                 alert("New task created! Worker will pick it up shortly.");

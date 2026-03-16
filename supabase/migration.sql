@@ -42,8 +42,9 @@ CREATE INDEX IF NOT EXISTS idx_nexus_sessions_last_activity ON nexus_sessions(la
 CREATE INDEX IF NOT EXISTS idx_nexus_hook_events_session ON nexus_hook_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_nexus_hook_events_created ON nexus_hook_events(created_at DESC);
 
--- Enable Realtime on sessions so dashboard updates live
+-- Enable Realtime on sessions and hook events so dashboard updates live
 ALTER PUBLICATION supabase_realtime ADD TABLE nexus_sessions;
+ALTER PUBLICATION supabase_realtime ADD TABLE nexus_hook_events;
 
 -- RLS: allow all operations for anon key (single-user app)
 ALTER TABLE nexus_sessions ENABLE ROW LEVEL SECURITY;
