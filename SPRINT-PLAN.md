@@ -57,17 +57,17 @@ The factory needs to run 24/7 without you babysitting it.
 Build the actual workflows that save you time at work.
 
 ### Week 5-6: Finance Automation Foundations
-- [ ] **Excel/CSV processor agent** — Template that reads a spreadsheet, analyzes data, generates summary
-- [ ] **Email drafter agent** — Template that takes bullet points, generates professional finance email
-- [ ] **Meeting prep agent** — Template that takes meeting topic + attendees, generates agenda + talking points + relevant data
-- [ ] **Report generator agent** — Template that takes raw data + report type, generates formatted analysis
+- [x] **Excel/CSV processor agent** — Executor reads .xlsx via openpyxl, .pdf via PyPDF2, plus all text formats. Templates in Mission Templates library.
+- [x] **Email drafter agent** — "Draft Email Response" template + finance-email-style.md context auto-loaded
+- [x] **Meeting prep agent** — "Meeting Prep" template with structured agenda/talking points output
+- [x] **Report generator agent** — "Generate Report" template + finance-report-templates.md context auto-loaded
 
 ### Week 7-8: Multi-Step Workflows
-- [ ] **Workflow engine v1** — Chain multiple templates: gather data → analyze → draft report → format
-- [ ] **Approval gates** — Workflow pauses at checkpoints, sends Discord notification, waits for "approve" before continuing
-- [ ] **File I/O for agents** — Agents can read local files (Excel, PDF, CSV) and write output files
-- [ ] **Scheduled workflows** — Run a workflow every Monday morning, every month-end, etc.
-- [ ] **Deere context library** — Stored context files (org chart, terminology, templates) that agents auto-load
+- [x] **Workflow engine v1** — Chained steps via /api/workflows with depends_on linking, context passing between steps
+- [x] **Approval gates** — Executor pauses at wait_for_approval steps, sets "pending_approval", notifies Discord. /api/tasks/approve endpoint for approve/reject. Executor picks up "approved" tasks.
+- [x] **File I/O for agents** — xlsx/pdf/csv reading in executor. Output saved to nexus/output/ with task ID and timestamp. Extended to .log, .html, .xml.
+- [x] **Scheduled workflows** — Scheduler supports workflow_steps column for multi-step pipelines. Morning Standup runs 3-step workflow at 7am.
+- [x] **Deere context library** — contexts/ dir with 3 finance files (terminology, report templates, email style). Auto-loaded by executor based on project and task type.
 
 ### Deliverable: You can say "prepare my monthly close report" and Nexus generates it from your data
 
