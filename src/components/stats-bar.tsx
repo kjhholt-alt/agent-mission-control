@@ -71,7 +71,12 @@ export function StatsBar({ agents }: StatsBarProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.1 }}
-          className={`${stat.bg} ${stat.border} border rounded-lg p-4 backdrop-blur-sm`}
+          whileHover={{
+            scale: 1.02,
+            borderColor: stat.color.replace('text-', 'rgb(var(--color-'),
+            boxShadow: `0 0 20px ${stat.color.includes('cyan') ? 'rgba(6, 182, 212, 0.4)' : stat.color.includes('emerald') ? 'rgba(16, 185, 129, 0.4)' : stat.color.includes('violet') ? 'rgba(167, 139, 250, 0.4)' : 'rgba(251, 191, 36, 0.4)'}`,
+          }}
+          className={`${stat.bg} ${stat.border} border rounded-lg p-4 backdrop-blur-sm transition-all cursor-pointer`}
         >
           <div className="flex items-center gap-2 mb-1">
             <stat.icon className={`w-4 h-4 ${stat.color}`} />
