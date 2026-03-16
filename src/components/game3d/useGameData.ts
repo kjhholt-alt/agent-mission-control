@@ -642,7 +642,9 @@ export function useGameData() {
       xp: sw.xp % 100,
       currentBuildingId: buildingId,
       targetBuildingId: buildingId, // Real workers stay at their building
-      task: speechBubble || `${sw.worker_type} worker`,
+      task: speechBubble || (sw.tasks_completed > 0
+        ? `${sw.tasks_completed} tasks done — awaiting mission`
+        : "Awaiting first mission"),
       progress,
       speechBubble,
       status: gameStatus,
