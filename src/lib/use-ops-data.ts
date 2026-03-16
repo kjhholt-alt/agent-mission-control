@@ -44,32 +44,52 @@ export function useOpsData(): OpsData {
         .limit(1),
       supabase
         .from("swarm_task_log")
-        .select("*")
+        .select("id, task_id, worker_id, event, details, created_at")
         .order("created_at", { ascending: false })
         .limit(100),
     ]);
 
     if (!mountedRef.current) return;
 
-    if (tasksRes.data) setTasks(tasksRes.data as OpsTask[]);
+    // Map task data — DB uses actual_cost_cents, type uses cost_cents
+    if (tasksRes.data) {
+      const mapped = tasksRes.data.map((t: Record<string, unknown>) => ({
+        ...t,
+        cost_cents: t.actual_cost_cents ?? 0,
+      }));
+      setTasks(mapped as OpsTask[]);
+    }
     if (workersRes.data) setWorkers(workersRes.data as OpsWorker[]);
     if (budgetRes.data && budgetRes.data.length > 0)
       setBudget(budgetRes.data[0] as OpsBudget);
-    if (eventsRes.data) setEvents(eventsRes.data as OpsEvent[]);
-    // If swarm_task_log doesn't exist, synthesize events from tasks
-    if (eventsRes.error && tasksRes.data) {
-      const syntheticEvents: OpsEvent[] = (tasksRes.data as OpsTask[])
-        .filter((t) => t.completed_at || t.started_at)
+
+    // Map task_log rows → OpsEvent (DB column "event" → type field "event_type")
+    if (eventsRes.data && eventsRes.data.length > 0) {
+      const mapped: OpsEvent[] = eventsRes.data.map((e: Record<string, unknown>) => ({
+        id: e.id as string,
+        task_id: (e.task_id as string) ?? null,
+        worker_id: (e.worker_id as string) ?? null,
+        event_type: (e.event as string) ?? "unknown",
+        title: typeof e.details === "object" && e.details ? String((e.details as Record<string, unknown>).title ?? e.event ?? "") : String(e.event ?? ""),
+        details: typeof e.details === "string" ? e.details : e.details ? JSON.stringify(e.details) : null,
+        project: typeof e.details === "object" && e.details ? String((e.details as Record<string, unknown>).project ?? "") : null,
+        created_at: e.created_at as string,
+      }));
+      setEvents(mapped);
+    } else {
+      // Synthesize events from tasks as fallback
+      const syntheticEvents: OpsEvent[] = (tasksRes.data ?? [])
+        .filter((t: Record<string, unknown>) => t.completed_at || t.started_at)
         .slice(0, 100)
-        .map((t) => ({
+        .map((t: Record<string, unknown>) => ({
           id: `synth-${t.id}`,
-          task_id: t.id,
-          worker_id: t.assigned_worker_id,
+          task_id: t.id as string,
+          worker_id: (t.assigned_worker_id as string) ?? null,
           event_type: t.status === "completed" ? "task_complete" : t.status === "failed" ? "task_failed" : "task_started",
-          title: t.title,
+          title: (t.title as string) ?? "",
           details: null,
-          project: t.project,
-          created_at: t.completed_at || t.started_at || t.updated_at,
+          project: (t.project as string) ?? null,
+          created_at: (t.completed_at ?? t.started_at ?? t.updated_at) as string,
         }));
       setEvents(syntheticEvents);
     }

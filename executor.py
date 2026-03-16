@@ -649,6 +649,11 @@ def execute_task(task):
     if file_context:
         prompt = f"Input files:\n\n{file_context}\n{prompt}"
 
+    # Ensure input_data.prompt is populated so swarm workers can read it
+    # (workers like light_worker, heavy_worker expect input_data.prompt)
+    input_data["prompt"] = prompt
+    task["input_data"] = input_data
+
     # Resolve working directory
     cwd = PROJECT_DIRS.get(project, PROJECTS_ROOT)
     if not os.path.isdir(cwd):
