@@ -39,14 +39,14 @@ The factory needs to run 24/7 without you babysitting it.
 - [x] **Make executor auto-start on boot** — Windows Task Scheduler entry via `scripts/register-executor-task.ps1`, crash recovery via `scripts/start-executor.ps1`
 - [x] **Fix session cost tracking** — Stop hook now parses session JSONL for real token usage, sends to collector for cost calculation
 - [x] **Add error notifications** — executor.py sends Discord alerts on task failure, timeout, and startup/shutdown
-- [ ] **Clean up 1000 completed tasks** — Run archive script, keep last 100
+- [x] **Clean up 1000 completed tasks** — Archived 1163 old tasks, kept 100 most recent. Cleared FK refs in task_log first.
 
 ### Week 3-4: Make It Useful Daily
 - [x] **Morning briefing script** — `scripts/ops/morning-briefing.py` — scheduled daily at 7am via Task Scheduler, posts to Discord with sessions, costs, tasks, git activity, infra status, action items
-- [ ] **Add Deere project templates** — Templates for: "Analyze financial data", "Generate report", "Review spreadsheet", "Draft email response"
-- [ ] **Add personal project templates** — Templates for each side project's most common tasks
-- [ ] **Scheduled health checks** — n8n workflow runs health-check.py every 15 min, alerts on failure
-- [ ] **Git activity dashboard** — Fusion page shows real git commits per project (already partially built)
+- [x] **Add Deere project templates** — 5 templates: financial analysis, email drafter, meeting prep, report generator, spreadsheet review
+- [x] **Add personal project templates** — 8 templates: MoneyPrinter health/P&L, PC Bottleneck SEO, Finance Brief SEO, BuildKit prospecting, BarrelHouse tests, Nexus health check, dependency updates
+- [x] **Scheduled health checks** — `health-check.py` runs every 15min via Task Scheduler, checks 9 endpoints (Supabase, Vercel x4, executor, n8n, Discord, queue), posts Discord alert on failure
+- [x] **Git activity dashboard** — Fusion page shows real commits across 14 GitHub repos via /api/git-activity
 
 ### Deliverable: Nexus runs 24/7, you get a morning briefing, you can spawn missions from phone via Discord
 
