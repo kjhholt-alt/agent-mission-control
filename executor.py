@@ -681,10 +681,10 @@ def execute_task(task):
 
     try:
         start = time.time()
-        # shell=False to prevent command injection via prompt content
+        # shell=True required on Windows for .cmd wrapper to pass args correctly
         result = subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True,
-            timeout=TASK_TIMEOUT, shell=False, encoding="utf-8", errors="replace",
+            timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
         )
         duration = round(time.time() - start, 1)
 
