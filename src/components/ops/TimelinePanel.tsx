@@ -35,25 +35,27 @@ type TabKey = "timeline" | "details";
 // ─── EVENT ICON ───────────────────────────────────────────────────────────────
 
 function EventIcon({ type }: { type: string }) {
-  if (type.includes("complete") || type.includes("success"))
+  const t = type || "";
+  if (t.includes("complete") || t.includes("success"))
     return <CheckCircle className="w-3 h-3 text-emerald-400" />;
-  if (type.includes("fail") || type.includes("error"))
+  if (t.includes("fail") || t.includes("error"))
     return <XCircle className="w-3 h-3 text-red-400" />;
-  if (type.includes("start") || type.includes("running") || type.includes("progress"))
+  if (t.includes("start") || t.includes("running") || t.includes("progress"))
     return <Play className="w-3 h-3 text-cyan-400" />;
-  if (type.includes("block") || type.includes("warn"))
+  if (t.includes("block") || t.includes("warn"))
     return <AlertTriangle className="w-3 h-3 text-amber-400" />;
-  if (type.includes("scout") || type.includes("spawn"))
+  if (t.includes("scout") || t.includes("spawn"))
     return <Radar className="w-3 h-3 text-violet-400" />;
   return <Clock className="w-3 h-3 text-zinc-500" />;
 }
 
 function eventColor(type: string): string {
-  if (type.includes("complete") || type.includes("success")) return "#10b981";
-  if (type.includes("fail") || type.includes("error")) return "#ef4444";
-  if (type.includes("start") || type.includes("running") || type.includes("progress")) return "#06b6d4";
-  if (type.includes("block") || type.includes("warn")) return "#eab308";
-  if (type.includes("scout")) return "#8b5cf6";
+  const t = type || "";
+  if (t.includes("complete") || t.includes("success")) return "#10b981";
+  if (t.includes("fail") || t.includes("error")) return "#ef4444";
+  if (t.includes("start") || t.includes("running") || t.includes("progress")) return "#06b6d4";
+  if (t.includes("block") || t.includes("warn")) return "#eab308";
+  if (t.includes("scout")) return "#8b5cf6";
   return "#6b7280";
 }
 
