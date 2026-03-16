@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AlertBanner } from "@/components/AlertBanner";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -82,6 +83,7 @@ export default function RootLayout({
       <body className={`${jetbrainsMono.variable} antialiased`}>
         <TooltipProvider>
           <GlobalNav />
+          <AlertBanner />
           <div className="pt-10">{children}</div>
         </TooltipProvider>
       </body>

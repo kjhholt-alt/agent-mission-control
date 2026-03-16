@@ -78,17 +78,17 @@ Build the actual workflows that save you time at work.
 Make agents work together and get smarter over time.
 
 ### Week 9-10: Agent Coordination
-- [ ] **Agent-to-agent handoff** — Builder finishes code → Inspector auto-reviews → Deployer auto-deploys
-- [ ] **Parallel agent execution** — Run 3-5 agents simultaneously on different projects
-- [ ] **Shared memory/context** — Agents read/write to a shared knowledge base (Supabase table)
-- [ ] **Agent specialization** — Train agents on your codebase patterns, your writing style, your finance terminology
+- [x] **Agent-to-agent handoff** — chain_next in input_data auto-spawns follow-up tasks. Executor unblocks dependent tasks on completion.
+- [x] **Parallel agent execution** — ThreadPoolExecutor with --workers flag (default 3, max 5). Thread-safe fetch with lock.
+- [x] **Shared memory/context** — swarm_memory Supabase table. Executor stores output summaries, recalls last 3 per project before execution.
+- [x] **Agent specialization** — agent_specializations table tracks success/fail/avg_duration per project+task_type. Best practices loaded into prompts.
 
 ### Week 11-12: Intelligence Layer
-- [ ] **Pattern recognition** — Track what tasks succeed/fail, auto-adjust prompts based on history
-- [ ] **Cost optimization** — Auto-route simple tasks to Haiku, complex to Sonnet, critical to Opus
-- [ ] **Predictive scheduling** — Based on your patterns, pre-queue Monday morning tasks on Sunday night
-- [ ] **Personal dashboard** — Single page showing: Deere tasks for today, side project status, cost this week, agent performance rankings
-- [ ] **Weekly retrospective** — Auto-generated report: what agents accomplished, what failed, what to improve
+- [x] **Pattern recognition** — /api/patterns endpoint analyzes 7-day history. Specialization data auto-updated after every task. Informs prompt enhancement.
+- [x] **Cost optimization** — Auto-routes to haiku (check/status/health), sonnet (review/analyze), or opus (build/implement) based on keywords + cost_tier field.
+- [x] **Predictive scheduling** — Scheduler analyzes 30-day task patterns, auto-suggests recurring schedules as disabled drafts with source="predicted".
+- [x] **Personal dashboard** — /today page: greeting, stats row, task list, project health, agent rankings, intelligence panel with specialization data.
+- [x] **Weekly retrospective** — scripts/ops/weekly-retrospective.py: 7-day analysis vs previous week, project breakdown, top errors, posts to Discord. Scheduled Monday 9am.
 
 ### Deliverable: Nexus anticipates your needs and runs multi-agent workflows with minimal supervision
 

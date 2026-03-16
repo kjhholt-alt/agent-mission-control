@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Download,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
@@ -262,12 +263,22 @@ export default function FusionPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={fetchFusionData}
-            className="p-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 text-zinc-400 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="/api/export?period=week&format=csv"
+              download
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-emerald-500/30 transition-colors text-xs text-zinc-400 hover:text-emerald-400"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </a>
+            <button
+              onClick={fetchFusionData}
+              className="p-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 hover:border-cyan-500/30 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 text-zinc-400 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </motion.header>
 
         {!data ? (

@@ -37,10 +37,11 @@ export function Building3D({
   const height = building.size * 1.0;
 
   const isActive = building.status === "active";
+  const isError = building.status === "error";
   const isLarge = building.size >= 2;
 
-  const color = useMemo(() => new THREE.Color(building.color), [building.color]);
-  const edgeColor = useMemo(() => new THREE.Color(building.color), [building.color]);
+  const color = useMemo(() => new THREE.Color(isError ? "#ef4444" : building.color), [building.color, isError]);
+  const edgeColor = useMemo(() => new THREE.Color(isError ? "#ef4444" : building.color), [building.color, isError]);
 
   // Warning stripe texture for base platform
   const warningTexture = useMemo(() => {
@@ -85,7 +86,10 @@ export function Building3D({
     const isWarning = building.status === "warning";
 
     let emissiveIntensity: number;
-    if (isActive) {
+    if (isError) {
+      // Threat zone — aggressive red pulse
+      emissiveIntensity = 0.4 + Math.sin(t * 5) * 0.3;
+    } else if (isActive) {
       emissiveIntensity = 0.25 + Math.sin(t * 2 + building.gridX) * 0.1;
     } else if (isWarning) {
       emissiveIntensity = 0.2 + Math.sin(t * 4) * 0.15;
@@ -133,11 +137,13 @@ export function Building3D({
     }
   });
 
-  const statusColor = building.status === "active"
-    ? "#22c55e"
-    : building.status === "warning"
-      ? "#f59e0b"
-      : "#6b7280";
+  const statusColor = building.status === "error"
+    ? "#ef4444"
+    : building.status === "active"
+      ? "#22c55e"
+      : building.status === "warning"
+        ? "#f59e0b"
+        : "#6b7280";
 
   // Window strip positions — two on each long side
   const windowY = height * 0.15;
@@ -339,6 +345,32 @@ export function Building3D({
           color={building.color}
           intensity={0.8}
           distance={4}
+          decay={2}
+        />
+      )}
+
+      {/* Threat zone ring — pulsing red for error state */}
+      {isError && (
+        <mesh position={[0, -height / 2 + 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[width * 0.9, width * 1.1, 32]} />
+          <meshStandardMaterial
+            color="#ef4444"
+            emissive="#ef4444"
+            emissiveIntensity={1.5}
+            transparent
+            opacity={0.4}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+
+      {/* Error point light — red glow for threat buildings */}
+      {isError && (
+        <pointLight
+          position={[0, height * 0.3, 0]}
+          color="#ef4444"
+          intensity={2.0}
+          distance={6}
           decay={2}
         />
       )}

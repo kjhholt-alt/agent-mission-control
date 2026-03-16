@@ -12,7 +12,7 @@ export interface Building {
   size: number;
   gridX: number;
   gridY: number;
-  status: "active" | "idle" | "warning";
+  status: "active" | "idle" | "warning" | "error";
   description: string;
   stats: { tests: number; deploys: number; uptime: string };
 }

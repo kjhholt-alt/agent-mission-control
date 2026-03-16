@@ -14,6 +14,7 @@ import {
 import { useOpsData } from "@/lib/use-ops-data";
 import type { OpsTask, OpsWorker } from "@/lib/ops-types";
 import { StatusRibbon } from "@/components/ops/StatusRibbon";
+import { PipelineView } from "@/components/ops/PipelineView";
 import { KanbanBoard } from "@/components/ops/KanbanBoard";
 import { WorkerFleet } from "@/components/ops/WorkerFleet";
 import { TimelinePanel } from "@/components/ops/TimelinePanel";
@@ -118,6 +119,30 @@ export default function OpsCenter() {
     console.log("Deploy swarm with goal:", goal);
   }, []);
 
+  // ── Workflow pipeline extraction ──
+  // Filter tasks that have "[" in their title (workflow tasks)
+  const workflowTasks = tasks.filter((t) => t.title.includes("["));
+
+  // Group workflow tasks by workflow name (text inside brackets)
+  const workflowGroups: Record<string, typeof tasks> = {};
+  for (const t of workflowTasks) {
+    const match = t.title.match(/^\[([^\]]+)\]/);
+    if (match) {
+      const name = match[1];
+      if (!workflowGroups[name]) workflowGroups[name] = [];
+      workflowGroups[name].push(t);
+    }
+  }
+
+  // Find the first active workflow (has at least one in_progress or queued task)
+  const activeWorkflowEntry = Object.entries(workflowGroups).find(([, group]) =>
+    group.some((t) => t.status === "in_progress" || t.status === "queued" || t.status === "pending")
+  );
+  // Fallback to first workflow group if no active one
+  const pipelineEntry = activeWorkflowEntry || Object.entries(workflowGroups)[0];
+  const pipelineName = pipelineEntry ? pipelineEntry[0] : "";
+  const pipelineTasks = pipelineEntry ? pipelineEntry[1] : [];
+
   // Task overlay for drag
   const dragOverlayContent = draggedTask ? (
     <div
@@ -162,6 +187,27 @@ export default function OpsCenter() {
             lastUpdated={lastUpdated}
           />
         </div>
+
+        {/* PIPELINE VIEW — Workflow progression */}
+        {pipelineTasks.length > 0 && (
+          <div className="flex-shrink-0 px-2">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="rounded-lg border border-zinc-800/40 p-3"
+              style={{
+                background: "rgba(10,10,18,0.5)",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <PipelineView
+                workflowTasks={pipelineTasks}
+                workflowName={pipelineName}
+              />
+            </motion.div>
+          </div>
+        )}
 
         {/* MAIN CONTENT — 3-panel layout */}
         <div className="flex-1 min-h-0 px-2 pb-2 flex gap-2">
