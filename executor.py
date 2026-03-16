@@ -684,7 +684,7 @@ def execute_task(task):
 
     # Build shell command that pipes the prompt file to claude CLI
     model_flag = f' --model {model}' if model else ""
-    shell_cmd = f'type "{prompt_file}" | "{CLAUDE_CLI}" --output-format text -p -{model_flag}'
+    shell_cmd = f'type "{prompt_file}" | "{CLAUDE_CLI}" --output-format text -p - --dangerously-skip-permissions{model_flag}'
     if model:
         print(f"  Model: {model}")
 
