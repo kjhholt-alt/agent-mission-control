@@ -674,16 +674,17 @@ def execute_task(task):
 
     # 5. Model routing (cost optimization)
     model = select_model(task)
-    cmd = [CLAUDE_CLI, "-p", prompt, "--output-format", "text"]
+    cmd = [CLAUDE_CLI, "--output-format", "text", "-p", "-"]
     if model:
         cmd.extend(["--model", model])
         print(f"  Model: {model}")
+    print(f"  Prompt length: {len(prompt)} chars")
 
     try:
         start = time.time()
-        # shell=True required on Windows for .cmd wrapper to pass args correctly
+        # Pass prompt via stdin (-p - reads from stdin) to avoid Windows .cmd arg mangling
         result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True,
+            cmd, cwd=cwd, capture_output=True, text=True, input=prompt,
             timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
         )
         duration = round(time.time() - start, 1)
