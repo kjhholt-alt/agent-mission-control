@@ -84,9 +84,15 @@ MODEL_ROUTING = {
     # "cc_light", "heavy", None → default (no --model flag, uses Opus)
 }
 
-# Keywords for auto-classifying task complexity
-HAIKU_KEYWORDS = {"check", "status", "list", "format", "count", "ping", "health", "digest"}
-SONNET_KEYWORDS = {"review", "analyze", "plan", "summarize", "compare", "audit", "research"}
+# Task types that are truly trivial — OK for Haiku
+HAIKU_TASK_TYPES = {"eval", "check", "health", "status", "ping"}
+# Task types that need real work — always Sonnet minimum
+SONNET_TASK_TYPES = {"build", "scout", "builder", "implement", "fix", "refactor",
+                     "review", "analyze", "plan", "research", "audit", "inspector", "miner"}
+# Keywords for auto-classifying when task_type doesn't resolve
+HAIKU_KEYWORDS = {"status", "ping", "health"}
+SONNET_KEYWORDS = {"review", "analyze", "plan", "summarize", "compare", "audit", "research",
+                   "build", "implement", "fix", "refactor", "scout"}
 # Everything else → Opus (default)
 
 # Thread safety
@@ -253,24 +259,37 @@ def memory_recall(project, limit=5):
 # ── Cost Optimization / Model Routing (Feature 6) ───────────────────
 
 def select_model(task):
-    """Choose the right Claude model based on task complexity."""
-    cost_tier = task.get("cost_tier", "cc_light")
+    """Choose the right Claude model based on task complexity.
 
-    # Explicit model routing from cost_tier
-    if cost_tier in MODEL_ROUTING:
-        return MODEL_ROUTING[cost_tier]
+    Routing priority:
+      1. task_type in HAIKU_TASK_TYPES  → Haiku  (trivial ops only)
+      2. task_type in SONNET_TASK_TYPES → Sonnet (real work)
+      3. Keyword scan of title/description as fallback
+      4. Default → Sonnet (safe default; Opus only when explicitly requested)
 
-    # Auto-classify from task title/description keywords
+    cost_tier field is IGNORED for routing — it was sending real work to
+    Haiku.  We keep the field for billing/reporting only.
+    """
+    task_type = (task.get("task_type") or "").lower().strip()
+
+    # 1. Route by task_type first (most reliable signal)
+    if task_type in HAIKU_TASK_TYPES:
+        return MODEL_ROUTING["haiku"]
+    if task_type in SONNET_TASK_TYPES:
+        return MODEL_ROUTING["sonnet"]
+
+    # 2. Keyword fallback for unknown task_types
     text = (task.get("title", "") + " " + (task.get("description") or "")).lower()
     words = set(text.split())
 
-    if words & HAIKU_KEYWORDS and not words & {"build", "implement", "fix", "refactor"}:
+    if words & HAIKU_KEYWORDS and not words & SONNET_KEYWORDS:
         return MODEL_ROUTING["haiku"]
 
-    if words & SONNET_KEYWORDS and not words & {"build", "implement", "refactor"}:
+    if words & SONNET_KEYWORDS:
         return MODEL_ROUTING["sonnet"]
 
-    return None  # Default — no --model flag, uses whatever claude CLI defaults to
+    # 3. Default to Sonnet — safe for real work, not wasteful
+    return MODEL_ROUTING["sonnet"]
 
 
 # ── Agent Specialization (Features 4 & 5) ───────────────────────────
@@ -671,6 +690,62 @@ def execute_task(task):
             stdout = stdout[:5000] + f"\n\n[...truncated {len(stdout) - 10000} chars...]\n\n" + stdout[-5000:]
 
         if result.returncode == 0:
+            # ── Clarification detection ──────────────────────────
+            # If the model asked questions instead of doing work,
+            # treat it as a failure so the task gets retried or
+            # escalated instead of silently "completing".
+            CLARIFICATION_PHRASES = [
+                "i need more information",
+                "i need more details",
+                "i need more context",
+                "could you clarify",
+                "could you provide",
+                "could you specify",
+                "can you clarify",
+                "can you provide more",
+                "need specific direction",
+                "need clarification",
+                "i'm ready to work but",
+                "i'm ready to help but",
+                "please provide",
+                "please clarify",
+                "before i proceed",
+                "before i can",
+                "what would you like me",
+                "which approach would you prefer",
+            ]
+            stdout_lower = stdout.lower()
+            asked_clarification = any(phrase in stdout_lower for phrase in CLARIFICATION_PHRASES)
+
+            if asked_clarification:
+                print(f"\n  [{thread_name}] REJECTED (clarification instead of execution) in {duration}s")
+
+                with _stats_lock:
+                    _session_stats["failed"] += 1
+                    _session_stats["xp"] += 2
+
+                error_reason = "Model requested clarification instead of executing"
+                update_task(task_id, {
+                    "status": "failed",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": error_reason,
+                    "output_data": json.dumps({
+                        "response": stdout, "duration_seconds": duration,
+                        "exit_code": 0, "model": model or "default",
+                        "rejection_reason": "clarification_instead_of_execution",
+                    }),
+                })
+                log_task_event(task_id, "rejected", f"Clarification instead of work: {title}", project, error_reason)
+                update_worker("idle")
+                notify_discord(
+                    f"**Task Rejected (clarification):** {title}\n"
+                    f"Project: {project} | {duration}s | Model: {model or 'default'}",
+                    0xe8a019,
+                )
+                track_specialization(project, task_type, False, duration)
+                return False
+            # ── End clarification detection ──────────────────────
+
             print(f"\n  [{thread_name}] COMPLETED in {duration}s")
 
             with _stats_lock:
