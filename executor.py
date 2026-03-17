@@ -546,30 +546,41 @@ def read_input_files(input_data):
 # ── Task Fetching (thread-safe) ──────────────────────────────────────
 
 def fetch_next_task():
-    """Get the highest-priority queued or approved task (thread-safe)."""
+    """Get the highest-priority queued or approved task (thread-safe).
+
+    Uses optimistic locking: PATCH includes status=eq.queued guard so only
+    one process can claim a task even without an RPC.
+    """
     with _fetch_lock:
         # Approved tasks first
         result = supabase_request("GET", "swarm_tasks?status=eq.approved&order=priority.asc&limit=1")
         if result and len(result) > 0:
-            # Immediately mark as running to prevent other threads from grabbing it
             task = result[0]
-            update_task(task["id"], {
-                "status": "running",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "assigned_worker_id": WORKER_ID,
-            })
-            return task
+            # Optimistic lock: only claim if still approved (prevents double-execution)
+            claimed = supabase_request("PATCH",
+                f"swarm_tasks?id=eq.{task['id']}&status=eq.approved", {
+                    "status": "running",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "assigned_worker_id": WORKER_ID,
+                })
+            if claimed and len(claimed) > 0:
+                return task
+            # Another worker claimed it, fall through
 
         # Queued tasks
         result = supabase_request("GET", "swarm_tasks?status=eq.queued&order=priority.asc&limit=1")
         if result and len(result) > 0:
             task = result[0]
-            update_task(task["id"], {
-                "status": "running",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "assigned_worker_id": WORKER_ID,
-            })
-            return task
+            # Optimistic lock: only claim if still queued
+            claimed = supabase_request("PATCH",
+                f"swarm_tasks?id=eq.{task['id']}&status=eq.queued", {
+                    "status": "running",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "assigned_worker_id": WORKER_ID,
+                })
+            if claimed and len(claimed) > 0:
+                return task
+            # Another worker claimed it
 
         return None
 
@@ -833,13 +844,14 @@ def execute_task(task):
     except subprocess.TimeoutExpired as te:
         duration = round(time.time() - start, 1)
         print(f"\n  [{thread_name}] TIMED OUT after {TASK_TIMEOUT}s")
-        # Kill the orphan subprocess to prevent resource leaks
-        if te.cmd and hasattr(te, 'cmd'):
-            try:
-                import signal
-                os.kill(os.getpid(), 0)  # Check we're still alive
-            except Exception:
-                pass
+        # Kill orphan claude processes spawned by shell=True
+        # subprocess.run only kills cmd.exe, not the grandchild claude process
+        try:
+            if os.name == "nt":
+                # Kill any claude processes with our prompt file
+                os.system(f'taskkill /F /FI "WINDOWTITLE eq nexus-prompt-{task_id[:8]}*" >nul 2>&1')
+        except Exception:
+            pass
         with _stats_lock:
             _session_stats["failed"] += 1
         update_task(task_id, {

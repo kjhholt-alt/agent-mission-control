@@ -8,7 +8,7 @@
 #   wscript.exe C:\Users\Kruz\Desktop\Projects\nexus\scripts\executor-hidden.vbs
 
 $ErrorActionPreference = "Continue"
-$ProjectRoot = "C:\Users\Kruz\Desktop\Projects\agent-mission-control"
+$ProjectRoot = "C:\Users\Kruz\Desktop\Projects\nexus"
 Set-Location $ProjectRoot
 
 # ── Load environment variables ────────────────────────────────────────
@@ -67,8 +67,8 @@ try {
 
         try {
             $psi = New-Object System.Diagnostics.ProcessStartInfo
-            $psi.FileName = "python"
-            $psi.Arguments = "-u executor.py --loop --interval 15"
+            $psi.FileName = "C:\Users\Kruz\AppData\Local\Python\pythoncore-3.14-64\python.exe"
+            $psi.Arguments = "-u executor.py --loop --interval 15 --workers 3"
             $psi.WorkingDirectory = $ProjectRoot
             $psi.UseShellExecute = $false
             $psi.RedirectStandardOutput = $true

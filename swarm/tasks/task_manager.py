@@ -144,25 +144,7 @@ class TaskManager:
         Returns:
             The claimed task row, or None if no tasks available
         """
-        # Try RPC first (atomic, uses SELECT FOR UPDATE SKIP LOCKED)
-        try:
-            resp = self.sb.rpc(
-                "claim_swarm_task", {"p_cost_tier": cost_tier, "p_worker_id": worker_id or ""}
-            ).execute()
-            if resp.data and len(resp.data) > 0:
-                task = resp.data[0]
-                # Skip meta tasks - they are containers, not executable
-                if task.get("task_type") == "meta":
-                    logger.info("Skipping meta task %s (container only)", task["id"][:8])
-                    self._auto_complete_meta(task)
-                    return None
-                logger.info("Claimed task %s via RPC: %s", task["id"][:8], task["title"])
-                return task
-            return None
-        except Exception as e:
-            logger.debug("RPC claim_swarm_task not available (%s), using fallback", e)
-
-        # Fallback: select + update (race condition possible but acceptable)
+        # Select + update with optimistic lock (status=queued guard)
         # Exclude meta tasks - they are containers, not executable by workers
         # Fetch a batch of candidates so we can do smart matching client-side
         resp = (
@@ -311,6 +293,7 @@ class TaskManager:
         except (TypeError, ValueError):
             pass
 
+        resp = None
         try:
             resp = (
                 self.sb.table(self.TABLE)
@@ -324,7 +307,7 @@ class TaskManager:
             # If the update fails, at least mark it as completed without cost data
             logger.error("Failed to complete task %s with full data: %s. Retrying minimal update.", task_id[:8], e)
             try:
-                self.sb.table(self.TABLE).update({
+                resp = self.sb.table(self.TABLE).update({
                     "status": "completed",
                     "completed_at": now,
                     "updated_at": now,
@@ -336,7 +319,7 @@ class TaskManager:
 
         # Unblock tasks that depended on this one
         self._unblock_dependents(task_id)
-        return resp.data[0]
+        return resp.data[0] if resp and resp.data else {}
 
     # ── Fail ──────────────────────────────────────────────────────────────
 

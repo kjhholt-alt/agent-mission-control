@@ -77,7 +77,7 @@ class CCLightWorker(BaseWorker):
         # Write prompt to temp file to avoid Windows cmd.exe argument mangling
         import tempfile
         prompt_file = os.path.join(
-            tempfile.gettempdir(), f"swarm-prompt-{task['id'][:8]}.txt"
+            tempfile.gettempdir(), f"swarm-prompt-cclight-{task['id']}.txt"
         )
         with open(prompt_file, "w", encoding="utf-8") as pf:
             pf.write(prompt)
