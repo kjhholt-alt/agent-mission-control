@@ -55,12 +55,15 @@ export function ProjectQuadrant({
       >
         <span style={{ color: theme.primary }}>■</span>
         {title}
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex items-center gap-2 text-[9px]">
           {activeFlows.length > 0 && (
             <span style={{ color: theme.dim }}>
               {activeFlows.length} flow{activeFlows.length !== 1 ? "s" : ""}
             </span>
           )}
+          <span className="tabular-nums" style={{ color: theme.primary }}>
+            {activeFlows.reduce((sum, f) => sum + f.throughput, 0)}/s
+          </span>
         </span>
       </div>
 
@@ -115,8 +118,24 @@ export function ProjectQuadrant({
                         <span style={{ color: workerColor }}>{icon}</span>
                         <span style={{ color: theme.secondary }}>{w.name}</span>
                         {w.status === "working" && (
-                          <span className="tabular-nums" style={{ color: theme.dim }}>
-                            {w.progress}%
+                          <>
+                            <span className="tabular-nums" style={{ color: theme.dim }}>
+                              {w.progress}%
+                            </span>
+                            {/* ASCII progress bar */}
+                            <span style={{ color: theme.dim }}>
+                              [
+                              <span style={{ color: workerColor }}>
+                                {"█".repeat(Math.floor(w.progress / 10))}
+                              </span>
+                              {"░".repeat(10 - Math.floor(w.progress / 10))}
+                              ]
+                            </span>
+                          </>
+                        )}
+                        {w.status === "moving" && (
+                          <span style={{ color: theme.dim }} className="text-[8px]">
+                            → {w.task.slice(0, 20)}
                           </span>
                         )}
                       </div>
