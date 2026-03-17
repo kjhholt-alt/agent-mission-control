@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BUILDINGS, CONVEYORS } from "@/components/game3d/constants";
 import { useGameData } from "@/components/game3d/useGameData";
 import { CRTTerminal } from "@/components/terminal/CRTTerminal";
@@ -17,6 +17,8 @@ import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
 import { BuildingDetail } from "@/components/terminal/BuildingDetail";
 import { useTerminalTheme } from "@/components/terminal/useTerminalTheme";
 import { useSpawnTask } from "@/components/terminal/useSpawnTask";
+import { TerminalToast } from "@/components/terminal/TerminalToast";
+import { useToasts } from "@/components/terminal/useToasts";
 
 type RightPanel = "events" | "flows" | "agents" | "system" | "map";
 
@@ -24,11 +26,39 @@ export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
   const { themeName, theme, cycleTheme } = useTerminalTheme();
   const { spawnTask } = useSpawnTask();
+  const { toasts, addToast, dismissToast } = useToasts();
   const [booted, setBooted] = useState(false);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [rightPanel, setRightPanel] = useState<RightPanel>("events");
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const prevEventCount = useRef(events.length);
 
   const isConnected = !isDemo;
+
+  // Toast on new events
+  useEffect(() => {
+    if (!booted) return;
+    if (events.length > prevEventCount.current) {
+      const newest = events[0];
+      if (newest) {
+        addToast(newest.message, newest.type);
+      }
+    }
+    prevEventCount.current = events.length;
+  }, [events, booted, addToast]);
+
+  // Handle agent assignment — click agent in roster, then click building in quadrant
+  const handleAssignAgent = useCallback((buildingId: string) => {
+    if (!selectedAgentId) return;
+    const agent = workers.find(w => w.id === selectedAgentId);
+    const building = BUILDINGS.find(b => b.id === buildingId);
+    if (agent && building) {
+      addToast(`${agent.name} → ${building.shortName}`, "success");
+      // In live mode, this could update Supabase. For now it's visual feedback.
+      spawnTask(buildingId, `Reassigned ${agent.name} to ${building.name}`);
+    }
+    setSelectedAgentId(null);
+  }, [selectedAgentId, workers, addToast, spawnTask]);
 
   // Command handler
   const handleCommand = useCallback((cmd: string) => {
@@ -49,9 +79,10 @@ export default function GamePage() {
       const tab = cmd.slice(6) as RightPanel;
       setRightPanel(tab);
     }
-    // move and alert commands could update Supabase in the future
-    // For now they just trigger visual feedback via CommandInput output
-  }, [cycleTheme, spawnTask]);
+    if (cmd.startsWith("alert:")) {
+      addToast(cmd.slice(6), "warning");
+    }
+  }, [cycleTheme, spawnTask, addToast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -60,13 +91,17 @@ export default function GamePage() {
         e.preventDefault();
         cycleTheme();
       }
-      if (e.key === "Escape" && !booted) {
-        setBooted(true);
+      if (e.key === "Escape") {
+        if (selectedAgentId) {
+          setSelectedAgentId(null);
+        } else if (!booted) {
+          setBooted(true);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cycleTheme, booted]);
+  }, [cycleTheme, booted, selectedAgentId]);
 
   const inspectedBuilding = inspectedId ? BUILDINGS.find(b => b.id === inspectedId) : null;
 
@@ -77,6 +112,9 @@ export default function GamePage() {
           <BootSequence theme={theme} onComplete={() => setBooted(true)} />
         ) : (
           <div className="terminal-grid relative">
+            {/* Toast notifications */}
+            <TerminalToast toasts={toasts} theme={theme} onDismiss={dismissToast} />
+
             {/* Full-screen building detail overlay */}
             {inspectedBuilding && (
               <div className="absolute inset-0 z-30">
@@ -108,6 +146,8 @@ export default function GamePage() {
               events={events}
               conveyors={CONVEYORS}
               theme={theme}
+              selectedAgentId={selectedAgentId}
+              onAssignAgent={handleAssignAgent}
             />
 
             {/* Right-side panel — tabbed between Events and Flows */}
@@ -133,7 +173,15 @@ export default function GamePage() {
               <div className="flex-1 min-h-0">
                 {rightPanel === "events" && <DataFeed events={events} theme={theme} />}
                 {rightPanel === "flows" && <DataFlowMap conveyors={CONVEYORS} buildings={BUILDINGS} theme={theme} />}
-                {rightPanel === "agents" && <AgentRoster workers={workers} buildings={BUILDINGS} theme={theme} />}
+                {rightPanel === "agents" && (
+                  <AgentRoster
+                    workers={workers}
+                    buildings={BUILDINGS}
+                    theme={theme}
+                    selectedAgentId={selectedAgentId}
+                    onSelectAgent={setSelectedAgentId}
+                  />
+                )}
                 {rightPanel === "system" && (
                   <SystemMonitor workers={workers} buildings={BUILDINGS} events={events} budget={budget} theme={theme} />
                 )}

@@ -9,6 +9,8 @@ interface AgentRosterProps {
   workers: Worker[];
   buildings: Building[];
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
+  selectedAgentId?: string | null;
+  onSelectAgent?: (workerId: string | null) => void;
 }
 
 const STATUS_ORDER: Record<Worker["status"], number> = {
@@ -35,7 +37,7 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
 
-export function AgentRoster({ workers, buildings, theme }: AgentRosterProps) {
+export function AgentRoster({ workers, buildings, theme, selectedAgentId, onSelectAgent }: AgentRosterProps) {
   const buildingMap = useMemo(() => {
     const map: Record<string, Building> = {};
     for (const b of buildings) {
@@ -115,11 +117,18 @@ export function AgentRoster({ workers, buildings, theme }: AgentRosterProps) {
                 ? "#ffb000"
                 : theme.dim;
 
+          const isSelected = selectedAgentId === w.id;
+
           return (
             <div
               key={w.id}
-              className="rounded-sm hover:bg-white/[0.04] transition-colors py-1.5 px-1"
-              style={{ fontFamily: "monospace" }}
+              className="rounded-sm hover:bg-white/[0.04] transition-colors py-1.5 px-1 cursor-pointer"
+              style={{
+                fontFamily: "monospace",
+                backgroundColor: isSelected ? "rgba(255,255,255,0.08)" : undefined,
+                borderLeft: isSelected ? `2px solid ${theme.primary}` : "2px solid transparent",
+              }}
+              onClick={() => onSelectAgent?.(isSelected ? null : w.id)}
             >
               {/* ── Row 1: Icon, Name, Level, Status badge ── */}
               <div className="flex items-center gap-2" style={{ fontSize: 14 }}>
@@ -206,6 +215,22 @@ export function AgentRoster({ workers, buildings, theme }: AgentRosterProps) {
           );
         })}
       </div>
+
+      {/* Selection hint */}
+      {selectedAgentId && (
+        <div
+          className="shrink-0 border-t px-3 py-1 text-center"
+          style={{
+            borderColor: theme.dim,
+            fontSize: 11,
+            fontFamily: "monospace",
+            color: theme.primary,
+            animation: "crt-transit-pulse 1.2s ease-in-out infinite",
+          }}
+        >
+          ▸ Click a building to assign agent ▸
+        </div>
+      )}
     </div>
   );
 }
