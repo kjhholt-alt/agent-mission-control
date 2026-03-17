@@ -458,6 +458,8 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
           <span className="text-[10px] text-zinc-600 font-mono">
             {tasks.length} completed
           </span>
+          <div className="flex-1" />
+          <LastUpdated timestamp={lastUpdate} />
         </div>
 
         <div className="rounded-xl bg-zinc-900/50 border border-zinc-800/50 backdrop-blur-sm overflow-hidden divide-y divide-zinc-800/30">

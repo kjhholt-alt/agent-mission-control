@@ -19,6 +19,7 @@ import { KanbanBoard } from "@/components/ops/KanbanBoard";
 import { WorkerFleet } from "@/components/ops/WorkerFleet";
 import { TimelinePanel } from "@/components/ops/TimelinePanel";
 import { BottomBar } from "@/components/ops/BottomBar";
+import { OpsPageLoading } from "@/components/loading-states";
 
 export default function OpsCenter() {
   const {
@@ -27,6 +28,7 @@ export default function OpsCenter() {
     budget,
     events,
     connected,
+    loading,
     lastUpdated,
     updateTaskStatus,
     assignTaskToWorker,
@@ -163,6 +165,10 @@ export default function OpsCenter() {
       )}
     </div>
   ) : null;
+
+  if (loading) {
+    return <OpsPageLoading />;
+  }
 
   return (
     <DndContext

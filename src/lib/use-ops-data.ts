@@ -24,6 +24,7 @@ export function useOpsData(): OpsData {
   const [budget, setBudget] = useState<OpsBudget | null>(null);
   const [events, setEvents] = useState<OpsEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const mountedRef = useRef(true);
 
@@ -96,10 +97,12 @@ export function useOpsData(): OpsData {
     }
 
     setLastUpdated(new Date());
+    setLoading(false);
   }, []);
 
   // Initial fetch
   useEffect(() => {
+    setLoading(true);
     fetchAll();
     return () => {
       mountedRef.current = false;
@@ -229,6 +232,7 @@ export function useOpsData(): OpsData {
     budget,
     events,
     connected,
+    loading,
     lastUpdated,
     refreshAll: fetchAll,
     updateTaskStatus,

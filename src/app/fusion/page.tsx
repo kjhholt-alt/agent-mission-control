@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
+import { FusionPageLoading } from "@/components/loading-states";
 
 interface GitCommit {
   repo: string;
@@ -281,11 +282,8 @@ export default function FusionPage() {
           </div>
         </motion.header>
 
-        {!data ? (
-          <div className="flex items-center justify-center py-20 text-zinc-600">
-            <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-            Loading fusion data...
-          </div>
+        {loading || !data ? (
+          <FusionPageLoading />
         ) : (
           <>
             {/* Top stats row */}

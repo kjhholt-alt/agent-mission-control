@@ -20,12 +20,6 @@ export function ConnectionStatus() {
   const isConnected = status === "connected";
   const isReconnecting = status === "reconnecting";
 
-  const statusColor = isConnected
-    ? "emerald"
-    : isReconnecting
-      ? "amber"
-      : "red";
-
   const statusText = isConnected
     ? "Connected"
     : isReconnecting
@@ -33,6 +27,25 @@ export function ConnectionStatus() {
       : "Disconnected";
 
   const Icon = isConnected ? Wifi : isReconnecting ? Loader2 : WifiOff;
+
+  // Use explicit color classes for proper Tailwind compilation
+  const iconColor = isConnected
+    ? "text-emerald-400"
+    : isReconnecting
+      ? "text-amber-400"
+      : "text-red-400";
+
+  const dotColor = isConnected
+    ? "bg-emerald-400"
+    : isReconnecting
+      ? "bg-amber-400"
+      : "bg-red-400";
+
+  const textColor = isConnected
+    ? "text-emerald-400"
+    : isReconnecting
+      ? "text-amber-400"
+      : "text-red-400";
 
   return (
     <div
@@ -43,7 +56,7 @@ export function ConnectionStatus() {
       <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-zinc-900/50 border border-zinc-800/50">
         <div className="relative">
           <Icon
-            className={`w-3 h-3 text-${statusColor}-400 ${isReconnecting ? "animate-spin" : ""}`}
+            className={`w-3 h-3 ${iconColor} ${isReconnecting ? "animate-spin" : ""}`}
           />
           {isConnected && (
             <AnimatePresence>
@@ -53,7 +66,7 @@ export function ConnectionStatus() {
                 animate={{ scale: 2, opacity: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.6 }}
-                className={`absolute inset-0 rounded-full bg-${statusColor}-400`}
+                className={`absolute inset-0 rounded-full ${dotColor}`}
               />
             </AnimatePresence>
           )}
@@ -61,11 +74,11 @@ export function ConnectionStatus() {
         <div className="relative w-2 h-2">
           {isConnected && (
             <span
-              className={`absolute inset-0 rounded-full bg-${statusColor}-400 animate-ping opacity-75`}
+              className={`absolute inset-0 rounded-full ${dotColor} animate-ping opacity-75`}
             />
           )}
           <span
-            className={`relative block w-2 h-2 rounded-full bg-${statusColor}-400`}
+            className={`relative block w-2 h-2 rounded-full ${dotColor}`}
           />
         </div>
       </div>
@@ -79,7 +92,7 @@ export function ConnectionStatus() {
             exit={{ opacity: 0, y: 5 }}
             className="absolute top-full right-0 mt-2 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-[200] min-w-[200px]"
           >
-            <p className={`text-xs font-medium text-${statusColor}-400 mb-1`}>
+            <p className={`text-xs font-medium ${textColor} mb-1`}>
               {statusText}
             </p>
             {lastUpdate && (

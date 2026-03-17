@@ -251,3 +251,43 @@
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* Additional mobile responsive improvements */
+@media (max-width: 767px) {
+  /* Reduce padding on mobile */
+  .max-w-7xl {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Make cards stack on mobile */
+  .grid.grid-cols-2,
+  .grid.grid-cols-3,
+  .grid.grid-cols-4,
+  .grid.lg\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Ensure buttons are touch-friendly */
+  button, a[role="button"] {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* Text truncation for mobile */
+  .text-truncate-mobile {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+}
+
+/* Tablet breakpoint - 2 column grids */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .grid.md\:grid-cols-4,
+  .grid.lg\:grid-cols-3,
+  .grid.lg\:grid-cols-6 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
