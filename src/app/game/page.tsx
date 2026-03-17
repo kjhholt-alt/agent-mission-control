@@ -10,28 +10,32 @@ import { QuadrantGrid } from "@/components/terminal/QuadrantGrid";
 import { DataFeed } from "@/components/terminal/DataFeed";
 import { CommandInput } from "@/components/terminal/CommandInput";
 import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
+import { BuildingDetail } from "@/components/terminal/BuildingDetail";
 import { useTerminalTheme } from "@/components/terminal/useTerminalTheme";
 
 export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
   const { themeName, theme, cycleTheme } = useTerminalTheme();
   const [booted, setBooted] = useState(false);
+  const [inspectedId, setInspectedId] = useState<string | null>(null);
 
   const isConnected = !isDemo;
 
-  // Keyboard shortcuts
+  // Command handler
   const handleCommand = useCallback((cmd: string) => {
     if (cmd === "theme") cycleTheme();
+    if (cmd.startsWith("inspect:")) {
+      setInspectedId(cmd.slice(8));
+    }
   }, [cycleTheme]);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+T = cycle theme
       if (e.ctrlKey && e.key === "t") {
         e.preventDefault();
         cycleTheme();
       }
-      // Escape = skip boot
       if (e.key === "Escape" && !booted) {
         setBooted(true);
       }
@@ -40,13 +44,29 @@ export default function GamePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [cycleTheme, booted]);
 
+  const inspectedBuilding = inspectedId ? BUILDINGS.find(b => b.id === inspectedId) : null;
+
   return (
     <div className="w-full" style={{ height: "calc(100vh - 40px)" }}>
       <CRTTerminal theme={theme}>
         {!booted ? (
           <BootSequence theme={theme} onComplete={() => setBooted(true)} />
         ) : (
-          <div className="terminal-grid">
+          <div className="terminal-grid relative">
+            {/* Full-screen building detail overlay */}
+            {inspectedBuilding && (
+              <div className="absolute inset-0 z-30">
+                <BuildingDetail
+                  building={inspectedBuilding}
+                  workers={workers}
+                  conveyors={CONVEYORS}
+                  allBuildings={BUILDINGS}
+                  theme={theme}
+                  onClose={() => setInspectedId(null)}
+                />
+              </div>
+            )}
+
             {/* Top header bar */}
             <div className="terminal-header">
               <TerminalHeader

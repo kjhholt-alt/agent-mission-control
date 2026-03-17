@@ -23,6 +23,7 @@ const COMMANDS: Record<string, string> = {
   status: "System status overview",
   agents: "List all agents and their current tasks",
   projects: "List all projects with status",
+  inspect: "inspect <CODE> — Open detail view for a project (e.g. inspect CMD)",
   theme: "Cycle terminal color theme (green → amber → cyan)",
   clear: "Clear command history",
   uptime: "Show session uptime",
@@ -122,6 +123,20 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
         break;
       }
       default: {
+        // inspect <shortname>
+        if (trimmed.startsWith("inspect ")) {
+          const code = trimmed.slice(8).trim().toUpperCase();
+          const found = buildings.find(b => b.shortName.toUpperCase() === code);
+          if (found) {
+            output = `  Opening ${found.name}...`;
+            type = "success";
+            onCommand?.(`inspect:${found.id}`);
+          } else {
+            output = `  Unknown project code '${code}'. Use 'projects' to see codes.`;
+            type = "error";
+          }
+          break;
+        }
         output = `  Unknown command: '${trimmed}'. Type 'help' for available commands.`;
         type = "error";
       }
