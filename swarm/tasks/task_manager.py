@@ -118,6 +118,11 @@ class TaskManager:
             raise RuntimeError(f"Failed to create task: {resp}")
         task = resp.data[0]
         logger.info("Created task %s: %s [%s]", task["id"][:8], title, status)
+
+        # Priority inheritance: boost upstream tasks if this task is high-priority
+        if depends_on and priority < 30:
+            self._boost_upstream_priority(depends_on, priority)
+
         return task
 
     # ── Pull (atomic claim) ───────────────────────────────────────────────
@@ -383,6 +388,11 @@ class TaskManager:
         update_resp = (
             self.sb.table(self.TABLE).update(update).eq("id", task_id).execute()
         )
+
+        # Cascade-fail downstream dependents if this task is permanently dead
+        if update.get("status") == "failed":
+            self._cascade_fail_dependents(task_id, error)
+
         return update_resp.data[0] if update_resp.data else update
 
     # ── Spawn children ────────────────────────────────────────────────────
@@ -433,6 +443,99 @@ class TaskManager:
             .execute()
         )
         return resp.data or []
+
+    # ── Failure propagation ──────────────────────────────────────────────
+
+    def _cascade_fail_dependents(self, failed_task_id: str, original_error: str):
+        """Cascade-fail all downstream tasks when an upstream task permanently fails.
+
+        Uses iterative BFS to find all transitive dependents and fail them.
+        This prevents blocked tasks from waiting forever on a dead dependency.
+
+        Args:
+            failed_task_id: UUID of the permanently failed task
+            original_error: Error message from the failed task
+        """
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Fetch all non-terminal tasks that might be downstream
+        resp = (
+            self.sb.table(self.TABLE)
+            .select("id, depends_on")
+            .in_("status", ["blocked", "queued"])
+            .execute()
+        )
+        if not resp.data:
+            return
+
+        failed_ids = {failed_task_id}
+        cascade_count = 0
+
+        # Iterative BFS: keep scanning until no new failures found
+        changed = True
+        while changed:
+            changed = False
+            for task in resp.data:
+                if task["id"] in failed_ids:
+                    continue
+                deps = task.get("depends_on", [])
+                if any(d in failed_ids for d in deps):
+                    self.sb.table(self.TABLE).update({
+                        "status": "failed",
+                        "error_message": f"Upstream task {failed_task_id[:8]} failed: {original_error[:200]}",
+                        "completed_at": now,
+                        "updated_at": now,
+                    }).eq("id", task["id"]).execute()
+                    failed_ids.add(task["id"])
+                    cascade_count += 1
+                    changed = True
+
+        if cascade_count:
+            logger.warning(
+                "Cascade-failed %d downstream tasks from %s",
+                cascade_count,
+                failed_task_id[:8],
+            )
+
+    # ── Priority inheritance ───────────────────────────────────────────────
+
+    def _boost_upstream_priority(self, dep_ids: list[str], child_priority: int):
+        """Boost priority of upstream tasks when a high-priority task depends on them.
+
+        If a priority-10 task depends on priority-50 tasks, those upstream tasks
+        should execute sooner. Boosts upstream to child_priority + 1.
+
+        Args:
+            dep_ids: UUIDs of upstream dependency tasks
+            child_priority: Priority of the high-priority downstream task
+        """
+        try:
+            boosted_priority = child_priority + 1
+            resp = (
+                self.sb.table(self.TABLE)
+                .select("id, priority")
+                .in_("id", dep_ids)
+                .gt("priority", boosted_priority)
+                .in_("status", ["queued", "blocked"])
+                .execute()
+            )
+            if not resp.data:
+                return
+
+            now = datetime.now(timezone.utc).isoformat()
+            for task in resp.data:
+                self.sb.table(self.TABLE).update({
+                    "priority": boosted_priority,
+                    "updated_at": now,
+                }).eq("id", task["id"]).execute()
+                logger.info(
+                    "Priority inheritance: boosted task %s from %d to %d",
+                    task["id"][:8],
+                    task["priority"],
+                    boosted_priority,
+                )
+        except Exception as e:
+            logger.debug("Priority inheritance failed: %s", e)
 
     # ── Dependency management ─────────────────────────────────────────────
 
@@ -519,20 +622,39 @@ class TaskManager:
             else:
                 output_text = str(output) if output else ""
 
-            # Truncate very long outputs to keep context reasonable
-            max_output_len = 3000
+            if not output_text:
+                continue
+
+            # Adaptive truncation: less per-parent when many fan-in
+            num_parents = len(completed_deps)
+            if num_parents <= 3:
+                max_output_len = 3000
+            elif num_parents <= 6:
+                max_output_len = 1500
+            else:
+                max_output_len = 800
+
             if len(output_text) > max_output_len:
                 output_text = output_text[:max_output_len] + "\n[...truncated...]"
 
-            if output_text:
-                parent_sections.append(
-                    f'Task: "{title}"\nOutput: {output_text}'
-                )
+            parent_sections.append(
+                f'Task: "{title}"\nOutput: {output_text}'
+            )
 
         if not parent_sections:
             return input_data
 
-        chained_context = "Previous task results:\n---\n"
+        # Fan-in summary header for many parents
+        if len(parent_sections) > 3:
+            titles = [dep.get("title", "?") for dep in completed_deps if dep.get("output_data")]
+            chained_context = (
+                f"This task depends on {len(parent_sections)} completed upstream tasks: "
+                f"{', '.join(t[:40] for t in titles)}.\n"
+                f"Key outputs from each:\n---\n"
+            )
+        else:
+            chained_context = "Previous task results:\n---\n"
+
         chained_context += "\n---\n".join(parent_sections)
         chained_context += f"\n---\n\nNow complete this task:\n{original_prompt}"
 

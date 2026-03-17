@@ -118,6 +118,13 @@ class GoalDecomposer:
         if not isinstance(tasks_data, list):
             raise ValueError("Goal decomposition must return a JSON array")
 
+        # Validate DAG: detect cycles before creating tasks
+        if self._has_cycle(tasks_data):
+            raise ValueError(
+                "Goal decomposition produced circular dependencies. "
+                "Re-decomposing with simpler structure."
+            )
+
         # Filter out any tasks for blocked projects
         original_count = len(tasks_data)
         tasks_data = [
@@ -174,3 +181,39 @@ class GoalDecomposer:
         )
 
         return [parent] + created_tasks
+
+    @staticmethod
+    def _has_cycle(tasks_data: list[dict[str, Any]]) -> bool:
+        """Detect cycles in the dependency graph using DFS.
+
+        Args:
+            tasks_data: List of task dicts with depends_on_index arrays
+
+        Returns:
+            True if a cycle exists (invalid DAG), False if graph is acyclic
+        """
+        n = len(tasks_data)
+        if n == 0:
+            return False
+
+        # Build adjacency list: dep_idx → [tasks that depend on it]
+        adj: dict[int, list[int]] = {i: [] for i in range(n)}
+        for i, td in enumerate(tasks_data):
+            for dep_idx in td.get("depends_on_index", []):
+                if 0 <= dep_idx < n:
+                    adj[dep_idx].append(i)
+
+        # DFS with 3 colors: 0=unvisited, 1=in-progress, 2=done
+        color = [0] * n
+
+        def dfs(node: int) -> bool:
+            color[node] = 1
+            for neighbor in adj[node]:
+                if color[neighbor] == 1:  # back edge = cycle
+                    return True
+                if color[neighbor] == 0 and dfs(neighbor):
+                    return True
+            color[node] = 2
+            return False
+
+        return any(color[i] == 0 and dfs(i) for i in range(n))
