@@ -39,7 +39,7 @@ export function MobileNav() {
           <Menu className="w-5 h-5 text-zinc-400" />
         </button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[280px] sm:w-[320px]">
+      <SheetContent className="w-[280px] sm:w-[320px]">
         <SheetHeader>
           <SheetTitle className="text-cyan-400 text-2xl font-bold tracking-wider">
             NEXUS

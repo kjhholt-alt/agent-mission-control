@@ -34,7 +34,7 @@ function updateConnectionState(updates: Partial<ConnectionState>) {
 
 export function useRealtimeConnection() {
   const [state, setState] = useState<ConnectionState>(globalState);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const healthCheckChannel = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
