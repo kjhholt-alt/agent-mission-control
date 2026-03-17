@@ -31,7 +31,7 @@ const PANEL_KEYS: Record<string, RightPanel> = {
 };
 
 export default function GamePage() {
-  const { workers, events, budget, isDemo } = useGameData();
+  const { workers, events, budget, isDemo, hookEvents, sessions } = useGameData();
   const { themeName, theme, cycleTheme } = useTerminalTheme();
   const { spawnTask } = useSpawnTask();
   const { toasts, addToast, dismissToast } = useToasts();
@@ -225,10 +225,10 @@ export default function GamePage() {
                   <ActivityHeatmap buildings={BUILDINGS} events={events} theme={theme} />
                 )}
                 {rightPanel === "chat" && (
-                  <AgentChat workers={workers} buildings={BUILDINGS} theme={theme} />
+                  <AgentChat workers={workers} buildings={BUILDINGS} theme={theme} sessions={sessions} hookEvents={hookEvents} />
                 )}
                 {rightPanel === "replay" && (
-                  <SessionReplay theme={theme} />
+                  <SessionReplay theme={theme} hookEvents={hookEvents} />
                 )}
               </div>
             </div>

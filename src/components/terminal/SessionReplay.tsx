@@ -2,51 +2,48 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import type { TERMINAL_THEMES } from "./terminal-constants";
+import type { HookEvent } from "../game3d/useGameData";
 
 interface SessionReplayProps {
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
+  hookEvents: HookEvent[];
 }
 
-interface SessionLine {
-  id: string;
-  time: string;
-  agent: string;
-  action: string;
-  detail: string;
-  type: "tool" | "edit" | "read" | "bash" | "write" | "think" | "spawn" | "complete";
+type ActionType = "tool" | "edit" | "read" | "bash" | "write" | "think" | "spawn" | "complete" | "stop";
+
+function classifyEvent(e: HookEvent): ActionType {
+  if (e.event_type === "Stop") return "stop";
+  const tool = (e.tool_name || "").toLowerCase();
+  if (tool.includes("read") || tool === "glob" || tool === "grep") return "read";
+  if (tool.includes("edit")) return "edit";
+  if (tool.includes("write")) return "write";
+  if (tool.includes("bash")) return "bash";
+  if (tool.includes("agent") || tool.includes("spawn")) return "spawn";
+  if (e.event_type === "PostToolUse") return "complete";
+  return "tool";
 }
 
-// Simulated session replay data — in production this comes from nexus_hook_events via Supabase
-const DEMO_SESSION_LINES: SessionLine[] = [
-  { id: "s1", time: "14:32:01", agent: "OPUS", action: "Read", detail: "src/app/game/page.tsx", type: "read" },
-  { id: "s2", time: "14:32:02", agent: "OPUS", action: "Think", detail: "Analyzing terminal grid layout and component structure", type: "think" },
-  { id: "s3", time: "14:32:04", agent: "OPUS", action: "Edit", detail: "src/components/terminal/CommandInput.tsx:46-98", type: "edit" },
-  { id: "s4", time: "14:32:06", agent: "OPUS", action: "Write", detail: "src/components/terminal/AgentChat.tsx (new)", type: "write" },
-  { id: "s5", time: "14:32:08", agent: "SONNET", action: "Bash", detail: "npm run build — 0 errors, 45 pages", type: "bash" },
-  { id: "s6", time: "14:32:10", agent: "OPUS", action: "Edit", detail: "src/app/game/page.tsx:25-87", type: "edit" },
-  { id: "s7", time: "14:32:12", agent: "OPUS", action: "Spawn", detail: "code-reviewer → 21 terminal components", type: "spawn" },
-  { id: "s8", time: "14:32:14", agent: "HAIKU", action: "Read", detail: "src/components/terminal/AgentRoster.tsx", type: "read" },
-  { id: "s9", time: "14:32:16", agent: "SONNET", action: "Bash", detail: "git add -A && git commit -m 'Phase 3'", type: "bash" },
-  { id: "s10", time: "14:32:18", agent: "OPUS", action: "Think", detail: "Planning Session Replay component architecture", type: "think" },
-  { id: "s11", time: "14:32:20", agent: "HAIKU", action: "Read", detail: "src/components/terminal/SystemMonitor.tsx", type: "read" },
-  { id: "s12", time: "14:32:22", agent: "OPUS", action: "Edit", detail: "src/components/terminal/QuadrantGrid.tsx:7-12", type: "edit" },
-  { id: "s13", time: "14:32:24", agent: "SONNET", action: "Bash", detail: "npx tsc --noEmit — clean", type: "bash" },
-  { id: "s14", time: "14:32:26", agent: "OPUS", action: "Write", detail: "src/components/terminal/SessionReplay.tsx (new)", type: "write" },
-  { id: "s15", time: "14:32:28", agent: "OPUS", action: "Done", detail: "Phase 3 complete — 6/6 features shipped", type: "complete" },
-];
+function modelBadge(model: string | null): string {
+  if (!model) return "???";
+  if (model.includes("opus")) return "OPUS";
+  if (model.includes("sonnet")) return "SNNT";
+  if (model.includes("haiku")) return "HAIK";
+  return model.slice(0, 4).toUpperCase();
+}
 
-const ACTION_COLORS: Record<SessionLine["type"], string> = {
-  read: "#60a5fa",    // blue
-  edit: "#fbbf24",    // amber
-  write: "#34d399",   // emerald
-  bash: "#a78bfa",    // violet
-  think: "#94a3b8",   // gray
-  spawn: "#f472b6",   // pink
-  complete: "#00ff41", // green
-  tool: "#06b6d4",    // cyan
+const ACTION_COLORS: Record<ActionType, string> = {
+  read: "#60a5fa",
+  edit: "#fbbf24",
+  write: "#34d399",
+  bash: "#a78bfa",
+  think: "#94a3b8",
+  spawn: "#f472b6",
+  complete: "#00ff41",
+  tool: "#06b6d4",
+  stop: "#ef4444",
 };
 
-const ACTION_ICONS: Record<SessionLine["type"], string> = {
+const ACTION_ICONS: Record<ActionType, string> = {
   read: "◎",
   edit: "✎",
   write: "✚",
@@ -55,60 +52,52 @@ const ACTION_ICONS: Record<SessionLine["type"], string> = {
   spawn: "⚡",
   complete: "✓",
   tool: "⊕",
+  stop: "■",
 };
 
-export function SessionReplay({ theme }: SessionReplayProps) {
-  const [lines, setLines] = useState<SessionLine[]>([]);
-  const [isStreaming, setIsStreaming] = useState(true);
+export function SessionReplay({ theme, hookEvents }: SessionReplayProps) {
+  const [isPaused, setIsPaused] = useState(false);
+  const [filter, setFilter] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lineIndexRef = useRef(0);
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevLengthRef = useRef(hookEvents.length);
 
-  // Stream lines one by one for replay effect
+  // Auto-scroll when new events arrive (not when paused)
   useEffect(() => {
-    if (!isStreaming) return;
-
-    const interval = setInterval(() => {
-      if (lineIndexRef.current >= DEMO_SESSION_LINES.length) {
-        // Loop back to start after a pause — guard against duplicate timeouts
-        if (!resetTimerRef.current) {
-          resetTimerRef.current = setTimeout(() => {
-            lineIndexRef.current = 0;
-            setLines([]);
-            resetTimerRef.current = null;
-          }, 3000);
-        }
-        return;
-      }
-
-      setLines(prev => [...prev, DEMO_SESSION_LINES[lineIndexRef.current]]);
-      lineIndexRef.current++;
-    }, 800 + Math.random() * 600);
-
-    return () => {
-      clearInterval(interval);
-      if (resetTimerRef.current) {
-        clearTimeout(resetTimerRef.current);
-        resetTimerRef.current = null;
-      }
-    };
-  }, [isStreaming]);
-
-  // Auto-scroll
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (!isPaused && hookEvents.length > prevLengthRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = 0; // newest at top
     }
-  }, [lines]);
+    prevLengthRef.current = hookEvents.length;
+  }, [hookEvents.length, isPaused]);
+
+  // Filter events
+  const displayEvents = useMemo(() => {
+    let events = hookEvents;
+    if (filter) {
+      events = events.filter(e =>
+        (e.project_name || "").toLowerCase().includes(filter.toLowerCase()) ||
+        (e.tool_name || "").toLowerCase().includes(filter.toLowerCase())
+      );
+    }
+    return events.slice(0, 60);
+  }, [hookEvents, filter]);
 
   // Stats
   const stats = useMemo(() => {
-    const edits = lines.filter(l => l.type === "edit").length;
-    const reads = lines.filter(l => l.type === "read").length;
-    const bashes = lines.filter(l => l.type === "bash").length;
-    const agents = new Set(lines.map(l => l.agent)).size;
-    return { edits, reads, bashes, agents };
-  }, [lines]);
+    const edits = hookEvents.filter(e => classifyEvent(e) === "edit").length;
+    const reads = hookEvents.filter(e => classifyEvent(e) === "read").length;
+    const bashes = hookEvents.filter(e => classifyEvent(e) === "bash").length;
+    const sessions = new Set(hookEvents.map(e => e.session_id)).size;
+    return { edits, reads, bashes, sessions };
+  }, [hookEvents]);
+
+  // Unique projects for filter
+  const projects = useMemo(() => {
+    const set = new Set<string>();
+    hookEvents.forEach(e => { if (e.project_name) set.add(e.project_name); });
+    return [...set].slice(0, 8);
+  }, [hookEvents]);
+
+  const isLive = hookEvents.length > 0;
 
   return (
     <div className="terminal-quadrant flex flex-col h-full">
@@ -121,65 +110,109 @@ export function SessionReplay({ theme }: SessionReplayProps) {
           ◆ SESSION REPLAY
         </span>
         <button
-          onClick={() => setIsStreaming(!isStreaming)}
+          onClick={() => setIsPaused(!isPaused)}
           className="cursor-pointer hover:opacity-80 text-[11px] px-2 py-0.5 rounded-sm"
           style={{
-            color: isStreaming ? "#00ff41" : theme.dim,
-            border: `1px solid ${isStreaming ? "#00ff41" : theme.dim}`,
+            color: !isPaused && isLive ? "#00ff41" : theme.dim,
+            border: `1px solid ${!isPaused && isLive ? "#00ff41" : theme.dim}`,
           }}
         >
-          {isStreaming ? "● LIVE" : "○ PAUSED"}
+          {!isPaused && isLive ? "● LIVE" : "○ PAUSED"}
         </button>
         <span className="ml-auto text-[11px] tabular-nums" style={{ color: theme.dim }}>
-          {lines.length} ops
+          {hookEvents.length} ops
         </span>
       </div>
 
+      {/* Project filter bar */}
+      {projects.length > 1 && (
+        <div className="flex gap-1 px-2 py-0.5 shrink-0 overflow-x-auto" style={{ borderBottom: `1px solid ${theme.dim}` }}>
+          <button
+            onClick={() => setFilter(null)}
+            className="text-[9px] px-1.5 py-0.5 rounded-sm cursor-pointer shrink-0"
+            style={{
+              color: !filter ? theme.primary : theme.dim,
+              backgroundColor: !filter ? "rgba(255,255,255,0.05)" : "transparent",
+            }}
+          >
+            ALL
+          </button>
+          {projects.map(p => (
+            <button
+              key={p}
+              onClick={() => setFilter(filter === p ? null : p)}
+              className="text-[9px] px-1.5 py-0.5 rounded-sm cursor-pointer shrink-0 truncate max-w-[80px]"
+              style={{
+                color: filter === p ? theme.primary : theme.dim,
+                backgroundColor: filter === p ? "rgba(255,255,255,0.05)" : "transparent",
+              }}
+            >
+              {p.replace(/-/g, " ").slice(0, 12)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Stream output */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto terminal-scroll px-2 py-1">
-        {lines.map((line, i) => {
-          const actionColor = ACTION_COLORS[line.type];
-          const icon = ACTION_ICONS[line.type];
+        {displayEvents.length === 0 && (
+          <div className="text-center py-4" style={{ color: theme.dim, fontFamily: "monospace", fontSize: 12 }}>
+            No hook events yet — start a Claude Code session to see live ops
+          </div>
+        )}
+        {displayEvents.map((event, i) => {
+          const actionType = classifyEvent(event);
+          const actionColor = ACTION_COLORS[actionType];
+          const icon = ACTION_ICONS[actionType];
+          const time = new Date(event.created_at).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          const badge = modelBadge(event.model);
+          const detail = event.event_type === "Stop"
+            ? `Session ended — ${event.project_name || "unknown"}`
+            : event.tool_name
+              ? `${event.tool_name}`
+              : event.event_type;
+
           return (
             <div
-              key={`${line.id}-${i}`}
+              key={event.id}
               className="flex items-start gap-1.5 py-0.5 hover:bg-white/[0.02] transition-colors"
               style={{
                 fontFamily: "monospace",
-                animation: i === lines.length - 1 ? "crt-fade-in 0.3s ease-out" : undefined,
+                animation: i === 0 && !isPaused ? "crt-fade-in 0.3s ease-out" : undefined,
               }}
             >
               {/* Timestamp */}
               <span className="text-[11px] tabular-nums shrink-0 w-[58px]" style={{ color: theme.dim }}>
-                {line.time}
+                {time}
               </span>
-              {/* Agent badge */}
+              {/* Event type badge */}
               <span
-                className="text-[10px] font-bold shrink-0 w-[44px] text-center py-0.5 rounded-sm"
+                className="text-[9px] font-bold shrink-0 w-[28px] text-center py-0.5 rounded-sm uppercase"
                 style={{
-                  color: line.agent === "OPUS" ? "#e879f9" : line.agent === "SONNET" ? "#60a5fa" : "#94a3b8",
+                  color: event.event_type === "PreToolUse" ? "#ffb000" : event.event_type === "PostToolUse" ? "#00ff41" : "#ef4444",
                   backgroundColor: "rgba(255,255,255,0.03)",
                 }}
               >
-                {line.agent}
+                {event.event_type === "PreToolUse" ? "PRE" : event.event_type === "PostToolUse" ? "POST" : "END"}
               </span>
-              {/* Action */}
+              {/* Action icon */}
               <span className="text-[12px] shrink-0" style={{ color: actionColor }}>
                 {icon}
               </span>
-              <span className="text-[12px] font-bold shrink-0 w-[40px]" style={{ color: actionColor }}>
-                {line.action}
+              {/* Project */}
+              <span className="text-[10px] shrink-0 w-[60px] truncate" style={{ color: theme.dim }}>
+                {(event.project_name || "???").slice(0, 10)}
               </span>
               {/* Detail */}
               <span className="text-[12px] truncate" style={{ color: theme.secondary }}>
-                {line.detail}
+                {detail}
               </span>
             </div>
           );
         })}
 
-        {/* Streaming cursor */}
-        {isStreaming && (
+        {/* Live cursor */}
+        {!isPaused && isLive && (
           <div className="flex items-center gap-1 py-0.5" style={{ fontFamily: "monospace" }}>
             <span
               className="inline-block w-[6px] h-[12px]"
@@ -201,7 +234,7 @@ export function SessionReplay({ theme }: SessionReplayProps) {
         <span style={{ color: ACTION_COLORS.read }}>◎ {stats.reads}</span>
         <span style={{ color: ACTION_COLORS.bash }}>$ {stats.bashes}</span>
         <span className="ml-auto" style={{ color: theme.dim }}>
-          {stats.agents} agent{stats.agents !== 1 ? "s" : ""}
+          {stats.sessions} session{stats.sessions !== 1 ? "s" : ""}
         </span>
       </div>
 

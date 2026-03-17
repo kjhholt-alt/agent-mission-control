@@ -236,6 +236,27 @@ function computeActiveConveyors(
 
 // ─── MAIN HOOK ───────────────────────────────────────────────────────────────
 
+export interface HookEvent {
+  id: string;
+  session_id: string;
+  event_type: string;
+  tool_name: string | null;
+  project_name: string | null;
+  model: string | null;
+  created_at: string;
+}
+
+export interface SessionInfo {
+  session_id: string;
+  project_name: string | null;
+  model: string | null;
+  tool_count: number;
+  status: string;
+  cost_usd: number;
+  last_activity: string;
+  current_tool: string | null;
+}
+
 export interface GameData {
   workers: Worker[];
   buildings: Building[];
@@ -252,6 +273,8 @@ export interface GameData {
   isDemo: boolean;
   workerCounts: Record<string, number>;
   completedTaskIds: Set<string>;
+  hookEvents: HookEvent[];
+  sessions: SessionInfo[];
 }
 
 // ─── HOOK EVENT ROW TYPE ─────────────────────────────────────────────────────
@@ -285,6 +308,8 @@ export function useGameData() {
   const [liveEvents, setLiveEvents] = useState<AlertEvent[]>([]);
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(new Set());
   const [recentSessions, setRecentSessions] = useState<CompletedSessionRow[]>([]);
+  const [hookEvents, setHookEvents] = useState<HookEvent[]>([]);
+  const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Track previous task statuses for completion detection
@@ -306,7 +331,7 @@ export function useGameData() {
     async function fetchAll() {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      const [workersRes, tasksRes, budgetRes, activityRes, sessionsRes, recentSessionsRes, hookEventsRes] = await Promise.all([
+      const [workersRes, tasksRes, budgetRes, activityRes, sessionsRes, recentSessionsRes, hookEventsRes, allSessionsRes] = await Promise.all([
         supabase.from("swarm_workers").select("*").order("spawned_at", { ascending: false }),
         supabase.from("swarm_tasks").select("*").order("updated_at", { ascending: false }).limit(50),
         supabase.from("swarm_budgets").select("*").order("budget_date", { ascending: false }).limit(1),
@@ -314,8 +339,10 @@ export function useGameData() {
         supabase.from("nexus_sessions").select("*").eq("status", "active").order("last_activity", { ascending: false }).limit(10),
         // Fetch recently completed sessions (last 24h) for "ghost" workers
         supabase.from("nexus_sessions").select("session_id, project_name, model, tool_count, cost_usd, completed_at, last_activity, current_tool").eq("status", "completed").gte("completed_at", oneDayAgo).order("completed_at", { ascending: false }).limit(10),
-        // Fetch recent hook events for the event feed
-        supabase.from("nexus_hook_events").select("*").order("created_at", { ascending: false }).limit(25),
+        // Fetch recent hook events for session replay + event feed (last 100)
+        supabase.from("nexus_hook_events").select("*").order("created_at", { ascending: false }).limit(100),
+        // Fetch all recent sessions for agent chat context
+        supabase.from("nexus_sessions").select("session_id, project_name, model, tool_count, status, cost_usd, last_activity, current_tool").order("last_activity", { ascending: false }).limit(20),
       ]);
 
       if (workersRes.data) setSwarmWorkers(workersRes.data);
@@ -329,6 +356,8 @@ export function useGameData() {
       if (budgetRes.data && budgetRes.data.length > 0) setBudget(budgetRes.data[0]);
       if (activityRes.data) setAgentActivity(activityRes.data);
       if (recentSessionsRes.data) setRecentSessions(recentSessionsRes.data);
+      if (hookEventsRes.data) setHookEvents(hookEventsRes.data as HookEvent[]);
+      if (allSessionsRes.data) setAllSessions(allSessionsRes.data as SessionInfo[]);
 
       // Seed event feed from real hook events instead of static demo data
       if (hookEventsRes.data && hookEventsRes.data.length > 0) {
@@ -549,7 +578,22 @@ export function useGameData() {
           }
 
           addEvent(message, type);
+          // Also push to hookEvents for SessionReplay
+          setHookEvents((prev) => [e as HookEvent, ...prev].slice(0, 100));
         });
+      })
+      // nexus_sessions — update session list for AgentChat
+      .on("postgres_changes", { event: "*", schema: "public", table: "nexus_sessions" }, (payload) => {
+        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+          const s = payload.new as SessionInfo;
+          setAllSessions((prev) => {
+            const exists = prev.some((p) => p.session_id === s.session_id);
+            const updated = exists
+              ? prev.map((p) => p.session_id === s.session_id ? s : p)
+              : [s, ...prev];
+            return updated.slice(0, 20);
+          });
+        }
       })
       .subscribe();
 
@@ -806,5 +850,7 @@ export function useGameData() {
     isDemo,
     workerCounts,
     completedTaskIds,
+    hookEvents,
+    sessions: allSessions,
   };
 }

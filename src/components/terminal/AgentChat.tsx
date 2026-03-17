@@ -5,69 +5,100 @@ import type { Worker, Building } from "../game3d/types";
 import type { TERMINAL_THEMES } from "./terminal-constants";
 import { WORKER_ICONS } from "./terminal-constants";
 import { WORKER_TYPE_CONFIG } from "../game3d/constants";
+import type { SessionInfo, HookEvent } from "../game3d/useGameData";
+import { supabase } from "@/lib/supabase";
 
 interface AgentChatProps {
   workers: Worker[];
   buildings: Building[];
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
+  sessions: SessionInfo[];
+  hookEvents: HookEvent[];
 }
 
 interface ChatMessage {
   id: string;
   agentId: string;
   agentName: string;
-  direction: "out" | "in"; // out = user→agent, in = agent→user
+  direction: "out" | "in";
   text: string;
   timestamp: string;
 }
 
-// Simulated agent responses based on their type and status
-function generateResponse(agent: Worker, prompt: string, buildings: Building[]): string {
+/** Build a real response using session + hook event data */
+function generateLiveResponse(
+  agent: Worker,
+  prompt: string,
+  buildings: Building[],
+  sessions: SessionInfo[],
+  hookEvents: HookEvent[],
+): string {
   const building = buildings.find(b => b.id === agent.currentBuildingId);
   const loc = building?.shortName || "???";
+  const lower = prompt.toLowerCase();
 
+  // Find matching session for this agent (if it's a session-based worker)
+  const sessionId = agent.id.startsWith("session-") ? agent.id.replace("session-", "") : null;
+  const session = sessionId ? sessions.find(s => s.session_id === sessionId) : null;
+
+  // Find recent hook events for this agent's session
+  const agentEvents = sessionId
+    ? hookEvents.filter(e => e.session_id === sessionId).slice(0, 10)
+    : [];
+
+  // If we have a real session, give real data
+  if (session) {
+    if (lower.includes("status") || lower.includes("report") || lower.includes("what")) {
+      const cost = Number(session.cost_usd).toFixed(2);
+      const lines = [
+        `Session ${session.status.toUpperCase()} at ${loc}`,
+        `Model: ${session.model || "unknown"}`,
+        `Tools used: ${session.tool_count}`,
+        `Cost: $${cost}`,
+        session.current_tool ? `Current tool: ${session.current_tool}` : null,
+      ].filter(Boolean);
+      return lines.join("\n");
+    }
+
+    if (lower.includes("recent") || lower.includes("history") || lower.includes("last")) {
+      if (agentEvents.length === 0) return "No recent tool activity in this session.";
+      const lines = agentEvents.slice(0, 5).map(e => {
+        const time = new Date(e.created_at).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+        return `${time} ${e.event_type}: ${e.tool_name || "—"}`;
+      });
+      return lines.join("\n");
+    }
+
+    if (lower.includes("cost") || lower.includes("spend") || lower.includes("budget")) {
+      return `Session spend: $${Number(session.cost_usd).toFixed(2)} across ${session.tool_count} tool calls.`;
+    }
+
+    if (lower.includes("stop") || lower.includes("abort") || lower.includes("cancel")) {
+      return `Cannot stop sessions from here. Use Claude Code directly to end this session.`;
+    }
+
+    // Default session response
+    return `Active on ${session.project_name || "unknown"}, ${session.tool_count} tools used. Currently ${session.current_tool ? `running ${session.current_tool}` : "idle"}.`;
+  }
+
+  // Non-session worker — use worker data
   if (agent.status === "idle") {
-    const idleResponses = [
-      `Standing by at ${loc}. Ready for assignment.`,
-      `Idle at ${loc}. What do you need?`,
-      `Awaiting orders at ${loc}. Send it.`,
-    ];
-    return idleResponses[Math.floor(Math.random() * idleResponses.length)];
+    return `Standing by at ${loc}. ${agent.task}`;
   }
 
   if (agent.status === "moving") {
     const target = buildings.find(b => b.id === agent.targetBuildingId);
-    return `In transit to ${target?.shortName || "???"}. ETA ~${Math.floor(Math.random() * 30) + 5}s. Will report on arrival.`;
+    return `In transit to ${target?.shortName || "???"}. Task: ${agent.task}`;
   }
-
-  // Working agent — respond contextually
-  const lower = prompt.toLowerCase();
 
   if (lower.includes("status") || lower.includes("report")) {
-    return `Working on "${agent.task}" at ${loc}. Progress: ${agent.progress}%. On track.`;
-  }
-  if (lower.includes("eta") || lower.includes("done") || lower.includes("finish")) {
-    const remaining = 100 - agent.progress;
-    const eta = Math.ceil(remaining * 0.6);
-    return `Estimated ${eta}s remaining. Currently at ${agent.progress}%.`;
-  }
-  if (lower.includes("help") || lower.includes("stuck")) {
-    return `Running nominal at ${loc}. No blockers. Task: "${agent.task}"`;
-  }
-  if (lower.includes("stop") || lower.includes("abort") || lower.includes("cancel")) {
-    return `Acknowledged. Wrapping up current step before halting. Stand by.`;
+    return `Working on "${agent.task}" at ${loc}. Progress: ${Math.round(agent.progress)}%.`;
   }
 
-  const workingResponses = [
-    `Copy. ${agent.progress}% through "${agent.task}" at ${loc}.`,
-    `Roger. Processing at ${loc}. Will ping on completion.`,
-    `Acknowledged. Task in progress — ${agent.progress}% complete.`,
-    `On it. Working ${loc}, progress ${agent.progress}%.`,
-  ];
-  return workingResponses[Math.floor(Math.random() * workingResponses.length)];
+  return `${Math.round(agent.progress)}% through "${agent.task}" at ${loc}.`;
 }
 
-export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
+export function AgentChat({ workers, buildings, theme, sessions, hookEvents }: AgentChatProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -78,18 +109,24 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
 
   const agent = selectedAgent ? workers.find(w => w.id === selectedAgent) : null;
 
-  // Auto-scroll on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
 
-  // Focus input when agent selected
   useEffect(() => {
-    if (selectedAgent) {
-      inputRef.current?.focus();
-    }
+    if (selectedAgent) inputRef.current?.focus();
+  }, [selectedAgent]);
+
+  // Clean up reply timer on agent switch
+  useEffect(() => {
+    return () => {
+      if (replyTimerRef.current) {
+        clearTimeout(replyTimerRef.current);
+        replyTimerRef.current = null;
+      }
+    };
   }, [selectedAgent]);
 
   const sendMessage = useCallback(() => {
@@ -105,13 +142,46 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
     };
 
     setMessages(prev => [...prev, userMsg]);
+    const promptText = input.trim();
     setInput("");
     setIsTyping(true);
 
-    // Simulate agent "thinking" delay
-    const delay = 400 + Math.random() * 800;
+    // Check if this is a task spawn command
+    const lower = promptText.toLowerCase();
+    const isSpawn = lower.startsWith("spawn:") || lower.startsWith("task:") || lower.startsWith("do:");
+
+    if (isSpawn) {
+      const taskDesc = promptText.slice(promptText.indexOf(":") + 1).trim();
+      const building = buildings.find(b => b.id === agent.currentBuildingId);
+      // Write task to Supabase
+      supabase.from("swarm_tasks").insert({
+        title: taskDesc,
+        project: building?.id || "command-center",
+        status: "queued",
+        priority: "medium",
+        created_at: new Date().toISOString(),
+      }).then(({ error }) => {
+        const response = error
+          ? `Failed to queue task: ${error.message}`
+          : `Task queued: "${taskDesc}" at ${building?.shortName || "CMD"}. Awaiting execution.`;
+        const agentMsg: ChatMessage = {
+          id: `msg-${Date.now()}-in`,
+          agentId: agent.id,
+          agentName: agent.name,
+          direction: "in",
+          text: response,
+          timestamp: new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        };
+        setMessages(prev => [...prev, agentMsg]);
+        setIsTyping(false);
+      });
+      return;
+    }
+
+    // Normal message — generate response from real data
+    const delay = 200 + Math.random() * 400;
     replyTimerRef.current = setTimeout(() => {
-      const response = generateResponse(agent, userMsg.text, buildings);
+      const response = generateLiveResponse(agent, promptText, buildings, sessions, hookEvents);
       const agentMsg: ChatMessage = {
         id: `msg-${Date.now()}-in`,
         agentId: agent.id,
@@ -124,17 +194,7 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
       setIsTyping(false);
       replyTimerRef.current = null;
     }, delay);
-  }, [input, agent, buildings]);
-
-  // Clean up reply timer on unmount or agent switch
-  useEffect(() => {
-    return () => {
-      if (replyTimerRef.current) {
-        clearTimeout(replyTimerRef.current);
-        replyTimerRef.current = null;
-      }
-    };
-  }, [selectedAgent]);
+  }, [input, agent, buildings, sessions, hookEvents]);
 
   const agentMessages = messages.filter(m => m.agentId === selectedAgent);
 
@@ -154,12 +214,21 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
           </span>
         </div>
         <div className="flex-1 overflow-y-auto terminal-scroll px-2 py-1">
+          {workers.length === 0 && (
+            <div className="text-center py-4" style={{ color: theme.dim, fontFamily: "monospace", fontSize: 12 }}>
+              No agents online — start a Claude Code session
+            </div>
+          )}
           {workers.map(w => {
             const icon = WORKER_ICONS[w.type] || "?";
             const color = WORKER_TYPE_CONFIG[w.type]?.color || theme.primary;
             const statusColor = w.status === "working" ? "#00ff41" : w.status === "moving" ? "#ffb000" : theme.dim;
             const building = buildings.find(b => b.id === w.currentBuildingId);
             const msgCount = messages.filter(m => m.agentId === w.id).length;
+
+            // Check if this is a live session worker
+            const sessionId = w.id.startsWith("session-") ? w.id.replace("session-", "") : null;
+            const session = sessionId ? sessions.find(s => s.session_id === sessionId) : null;
 
             return (
               <div
@@ -171,9 +240,12 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
                 <span style={{ color, fontSize: 14 }}>{icon}</span>
                 <span style={{ color: theme.primary, fontWeight: 700, fontSize: 13 }}>{w.name}</span>
                 <span style={{ color: statusColor, fontSize: 11, fontWeight: 700 }}>
-                  {w.status === "working" ? "ONLINE" : w.status === "moving" ? "TRANSIT" : "STANDBY"}
+                  {session ? "LIVE" : w.status === "working" ? "ONLINE" : w.status === "moving" ? "TRANSIT" : "STANDBY"}
                 </span>
                 <span style={{ color: theme.dim, fontSize: 11 }}>@ {building?.shortName || "???"}</span>
+                {session && (
+                  <span style={{ color: theme.dim, fontSize: 10 }}>${Number(session.cost_usd).toFixed(1)}</span>
+                )}
                 {msgCount > 0 && (
                   <span className="ml-auto text-[11px]" style={{ color: theme.secondary }}>
                     {msgCount} msg{msgCount !== 1 ? "s" : ""}
@@ -213,15 +285,21 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
           LVL {agent?.level || 0}
         </span>
         <span className="ml-auto text-[11px]" style={{ color: theme.dim }}>
-          {agent?.status === "working" ? `${agent.progress}%` : agent?.status?.toUpperCase()}
+          {agent?.status === "working" ? `${Math.round(agent.progress)}%` : agent?.status?.toUpperCase()}
         </span>
       </div>
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto terminal-scroll px-3 py-1.5">
         {agentMessages.length === 0 && !isTyping && (
-          <div className="text-center py-4" style={{ color: theme.dim, fontFamily: "monospace", fontSize: 12 }}>
-            Send a message to {agent?.name}
+          <div style={{ color: theme.dim, fontFamily: "monospace", fontSize: 12 }}>
+            <div className="py-2">Send a message to {agent?.name}.</div>
+            <div className="text-[11px] space-y-0.5" style={{ color: theme.dim }}>
+              <div>Try: <span style={{ color: theme.secondary }}>status</span> — agent report</div>
+              <div>Try: <span style={{ color: theme.secondary }}>recent</span> — last tool calls</div>
+              <div>Try: <span style={{ color: theme.secondary }}>cost</span> — session spend</div>
+              <div>Try: <span style={{ color: theme.secondary }}>task: fix bug</span> — queue a task</div>
+            </div>
           </div>
         )}
         {agentMessages.map(msg => (
@@ -232,21 +310,16 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
                 {msg.direction === "out" ? "YOU" : msg.agentName.toUpperCase()}
               </span>
             </div>
-            <div
-              className="pl-3 text-[13px] leading-relaxed"
+            <pre
+              className="pl-3 text-[13px] leading-relaxed whitespace-pre-wrap"
               style={{ color: msg.direction === "out" ? theme.secondary : theme.primary }}
             >
               {msg.direction === "out" ? "▸ " : "◂ "}{msg.text}
-            </div>
+            </pre>
           </div>
         ))}
         {isTyping && (
           <div className="mb-1.5" style={{ fontFamily: "monospace" }}>
-            <div className="flex items-center gap-1.5" style={{ fontSize: 12 }}>
-              <span style={{ color: agentColor, fontWeight: 700 }}>
-                {agent?.name?.toUpperCase()}
-              </span>
-            </div>
             <div className="pl-3 text-[13px]" style={{ color: theme.dim }}>
               <span style={{ animation: "crt-transit-pulse 1.2s ease-in-out infinite" }}>
                 typing...
