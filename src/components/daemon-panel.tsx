@@ -24,6 +24,7 @@ import {
   sendNotification,
   type DaemonStatus,
 } from "@/lib/tauri-bridge";
+import { useToast } from "@/components/ui/toast";
 
 function formatUptime(seconds: number | null): string {
   if (!seconds) return "—";
@@ -71,6 +72,8 @@ export function DaemonPanel() {
   const [logs, setLogs] = useState<string[]>([]);
   const [acting, setActing] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  const prevStatusRef = useRef<string | null>(null);
 
   // Only render in Tauri
   useEffect(() => {

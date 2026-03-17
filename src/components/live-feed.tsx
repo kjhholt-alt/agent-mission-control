@@ -377,6 +377,9 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
             completedToday: prev.completedToday + 1,
             spentToday: prev.spentToday + (newTask.actual_cost_cents || 0) / 100,
           }));
+          // Show toast notification
+          const costStr = newTask.actual_cost_cents != null ? ` ($${(newTask.actual_cost_cents / 100).toFixed(3)})` : "";
+          toast.success(`Task completed: ${newTask.title}${costStr}`);
         }
       )
       .on(
@@ -394,6 +397,24 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
             const filtered = prev.filter((t) => t.id !== newTask.id);
             return [newTask, ...filtered].slice(0, 30);
           });
+          // Show toast notification
+          const costStr = newTask.actual_cost_cents != null ? ` ($${(newTask.actual_cost_cents / 100).toFixed(3)})` : "";
+          toast.success(`Task completed: ${newTask.title}${costStr}`);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "swarm_tasks",
+          filter: "status=eq.failed",
+        },
+        (payload) => {
+          markDataUpdate();
+          const newTask = payload.new as SwarmTask;
+          const errorMsg = newTask.error_message || "Unknown error";
+          toast.error(`Task failed: ${newTask.title} — ${errorMsg}`);
         }
       )
       .subscribe();
@@ -401,7 +422,7 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [markDataUpdate]);
+  }, [markDataUpdate, toast]);
 
   return (
     <div className="space-y-4">

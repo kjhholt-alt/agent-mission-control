@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
 import { getUnlockedCount } from "@/lib/achievements";
 import type { NexusSession } from "@/lib/collector-types";
+import { SuccessRateChart } from "@/components/charts/dashboard-charts";
 
 interface TaskSummary {
   queued: number;
@@ -196,6 +197,17 @@ export default function CommandCenterPage() {
 
           {/* CENTER COLUMN — Feed (5 cols) */}
           <div className="col-span-12 lg:col-span-5 space-y-3">
+
+            {/* Success Rate Chart */}
+            <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 border-b border-zinc-800/50 flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Success Rate (7 Days)</span>
+              </div>
+              <div className="p-3">
+                <SuccessRateChart tasks={recentTasks} />
+              </div>
+            </div>
 
             {/* Recent completed tasks */}
             <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg overflow-hidden">
