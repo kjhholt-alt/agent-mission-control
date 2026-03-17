@@ -119,6 +119,12 @@ class Supervisor:
         if cleaned > 0:
             actions_taken.append(f"Cleaned up {cleaned} dead workers")
 
+        # 7. Detect failure patterns and auto-escalate
+        escalated = self._detect_and_escalate_failures()
+        for msg in escalated:
+            actions_taken.append(msg)
+            issues_found += 1
+
         # Report
         if actions_taken:
             self._report(actions_taken)
@@ -390,6 +396,81 @@ class Supervisor:
             )
             return queued_count
         return 0
+
+    def _detect_and_escalate_failures(self) -> list[str]:
+        """Detect chronically failing task types and auto-escalate their cost tier.
+
+        If a project+task_type combo fails >60% of the time on a light tier,
+        escalate queued tasks of that type to cc_light. If cc_light also fails,
+        escalate to heavy.
+
+        Returns:
+            List of action descriptions for the patrol report
+        """
+        actions: list[str] = []
+
+        try:
+            # Check specialization data for chronic failures
+            resp = (
+                self.sb.table("agent_specializations")
+                .select("project, task_type, success_count, fail_count")
+                .execute()
+            )
+            if not resp.data:
+                return actions
+
+            ESCALATION_MAP = {
+                "light": "cc_light",
+                "cc_light": "heavy",
+            }
+
+            for row in resp.data:
+                total = (row.get("success_count") or 0) + (row.get("fail_count") or 0)
+                if total < 5:
+                    continue  # Not enough data
+
+                fail_rate = (row.get("fail_count") or 0) / total
+                if fail_rate < 0.6:
+                    continue  # Not a problem
+
+                project = row.get("project", "")
+                task_type = row.get("task_type", "")
+
+                # Find queued tasks of this type that could be escalated
+                queued_resp = (
+                    self.sb.table(self.TASKS_TABLE)
+                    .select("id, cost_tier")
+                    .eq("status", "queued")
+                    .eq("project", project)
+                    .eq("task_type", task_type)
+                    .limit(10)
+                    .execute()
+                )
+
+                escalated_count = 0
+                for task in queued_resp.data or []:
+                    current_tier = task.get("cost_tier", "light")
+                    new_tier = ESCALATION_MAP.get(current_tier)
+                    if new_tier:
+                        self.sb.table(self.TASKS_TABLE).update({
+                            "cost_tier": new_tier,
+                        }).eq("id", task["id"]).execute()
+                        escalated_count += 1
+
+                if escalated_count > 0:
+                    actions.append(
+                        f"Auto-escalated {escalated_count} {project}/{task_type} "
+                        f"tasks (fail rate {fail_rate:.0%})"
+                    )
+                    logger.info(
+                        "Supervisor: escalated %d tasks for %s/%s (fail rate %.0f%%)",
+                        escalated_count, project, task_type, fail_rate * 100,
+                    )
+
+        except Exception as e:
+            logger.debug("Failure pattern detection failed: %s", e)
+
+        return actions
 
     def _cleanup_dead_workers(self) -> int:
         """Remove dead workers older than 30 minutes."""

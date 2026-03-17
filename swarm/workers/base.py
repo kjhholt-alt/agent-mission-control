@@ -162,6 +162,51 @@ class BaseWorker:
             )
         return base_prompt
 
+    # ── Keyword extraction for contextual recall ──────────────────────────
+
+    @staticmethod
+    def _extract_keywords(prompt: str, max_keywords: int = 8) -> list[str]:
+        """Extract meaningful keywords from a prompt for memory relevance scoring.
+
+        Filters out common stop words and short tokens, returns the most
+        frequent significant words.
+
+        Args:
+            prompt: The task prompt text
+            max_keywords: Max keywords to return
+
+        Returns:
+            List of lowercase keywords
+        """
+        if not prompt:
+            return []
+
+        stop_words = {
+            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "shall", "can", "to", "of", "in", "for",
+            "on", "with", "at", "by", "from", "as", "into", "through", "during",
+            "before", "after", "above", "below", "between", "out", "off", "up",
+            "down", "and", "but", "or", "nor", "not", "so", "yet", "both",
+            "either", "neither", "each", "every", "all", "any", "few", "more",
+            "most", "other", "some", "such", "no", "than", "too", "very",
+            "just", "also", "now", "then", "here", "there", "when", "where",
+            "why", "how", "what", "which", "who", "whom", "this", "that",
+            "these", "those", "it", "its", "you", "your", "we", "our",
+            "they", "their", "he", "she", "him", "her", "my", "i",
+            "task", "please", "make", "sure", "use", "using", "need",
+        }
+
+        words = re.findall(r"[a-z]{3,}", prompt.lower())
+        word_counts: dict[str, int] = {}
+        for w in words:
+            if w not in stop_words:
+                word_counts[w] = word_counts.get(w, 0) + 1
+
+        # Sort by frequency, take top N
+        sorted_words = sorted(word_counts.items(), key=lambda x: x[1], reverse=True)
+        return [w for w, _ in sorted_words[:max_keywords]]
+
     # ── Execute (override in subclass) ────────────────────────────────────
 
     def execute(self, task: dict[str, Any]) -> dict[str, Any]:
@@ -445,25 +490,40 @@ class BaseWorker:
         project = task.get("project", "")
         task_type = task.get("task_type")
         if project:
-            context = self.memory.recall(project)
-            failed_approaches = self.memory.get_failed_approaches(project, task_type)
-
-            # Load specialization (best practices, common errors)
-            spec_context = ""
-            if task_type:
-                spec_context = self.load_specialization(project, task_type)
-
+            # Extract keywords from prompt for relevance scoring
             input_data = task.get("input_data", {})
             if isinstance(input_data, str):
                 import json
                 input_data = json.loads(input_data)
 
             prompt = input_data.get("prompt", "")
+            keywords = self._extract_keywords(prompt)
+
+            # Contextual recall: relevance-scored, not just recency
+            context = self.memory.recall_relevant(
+                project, task_type=task_type, keywords=keywords
+            )
+            failed_approaches = self.memory.get_failed_approaches(project, task_type)
+
+            # Cross-project learning: patterns from other projects
+            cross_project = ""
+            if task_type:
+                cross_project = self.memory.recall_cross_project(
+                    task_type, exclude_project=project
+                )
+
+            # Load specialization (best practices, common errors)
+            spec_context = ""
+            if task_type:
+                spec_context = self.load_specialization(project, task_type)
+
             memory_prefix = ""
             if spec_context:
                 memory_prefix += f"{spec_context}\n\n"
             if context:
                 memory_prefix += f"{context}\n\n"
+            if cross_project:
+                memory_prefix += f"{cross_project}\n\n"
             if failed_approaches:
                 memory_prefix += f"{failed_approaches}\n\n"
             if memory_prefix and prompt:
