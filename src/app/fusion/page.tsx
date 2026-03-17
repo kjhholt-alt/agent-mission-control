@@ -16,10 +16,12 @@ import {
   XCircle,
   Loader2,
   Download,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
 import { FusionPageLoading } from "@/components/loading-states";
+import { ModelDistributionChart, CostByModelChart, ProjectActivityChart } from "@/components/charts/dashboard-charts";
 
 interface GitCommit {
   repo: string;
@@ -491,11 +493,58 @@ export default function FusionPage() {
                 </motion.div>
               </div>
             </div>
-            {/* Git Activity */}
+            {/* Charts Section */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
+              className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+            >
+              {/* Model Distribution */}
+              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-purple-400" />
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    Model Usage (Week)
+                  </h2>
+                </div>
+                <div className="p-4">
+                  <ModelDistributionChart sessions={sessions} />
+                </div>
+              </div>
+
+              {/* Cost by Model */}
+              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    Cost by Model
+                  </h2>
+                </div>
+                <div className="p-4">
+                  <CostByModelChart sessions={sessions} />
+                </div>
+              </div>
+
+              {/* Project Activity */}
+              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    Top Projects
+                  </h2>
+                </div>
+                <div className="p-4">
+                  <ProjectActivityChart sessions={sessions} />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Git Activity */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
               className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden"
             >
               <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">

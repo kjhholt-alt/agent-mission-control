@@ -6,6 +6,7 @@ import { Radio, Trophy, Zap, Clock, Cpu, DollarSign, ListChecks } from "lucide-r
 import { supabase } from "@/lib/supabase";
 import { useRealtimeConnection } from "@/lib/use-realtime-connection";
 import { LastUpdated } from "./last-updated";
+import { useToast } from "@/components/ui/toast";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -256,6 +257,7 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
   });
   const workerMapRef = useRef<Map<string, SwarmWorker>>(new Map());
   const { markDataUpdate, lastUpdate } = useRealtimeConnection();
+  const toast = useToast();
 
   // Build a lookup: worker_id -> worker_type
   const getWorkerType = useCallback((task: SwarmTask): string => {

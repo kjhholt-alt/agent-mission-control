@@ -26,6 +26,7 @@ import { Workbench } from "@/components/workbench";
 import { useRealtimeConnection } from "@/lib/use-realtime-connection";
 import { LastUpdated } from "@/components/last-updated";
 import { Sparkline } from "@/components/sparkline";
+import { AgentActivityChart } from "@/components/charts/dashboard-charts";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -459,7 +460,7 @@ export default function MissionControl() {
             Activity Timeline (24h)
           </h2>
           <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4 backdrop-blur-sm dashboard-timeline-wrap">
-            <ActivityTimeline agents={agents} />
+            <AgentActivityChart agents={agents} />
           </div>
         </motion.section>
 

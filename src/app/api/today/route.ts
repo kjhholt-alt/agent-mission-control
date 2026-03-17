@@ -14,8 +14,9 @@ export async function GET() {
   try {
     const now = new Date();
     const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const weekAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 7)).toISOString();
 
-    const [tasksRes, workersRes, budgetRes, sessionsRes, specRes] = await Promise.all([
+    const [tasksRes, workersRes, budgetRes, sessionsRes, specRes, weekTasksRes, weekSessionsRes] = await Promise.all([
       supabase.from("swarm_tasks").select("*")
         .or(`updated_at.gte.${todayStart},status.in.(queued,running,pending_approval,approved)`)
         .order("updated_at", { ascending: false }).limit(50),
@@ -28,12 +29,21 @@ export async function GET() {
         .order("last_activity", { ascending: false }).limit(20),
       supabase.from("agent_specializations").select("*")
         .order("last_updated", { ascending: false }).limit(20),
+      // Historical data for charts
+      supabase.from("swarm_tasks").select("status,created_at,project")
+        .gte("created_at", weekAgo)
+        .order("created_at", { ascending: false }),
+      supabase.from("nexus_sessions").select("cost_usd,last_activity,model,project_name")
+        .gte("last_activity", weekAgo)
+        .order("last_activity", { ascending: false }),
     ]);
 
     const tasks = tasksRes.data || [];
     const workers = workersRes.data || [];
     const sessions = sessionsRes.data || [];
     const specs = specRes.data || [];
+    const weekTasks = weekTasksRes.data || [];
+    const weekSessions = weekSessionsRes.data || [];
 
     // Aggregate today's tasks
     const todayTasks = tasks.filter(t => t.created_at >= todayStart || ["queued", "running", "pending_approval"].includes(t.status));
@@ -90,6 +100,9 @@ export async function GET() {
       rankings,
       specializations: specs,
       sessions: { active: sessions.filter(s => s.status === "active").length, total: sessions.length },
+      // Historical data for charts
+      weekTasks,
+      weekSessions,
     });
   } catch (err) {
     return NextResponse.json(

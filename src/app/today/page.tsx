@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Sun, CheckCircle2, XCircle, Clock, Loader2, Brain,
-  TrendingUp, DollarSign, Users, Zap, RefreshCw, Rocket,
+  TrendingUp, DollarSign, Users, Zap, RefreshCw, Rocket, BarChart3,
 } from "lucide-react";
 import { TodayPageLoading } from "@/components/loading-states";
+import { TaskTrendChart, CostTrendChart } from "@/components/charts/dashboard-charts";
 
 interface TodayData {
   date: string;
@@ -32,6 +33,8 @@ interface TodayData {
     fail_count: number; avg_duration_seconds: number; best_practices: string;
   }>;
   sessions: { active: number; total: number };
+  weekTasks?: Array<{ status: string; created_at: string }>;
+  weekSessions?: Array<{ cost_usd: string; last_activity: string; model?: string; project_name?: string }>;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -265,6 +268,38 @@ export default function TodayPage() {
                 )}
               </div>
             </div>
+
+            {/* Charts Section */}
+            {data.weekTasks && data.weekSessions && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Task Completion Trend */}
+                <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-emerald-400" />
+                    <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                      Task Completion Trend (7 Days)
+                    </h2>
+                  </div>
+                  <div className="p-4">
+                    <TaskTrendChart tasks={data.weekTasks} />
+                  </div>
+                </div>
+
+                {/* Cost Trend */}
+                <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-amber-400" />
+                    <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                      Cost Trend (7 Days)
+                    </h2>
+                  </div>
+                  <div className="p-4">
+                    <CostTrendChart sessions={data.weekSessions} />
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </>
         )}
       </div>

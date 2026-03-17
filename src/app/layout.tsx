@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ToastProvider } from "@/components/ui/toast";
 import { AlertBanner } from "@/components/AlertBanner";
 import { ConnectionStatus } from "@/components/connection-status";
 import { MobileNav } from "@/components/MobileNav";
@@ -94,13 +95,15 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${jetbrainsMono.variable} antialiased`}>
-        <TooltipProvider>
-          <KeyboardShortcutsProvider>
-            <GlobalNav />
-            <AlertBanner />
-            <div className="pt-10">{children}</div>
-          </KeyboardShortcutsProvider>
-        </TooltipProvider>
+        <ToastProvider>
+          <TooltipProvider>
+            <KeyboardShortcutsProvider>
+              <GlobalNav />
+              <AlertBanner />
+              <div className="pt-10">{children}</div>
+            </KeyboardShortcutsProvider>
+          </TooltipProvider>
+        </ToastProvider>
       </body>
     </html>
   );
