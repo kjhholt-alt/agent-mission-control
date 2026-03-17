@@ -44,6 +44,12 @@ export default function GamePage() {
         spawnTask(projectId, task);
       }
     }
+    if (cmd.startsWith("focus:")) {
+      const tab = cmd.slice(6) as RightPanel;
+      setRightPanel(tab);
+    }
+    // move and alert commands could update Supabase in the future
+    // For now they just trigger visual feedback via CommandInput output
   }, [cycleTheme, spawnTask]);
 
   // Keyboard shortcuts
