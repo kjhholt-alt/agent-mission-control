@@ -548,24 +548,27 @@
   animation: crt-cursor 1s step-end infinite;
 }
 
-/* Terminal grid layout — 4 quadrants + bottom bar */
+/* Terminal grid layout — header + 4 quadrants + event feed + status bar */
 .terminal-grid {
   display: grid;
-  grid-template-rows: 1fr 1fr 28px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 32px 1fr 1fr 28px;
+  grid-template-columns: 1fr 1fr minmax(240px, 0.6fr);
   grid-template-areas:
-    "q1 q2"
-    "q3 q4"
-    "bar bar";
+    "header header header"
+    "q1     q2     feed"
+    "q3     q4     feed"
+    "bar    bar    bar";
   gap: 1px;
   height: 100%;
   width: 100%;
 }
 
+.terminal-header { grid-area: header; }
 .terminal-q1 { grid-area: q1; }
 .terminal-q2 { grid-area: q2; }
 .terminal-q3 { grid-area: q3; }
 .terminal-q4 { grid-area: q4; }
+.terminal-feed { grid-area: feed; }
 .terminal-bar { grid-area: bar; }
 
 /* Quadrant borders */
@@ -603,15 +606,20 @@
 }
 
 /* Responsive — stack on mobile */
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .terminal-grid {
-    grid-template-rows: 1fr 1fr 1fr 1fr 28px;
+    grid-template-rows: 32px repeat(4, minmax(200px, 1fr)) minmax(180px, 0.5fr) 28px;
     grid-template-columns: 1fr;
     grid-template-areas:
+      "header"
       "q1"
       "q2"
       "q3"
       "q4"
+      "feed"
       "bar";
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
   }
 }
