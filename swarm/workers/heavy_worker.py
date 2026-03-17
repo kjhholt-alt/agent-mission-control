@@ -84,6 +84,7 @@ class HeavyWorker(BaseWorker):
         )
 
         start_time = time.time()
+        worktree_committed = False  # Guard against double commit in finally
 
         # Write prompt to temp file to avoid Windows cmd.exe argument mangling
         import tempfile
@@ -173,6 +174,7 @@ class HeavyWorker(BaseWorker):
                     task.get("title", "agent task"),
                     worker_name=self.worker_type,
                 )
+                worktree_committed = True
                 output_data["worktree"] = {
                     "path": worktree_path,
                     "branch": f"agent/{task['id'][:8]}",
@@ -199,8 +201,8 @@ class HeavyWorker(BaseWorker):
                     os.remove(prompt_file)
             except Exception:
                 pass
-            # Commit any partial worktree changes before cleanup (even on failure)
-            if worktree_path:
+            # Commit any partial worktree changes before cleanup (only on failure path)
+            if worktree_path and not worktree_committed:
                 try:
                     commit_worktree_changes(
                         worktree_path,

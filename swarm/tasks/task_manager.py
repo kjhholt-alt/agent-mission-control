@@ -166,36 +166,41 @@ class TaskManager:
         if not resp.data:
             return None
 
-        # Smart worker matching: prefer tasks that match the worker's type
-        task = self._pick_best_task(resp.data, worker_type)
+        # Smart worker matching: rank tasks by affinity
+        ranked = self._rank_tasks(resp.data, worker_type)
 
         now = datetime.now(timezone.utc).isoformat()
-        update: dict[str, Any] = {
-            "status": "running",
-            "started_at": now,
-            "updated_at": now,
-        }
-        if worker_id:
-            update["assigned_worker_id"] = worker_id
 
-        update_resp = (
-            self.sb.table(self.TABLE)
-            .update(update)
-            .eq("id", task["id"])
-            .eq("status", "queued")  # Optimistic lock
-            .execute()
-        )
-        if not update_resp.data:
-            logger.debug("Task %s was claimed by another worker", task["id"][:8])
-            return None
+        # Try each candidate in ranked order until one is claimed
+        for task in ranked:
+            update: dict[str, Any] = {
+                "status": "running",
+                "started_at": now,
+                "updated_at": now,
+            }
+            if worker_id:
+                update["assigned_worker_id"] = worker_id
 
-        logger.info("Claimed task %s: %s", task["id"][:8], task["title"])
-        return update_resp.data[0]
+            update_resp = (
+                self.sb.table(self.TABLE)
+                .update(update)
+                .eq("id", task["id"])
+                .eq("status", "queued")  # Optimistic lock
+                .execute()
+            )
+            if update_resp.data:
+                logger.info("Claimed task %s: %s", task["id"][:8], task["title"])
+                return update_resp.data[0]
 
-    def _pick_best_task(
+            logger.debug("Task %s was claimed by another worker, trying next", task["id"][:8])
+
+        logger.debug("All %d candidates claimed by other workers", len(ranked))
+        return None
+
+    def _rank_tasks(
         self, candidates: list[dict[str, Any]], worker_type: Optional[str] = None
-    ) -> dict[str, Any]:
-        """Pick the best task from candidates using multi-factor affinity scoring.
+    ) -> list[dict[str, Any]]:
+        """Rank candidate tasks using multi-factor affinity scoring.
 
         Scores each candidate task by:
         - Worker type preference match (+5)
@@ -203,17 +208,18 @@ class TaskManager:
         - Priority (higher priority = higher score, up to +3)
         - Retry avoidance: tasks with 0 retries preferred (+1)
 
-        Falls back to highest priority if no worker_type or no affinity data.
+        Returns all candidates sorted by score (best first) so the caller
+        can iterate and try claiming each in order.
 
         Args:
             candidates: List of queued task rows, already sorted by priority
             worker_type: Worker type for matching (e.g. "builder", "inspector")
 
         Returns:
-            The best matching task row
+            List of task rows sorted by affinity score (best first)
         """
         if not worker_type:
-            return candidates[0]
+            return candidates
 
         from swarm.config import WORKER_TYPE_PREFERENCES
 
@@ -222,8 +228,8 @@ class TaskManager:
         # Load affinity data: success rates per project+task_type
         affinity_cache = self._load_affinity_cache()
 
-        scored: list[tuple[float, dict[str, Any]]] = []
-        for task in candidates:
+        scored: list[tuple[float, int, dict[str, Any]]] = []
+        for idx, task in enumerate(candidates):
             score = 0.0
 
             # Worker type preference match (+5)
@@ -249,21 +255,21 @@ class TaskManager:
             if (task.get("retry_count") or 0) == 0:
                 score += 1.0
 
-            scored.append((score, task))
+            scored.append((score, idx, task))
 
-        scored.sort(key=lambda x: x[0], reverse=True)
+        # Sort by score descending, then original order as tiebreaker
+        scored.sort(key=lambda x: (-x[0], x[1]))
 
-        best_score, best_task = scored[0]
-        if best_score > 0 and best_task["id"] != candidates[0]["id"]:
+        if scored and scored[0][2]["id"] != candidates[0]["id"]:
             logger.debug(
-                "Affinity match: worker_type=%s picked task %s (score=%.1f) over default %s",
+                "Affinity ranking: worker_type=%s preferred task %s (score=%.1f) over default %s",
                 worker_type,
-                best_task["id"][:8],
-                best_score,
+                scored[0][2]["id"][:8],
+                scored[0][0],
                 candidates[0]["id"][:8],
             )
 
-        return best_task
+        return [task for _, _, task in scored]
 
     def _load_affinity_cache(self) -> dict[str, float]:
         """Load success rate cache from agent_specializations table.
@@ -518,11 +524,12 @@ class TaskManager:
         """
         now = datetime.now(timezone.utc).isoformat()
 
-        # Fetch all non-terminal tasks that might be downstream
+        # Fetch non-terminal tasks that might be downstream (capped to prevent OOM)
         resp = (
             self.sb.table(self.TABLE)
             .select("id, depends_on")
             .in_("status", ["blocked", "queued"])
+            .limit(500)
             .execute()
         )
         if not resp.data:

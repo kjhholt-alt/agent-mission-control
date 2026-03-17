@@ -221,21 +221,33 @@ class Supervisor:
             logger.info("Supervisor: re-queued task %s from stale worker", task_id[:8])
 
     def _handle_stuck_task(self, task: dict):
-        """Re-queue a stuck task and kill its worker."""
+        """Re-queue a stuck task and kill its worker, respecting max_retries."""
         now = datetime.now(timezone.utc).isoformat()
         retry_count = (task.get("retry_count", 0) or 0) + 1
+        max_retries = task.get("max_retries", 3) or 3
 
-        # Re-queue the task
-        self.sb.table(self.TASKS_TABLE).update({
-            "status": "queued",
-            "assigned_worker_id": None,
-            "retry_count": retry_count,
-        }).eq("id", task["id"]).execute()
+        if retry_count >= max_retries:
+            # Retries exhausted — use task_manager to fail properly (with cascade)
+            self.task_manager.fail_task(
+                task["id"],
+                f"Supervisor: stuck after {retry_count} attempts (timeout)",
+            )
+            logger.warning(
+                "Supervisor: permanently failed stuck task %s (retries exhausted: %d/%d)",
+                task["id"][:8], retry_count, max_retries,
+            )
+        else:
+            # Re-queue the task
+            self.sb.table(self.TASKS_TABLE).update({
+                "status": "queued",
+                "assigned_worker_id": None,
+                "retry_count": retry_count,
+            }).eq("id", task["id"]).execute()
 
-        logger.info(
-            "Supervisor: re-queued stuck task %s (retry #%d)",
-            task["id"][:8], retry_count,
-        )
+            logger.info(
+                "Supervisor: re-queued stuck task %s (retry #%d/%d)",
+                task["id"][:8], retry_count, max_retries,
+            )
 
         # Kill the assigned worker if any
         worker_id = task.get("assigned_worker_id")
@@ -308,20 +320,20 @@ class Supervisor:
 
     def _fix_idle_situation(self) -> str | None:
         """ZERO TOLERANCE: If there are queued/blocked tasks and idle workers, wake them up."""
-        # Count queued tasks
-        queued = self.sb.table(self.TASKS_TABLE).select("id", count="exact").eq("status", "queued").execute()
-        blocked = self.sb.table(self.TASKS_TABLE).select("id", count="exact").eq("status", "blocked").execute()
-        queued_count = len(queued.data) if queued.data else 0
-        blocked_count = len(blocked.data) if blocked.data else 0
+        # Count queued tasks (use .count for accurate server-side count)
+        queued = self.sb.table(self.TASKS_TABLE).select("id", count="exact", head=True).eq("status", "queued").execute()
+        blocked = self.sb.table(self.TASKS_TABLE).select("id", count="exact", head=True).eq("status", "blocked").execute()
+        queued_count = queued.count or 0
+        blocked_count = blocked.count or 0
         total_pending = queued_count + blocked_count
 
-        # Count idle workers
+        # Count idle workers (need data for kill loop, so fetch rows)
         idle_workers = self.sb.table(self.WORKERS_TABLE).select("id").eq("status", "idle").execute()
         idle_count = len(idle_workers.data) if idle_workers.data else 0
 
         # Count active workers
-        active = self.sb.table(self.WORKERS_TABLE).select("id").in_("status", ["busy", "working"]).execute()
-        active_count = len(active.data) if active.data else 0
+        active = self.sb.table(self.WORKERS_TABLE).select("id", count="exact", head=True).in_("status", ["busy", "working"]).execute()
+        active_count = active.count or 0
 
         if total_pending > 0 and active_count == 0:
             # Tasks exist but NOBODY is working — kill all idle workers so orchestrator respawns fresh ones
