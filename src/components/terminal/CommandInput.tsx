@@ -25,6 +25,10 @@ const COMMANDS: Record<string, string> = {
   projects: "List all projects with status",
   inspect: "inspect <CODE> — Open detail view for a project (e.g. inspect CMD)",
   spawn: "spawn <CODE> <task> — Queue a task for a project",
+  move: "move <AGENT> <CODE> — Reassign agent to a building",
+  scan: "scan <CODE> — Quick scan of a project's vitals",
+  focus: "focus <events|flows|agents|system> — Switch right panel tab",
+  alert: "alert <message> — Broadcast a custom event",
   workers: "Show worker type legend with icons",
   theme: "Cycle terminal color theme (green → amber → cyan)",
   clear: "Clear command history",
@@ -181,6 +185,87 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
           output = `  Spawning task on ${found.name}: "${task}"`;
           type = "success";
           onCommand?.(`spawn:${found.id}:${task}`);
+          break;
+        }
+        // move <AGENT_NAME> <BUILDING_CODE>
+        if (trimmed.startsWith("move ")) {
+          const rest = trimmed.slice(5).trim();
+          const spaceIdx = rest.lastIndexOf(" ");
+          if (spaceIdx === -1) {
+            output = "  Usage: move <AGENT_NAME> <CODE>";
+            type = "error";
+            break;
+          }
+          const agentName = rest.slice(0, spaceIdx).trim();
+          const code = rest.slice(spaceIdx + 1).trim().toUpperCase();
+          const agent = workers.find(w => w.name.toLowerCase() === agentName.toLowerCase());
+          const target = buildings.find(b => b.shortName.toUpperCase() === code);
+          if (!agent) {
+            output = `  Unknown agent '${agentName}'. Use 'agents' to see roster.`;
+            type = "error";
+            break;
+          }
+          if (!target) {
+            output = `  Unknown building '${code}'. Use 'projects' to see codes.`;
+            type = "error";
+            break;
+          }
+          const currentBuilding = buildings.find(b => b.id === agent.currentBuildingId);
+          output = `  ${agent.name} → ${target.shortName} (from ${currentBuilding?.shortName || "???"})`;
+          type = "success";
+          onCommand?.(`move:${agent.id}:${target.id}`);
+          break;
+        }
+        // scan <CODE>
+        if (trimmed.startsWith("scan ")) {
+          const code = trimmed.slice(5).trim().toUpperCase();
+          const found = buildings.find(b => b.shortName.toUpperCase() === code);
+          if (!found) {
+            output = `  Unknown project '${code}'. Use 'projects' to see codes.`;
+            type = "error";
+            break;
+          }
+          const bWorkers = workers.filter(w => w.currentBuildingId === found.id);
+          const statusIcon = found.status === "active" ? "●" : found.status === "warning" ? "▲" : found.status === "error" ? "✖" : "○";
+          output = [
+            `  ┌─ SCAN: ${found.shortName} ─────────────────`,
+            `  │ ${statusIcon} ${found.name}`,
+            `  │ Status:  ${found.status.toUpperCase()}`,
+            `  │ Uptime:  ${found.stats.uptime}`,
+            `  │ Tests:   ${found.stats.tests}`,
+            `  │ Deploys: ${found.stats.deploys}`,
+            `  │ Agents:  ${bWorkers.length > 0 ? bWorkers.map(w => w.name).join(", ") : "none"}`,
+            `  │ ${found.description}`,
+            `  └──────────────────────────────`,
+          ].join("\n");
+          type = "success";
+          break;
+        }
+        // focus <tab>
+        if (trimmed.startsWith("focus ")) {
+          const tab = trimmed.slice(6).trim().toLowerCase();
+          const validTabs = ["events", "flows", "agents", "system"];
+          if (!validTabs.includes(tab)) {
+            output = `  Unknown panel '${tab}'. Options: ${validTabs.join(", ")}`;
+            type = "error";
+            break;
+          }
+          output = `  Switched to ${tab.toUpperCase()} panel`;
+          type = "success";
+          onCommand?.(`focus:${tab}`);
+          break;
+        }
+        // alert <message>
+        if (trimmed.startsWith("alert ")) {
+          const msg = cmd.trim().slice(6).trim();
+          if (!msg) {
+            output = "  Usage: alert <message>";
+            type = "error";
+            break;
+          }
+          output = `  Alert broadcast: "${msg}"`;
+          type = "success";
+          onCommand?.(`alert:${msg}`);
           break;
         }
         output = `  Unknown command: '${trimmed}'. Type 'help' for available commands.`;
