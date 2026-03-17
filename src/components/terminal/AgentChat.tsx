@@ -74,6 +74,7 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const agent = selectedAgent ? workers.find(w => w.id === selectedAgent) : null;
 
@@ -109,7 +110,7 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
 
     // Simulate agent "thinking" delay
     const delay = 400 + Math.random() * 800;
-    setTimeout(() => {
+    replyTimerRef.current = setTimeout(() => {
       const response = generateResponse(agent, userMsg.text, buildings);
       const agentMsg: ChatMessage = {
         id: `msg-${Date.now()}-in`,
@@ -121,8 +122,19 @@ export function AgentChat({ workers, buildings, theme }: AgentChatProps) {
       };
       setMessages(prev => [...prev, agentMsg]);
       setIsTyping(false);
+      replyTimerRef.current = null;
     }, delay);
   }, [input, agent, buildings]);
+
+  // Clean up reply timer on unmount or agent switch
+  useEffect(() => {
+    return () => {
+      if (replyTimerRef.current) {
+        clearTimeout(replyTimerRef.current);
+        replyTimerRef.current = null;
+      }
+    };
+  }, [selectedAgent]);
 
   const agentMessages = messages.filter(m => m.agentId === selectedAgent);
 

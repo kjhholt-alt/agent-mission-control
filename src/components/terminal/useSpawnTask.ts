@@ -14,21 +14,28 @@ export function useSpawnTask() {
       setIsSpawning(true);
       setLastResult(null);
 
-      const { error } = await supabase.from("swarm_tasks").insert({
-        title: taskDescription,
-        project: projectId,
-        status: "queued",
-        priority: "medium",
-        created_at: new Date().toISOString(),
-      });
+      try {
+        const { error } = await supabase.from("swarm_tasks").insert({
+          title: taskDescription,
+          project: projectId,
+          status: "queued",
+          priority: "medium",
+          created_at: new Date().toISOString(),
+        });
 
-      const result: SpawnResult = error ? "error" : "success";
-      if (error) {
-        console.error("[useSpawnTask] insert failed:", error.message);
+        const result: SpawnResult = error ? "error" : "success";
+        if (error) {
+          console.error("[useSpawnTask] insert failed:", error.message);
+        }
+        setLastResult(result);
+        return result;
+      } catch (err) {
+        console.error("[useSpawnTask] unexpected error:", err);
+        setLastResult("error");
+        return "error";
+      } finally {
+        setIsSpawning(false);
       }
-      setLastResult(result);
-      setIsSpawning(false);
-      return result;
     },
     []
   );

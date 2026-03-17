@@ -62,6 +62,7 @@ export function SessionReplay({ theme }: SessionReplayProps) {
   const [isStreaming, setIsStreaming] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineIndexRef = useRef(0);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Stream lines one by one for replay effect
   useEffect(() => {
@@ -69,11 +70,14 @@ export function SessionReplay({ theme }: SessionReplayProps) {
 
     const interval = setInterval(() => {
       if (lineIndexRef.current >= DEMO_SESSION_LINES.length) {
-        // Loop back to start after a pause
-        setTimeout(() => {
-          lineIndexRef.current = 0;
-          setLines([]);
-        }, 3000);
+        // Loop back to start after a pause — guard against duplicate timeouts
+        if (!resetTimerRef.current) {
+          resetTimerRef.current = setTimeout(() => {
+            lineIndexRef.current = 0;
+            setLines([]);
+            resetTimerRef.current = null;
+          }, 3000);
+        }
         return;
       }
 
@@ -81,7 +85,13 @@ export function SessionReplay({ theme }: SessionReplayProps) {
       lineIndexRef.current++;
     }, 800 + Math.random() * 600);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+    };
   }, [isStreaming]);
 
   // Auto-scroll
