@@ -9,6 +9,7 @@ agents can work on the same repo simultaneously without conflicts.
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Any
@@ -50,6 +51,10 @@ class HeavyWorker(BaseWorker):
         prompt = input_data.get("prompt", "")
         if not prompt:
             raise ValueError("Task input_data must contain a 'prompt' field")
+
+        # Validate task ID format (defensive — prevents shell injection via crafted IDs)
+        if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', task["id"]):
+            raise ValueError(f"Invalid task ID format: {task['id'][:40]}")
 
         # Resolve working directory
         project_key = task.get("project", "")
@@ -194,6 +199,17 @@ class HeavyWorker(BaseWorker):
                     os.remove(prompt_file)
             except Exception:
                 pass
+            # Commit any partial worktree changes before cleanup (even on failure)
+            if worktree_path:
+                try:
+                    commit_worktree_changes(
+                        worktree_path,
+                        task["id"],
+                        task.get("title", "agent task"),
+                        worker_name=self.worker_type,
+                    )
+                except Exception as e:
+                    logger.warning("Worktree commit in finally failed: %s", e)
             # Clean up worktree (branch preserved for review/merge)
             if worktree_path and project_dir:
                 try:

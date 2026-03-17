@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 /**
@@ -94,6 +94,25 @@ export async function POST(request: NextRequest) {
     if (!goal || !project) {
       return NextResponse.json(
         { error: "Missing required fields: goal, project" },
+        { status: 400 }
+      );
+    }
+
+    // Validate project is in the allowlist
+    const ALLOWED_PROJECTS = [
+      "pl-engine", "buildkit-services", "nexus", "email-finder", "mcp-servers",
+    ];
+    if (!ALLOWED_PROJECTS.includes(project)) {
+      return NextResponse.json(
+        { error: `Unknown project: ${project}. Allowed: ${ALLOWED_PROJECTS.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate goal length
+    if (typeof goal !== "string" || goal.length > 2000) {
+      return NextResponse.json(
+        { error: "Goal must be a string under 2000 characters" },
         { status: 400 }
       );
     }

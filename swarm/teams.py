@@ -279,7 +279,7 @@ class AgentTeam:
                     "completed_at": now,
                     "updated_at": now,
                 }).in_("id", member_ids).in_(
-                    "status", ["queued", "blocked", "pending"]
+                    "status", ["queued", "blocked", "pending", "running"]
                 ).execute()
 
             # Update team status

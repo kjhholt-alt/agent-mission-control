@@ -434,6 +434,13 @@ class BaseWorker:
             "task_started", "running", {"task_id": task["id"], "title": task["title"]}
         )
 
+        # Normalize input_data to dict once (defensive — avoids repeated json.loads)
+        _raw_input = task.get("input_data", {})
+        if isinstance(_raw_input, str):
+            import json
+            _raw_input = json.loads(_raw_input)
+        task["input_data"] = _raw_input
+
         # ── Memory + specialization injection ─────────────────────────
         project = task.get("project", "")
         task_type = task.get("task_type")

@@ -10,6 +10,7 @@ Supports worktree isolation for tasks that touch code (when use_worktree=True).
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Any
@@ -49,6 +50,10 @@ class CCLightWorker(BaseWorker):
         prompt = input_data.get("prompt", "")
         if not prompt:
             raise ValueError("Task input_data must contain a 'prompt' field")
+
+        # Validate task ID format (defensive — prevents shell injection via crafted IDs)
+        if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', task["id"]):
+            raise ValueError(f"Invalid task ID format: {task['id'][:40]}")
 
         # Resolve project and inject context
         project_key = task.get("project", "")
@@ -201,6 +206,17 @@ class CCLightWorker(BaseWorker):
                     os.remove(prompt_file)
             except Exception:
                 pass
+            # Commit any partial worktree changes before cleanup (even on failure)
+            if worktree_path:
+                try:
+                    commit_worktree_changes(
+                        worktree_path,
+                        task["id"],
+                        task.get("title", "cc_light task"),
+                        worker_name="cc_light",
+                    )
+                except Exception as e:
+                    logger.warning("Worktree commit in finally failed: %s", e)
             # Clean up worktree (branch preserved for review)
             if worktree_path and project_dir:
                 try:
