@@ -80,26 +80,40 @@ export function ProjectQuadrant({
           return (
             <div
               key={building.id}
-              className="mb-1.5 px-2 py-1 rounded-sm hover:bg-white/[0.02] transition-colors"
+              className="mb-1.5 py-1 rounded-sm hover:bg-white/[0.02] transition-colors flex"
             >
-              {/* Building header line */}
-              <div className="flex items-center gap-2 text-[11px] font-mono">
-                <span style={{ color: statusColor }}>{statusChar}</span>
-                <span style={{ color: theme.primary }} className="font-bold tracking-wider">
-                  {building.shortName}
-                </span>
-                <span style={{ color: theme.dim }} className="text-[9px] truncate">
-                  {building.name}
-                </span>
-                <span className="ml-auto text-[9px] tabular-nums" style={{ color: theme.dim }}>
-                  {building.stats.uptime}
-                </span>
-              </div>
+              {/* Color accent bar */}
+              <div
+                className="w-[3px] shrink-0 rounded-sm mr-2"
+                style={{
+                  backgroundColor: building.status === "active" ? building.color : "transparent",
+                  opacity: building.status === "active" ? 0.6 : 0,
+                }}
+              />
+              <div className="flex-1 min-w-0">
+                {/* Building header line */}
+                <div className="flex items-center gap-2 text-[11px] font-mono">
+                  <span style={{ color: statusColor }}>{statusChar}</span>
+                  <span style={{ color: theme.primary }} className="font-bold tracking-wider">
+                    {building.shortName}
+                  </span>
+                  <span style={{ color: theme.dim }} className="text-[9px] truncate">
+                    {building.name}
+                  </span>
+                  <span className="ml-auto text-[9px] tabular-nums" style={{ color: theme.dim }}>
+                    {building.stats.uptime}
+                  </span>
+                </div>
 
-              {/* Stats line */}
-              <div className="flex items-center gap-3 text-[9px] mt-0.5 pl-4" style={{ color: theme.dim }}>
-                <span>tests:{building.stats.tests}</span>
-                <span>deploys:{building.stats.deploys}</span>
+                {/* Description */}
+                <div className="text-[8px] mt-0.5 pl-4 truncate" style={{ color: theme.dim }}>
+                  {building.description}
+                </div>
+
+                {/* Stats line */}
+                <div className="flex items-center gap-3 text-[9px] mt-0.5 pl-4" style={{ color: theme.dim }}>
+                  <span>tests:{building.stats.tests}</span>
+                  <span>deploys:{building.stats.deploys}</span>
                 {bWorkers.length > 0 && (
                   <span style={{ color: theme.secondary }}>
                     agents:{bWorkers.length}
@@ -143,6 +157,7 @@ export function ProjectQuadrant({
                   })}
                 </div>
               )}
+              </div>
             </div>
           );
         })}

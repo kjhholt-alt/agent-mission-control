@@ -548,15 +548,16 @@
   animation: crt-cursor 1s step-end infinite;
 }
 
-/* Terminal grid layout — header + 4 quadrants + event feed + status bar */
+/* Terminal grid layout — header + 4 quadrants + event feed + command + status bar */
 .terminal-grid {
   display: grid;
-  grid-template-rows: 32px 1fr 1fr 28px;
+  grid-template-rows: 32px 1fr 0.6fr 0.4fr 28px;
   grid-template-columns: 1fr 1fr minmax(240px, 0.6fr);
   grid-template-areas:
     "header header header"
     "q1     q2     feed"
     "q3     q4     feed"
+    "q3     cmd    feed"
     "bar    bar    bar";
   gap: 1px;
   height: 100%;
@@ -569,6 +570,7 @@
 .terminal-q3 { grid-area: q3; }
 .terminal-q4 { grid-area: q4; }
 .terminal-feed { grid-area: feed; }
+.terminal-cmd { grid-area: cmd; }
 .terminal-bar { grid-area: bar; }
 
 /* Quadrant borders */
@@ -608,7 +610,7 @@
 /* Responsive — stack on mobile */
 @media (max-width: 1023px) {
   .terminal-grid {
-    grid-template-rows: 32px repeat(4, minmax(200px, 1fr)) minmax(180px, 0.5fr) 28px;
+    grid-template-rows: 32px repeat(4, minmax(180px, 1fr)) minmax(150px, 0.4fr) minmax(120px, 0.3fr) 28px;
     grid-template-columns: 1fr;
     grid-template-areas:
       "header"
@@ -617,6 +619,7 @@
       "q3"
       "q4"
       "feed"
+      "cmd"
       "bar";
     height: auto;
     min-height: 100vh;
