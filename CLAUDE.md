@@ -66,6 +66,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/spawn` | POST | API Key | Create mission |
 | `/api/teams` | GET/POST | API Key | Agent team management (create, list, progress) |
 | `/api/dag` | GET | Public | DAG topology: nodes, edges, stats, critical path, bottlenecks |
+| `/api/metrics` | GET | Public | Live system metrics: throughput, latency, error rates, health score |
 | `/api/deploy` | GET/POST | API Key | Deploy management |
 | `/api/heartbeat` | POST | Public | Agent heartbeat |
 | `/api/radiant` | GET | Public | Auto-generated quest suggestions |
