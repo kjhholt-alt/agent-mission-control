@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
+import * as Sentry from '@sentry/nextjs';
 
 export default function Error({
   error,
@@ -14,15 +15,17 @@ export default function Error({
     // Log the error to console
     console.error('[Page Error]', error);
 
-    // Optional: Send to monitoring service
-    const errorLog = {
-      message: error.message,
-      stack: error.stack,
-      digest: error.digest,
-      timestamp: new Date().toISOString(),
-      url: typeof window !== 'undefined' ? window.location.href : 'unknown',
-    };
-    console.log('[Error logged]:', errorLog);
+    // Send to Sentry
+    Sentry.captureException(error, {
+      tags: {
+        digest: error.digest,
+        component: 'error-boundary',
+      },
+      extra: {
+        url: typeof window !== 'undefined' ? window.location.href : 'unknown',
+        timestamp: new Date().toISOString(),
+      },
+    });
   }, [error]);
 
   return (
