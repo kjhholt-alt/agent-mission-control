@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { ConveyorBelt, Building } from "../game3d/types";
 import type { TERMINAL_THEMES } from "./terminal-constants";
 
@@ -10,24 +11,23 @@ interface DataFlowMapProps {
 }
 
 export function DataFlowMap({ conveyors, buildings, theme }: DataFlowMapProps) {
-  const buildingMap = new Map(buildings.map((b) => [b.id, b]));
+  const buildingMap = useMemo(() => new Map(buildings.map((b) => [b.id, b])), [buildings]);
 
-  const activeCount = conveyors.filter((c) => c.active).length;
+  const activeCount = useMemo(() => conveyors.filter((c) => c.active).length, [conveyors]);
 
-  // Group conveyors by source building
-  const grouped = new Map<string, ConveyorBelt[]>();
-  for (const c of conveyors) {
-    const existing = grouped.get(c.fromBuildingId) ?? [];
-    existing.push(c);
-    grouped.set(c.fromBuildingId, existing);
-  }
-
-  // Sort groups by source building shortName for consistent ordering
-  const sortedGroups = [...grouped.entries()].sort((a, b) => {
-    const nameA = buildingMap.get(a[0])?.shortName ?? "";
-    const nameB = buildingMap.get(b[0])?.shortName ?? "";
-    return nameA.localeCompare(nameB);
-  });
+  const sortedGroups = useMemo(() => {
+    const grouped = new Map<string, ConveyorBelt[]>();
+    for (const c of conveyors) {
+      const existing = grouped.get(c.fromBuildingId) ?? [];
+      existing.push(c);
+      grouped.set(c.fromBuildingId, existing);
+    }
+    return [...grouped.entries()].sort((a, b) => {
+      const nameA = buildingMap.get(a[0])?.shortName ?? "";
+      const nameB = buildingMap.get(b[0])?.shortName ?? "";
+      return nameA.localeCompare(nameB);
+    });
+  }, [conveyors, buildingMap]);
 
   return (
     <div className="terminal-quadrant flex flex-col h-full">

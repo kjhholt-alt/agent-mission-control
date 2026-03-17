@@ -10,7 +10,7 @@ export function useSpawnTask() {
   const [lastResult, setLastResult] = useState<SpawnResult>(null);
 
   const spawnTask = useCallback(
-    async (projectId: string, taskDescription: string) => {
+    async (projectId: string, taskDescription: string): Promise<SpawnResult> => {
       setIsSpawning(true);
       setLastResult(null);
 
@@ -22,14 +22,13 @@ export function useSpawnTask() {
         created_at: new Date().toISOString(),
       });
 
+      const result: SpawnResult = error ? "error" : "success";
       if (error) {
         console.error("[useSpawnTask] insert failed:", error.message);
-        setLastResult("error");
-      } else {
-        setLastResult("success");
       }
-
+      setLastResult(result);
       setIsSpawning(false);
+      return result;
     },
     []
   );

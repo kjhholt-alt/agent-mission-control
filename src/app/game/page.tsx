@@ -26,6 +26,10 @@ import { useToasts } from "@/components/terminal/useToasts";
 
 type RightPanel = "events" | "flows" | "agents" | "system" | "map" | "heat" | "chat" | "replay";
 
+const PANEL_KEYS: Record<string, RightPanel> = {
+  "1": "events", "2": "flows", "3": "agents", "4": "system", "5": "map", "6": "heat", "7": "chat", "8": "replay",
+};
+
 export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
   const { themeName, theme, cycleTheme } = useTerminalTheme();
@@ -87,11 +91,6 @@ export default function GamePage() {
       addToast(cmd.slice(6), "warning");
     }
   }, [cycleTheme, spawnTask, addToast]);
-
-  // Keyboard shortcuts
-  const PANEL_KEYS: Record<string, RightPanel> = {
-    "1": "events", "2": "flows", "3": "agents", "4": "system", "5": "map", "6": "heat", "7": "chat", "8": "replay",
-  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

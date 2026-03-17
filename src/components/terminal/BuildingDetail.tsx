@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import type { Building, Worker, ConveyorBelt } from "../game3d/types";
 import { WORKER_TYPE_CONFIG } from "../game3d/constants";
 import { ASCII_BUILDINGS, STATUS_CHARS, WORKER_ICONS } from "./terminal-constants";
@@ -38,14 +37,7 @@ export function BuildingDetail({
   const flows = conveyors.filter(c => c.fromBuildingId === building.id || c.toBuildingId === building.id);
   const activeFlows = flows.filter(c => c.active);
 
-  // Escape to close
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  // Escape handled by parent GamePage — no duplicate listener needed
 
   // ASCII art
   const sizeKey = building.size >= 2.5 ? "large" : building.size >= 1.75 ? "medium" : "small";

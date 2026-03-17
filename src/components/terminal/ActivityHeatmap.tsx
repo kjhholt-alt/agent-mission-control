@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { Building, AlertEvent } from "../game3d/types";
 import type { TERMINAL_THEMES } from "./terminal-constants";
 
@@ -50,8 +50,8 @@ export function ActivityHeatmap({
     return m;
   });
 
-  // Track the event count snapshot at each tick so we can diff
-  const [lastEventCount, setLastEventCount] = useState(events.length);
+  // Track the event count snapshot at each tick so we can diff (ref to avoid interval reset)
+  const lastEventCountRef = useRef(events.length);
 
   // Re-initialise rows when the building list changes
   useEffect(() => {
@@ -67,13 +67,20 @@ export function ActivityHeatmap({
     });
   }, [buildings]);
 
+  // Keep ref in sync with latest events length (without resetting interval)
+  useEffect(() => {
+    lastEventCountRef.current = events.length;
+  }, [events.length]);
+
   // Every BUCKET_SECONDS, shift the window and count new events
   useEffect(() => {
     const interval = setInterval(() => {
       setBuckets((prev) => {
         const next = new Map<string, number[]>();
         // Count new events since last tick
-        const newEvents = events.slice(lastEventCount);
+        const prevCount = lastEventCountRef.current;
+        const newEvents = events.slice(prevCount);
+        lastEventCountRef.current = events.length;
 
         for (const b of buildings) {
           const keyword = buildingKeyword(b);
@@ -89,11 +96,10 @@ export function ActivityHeatmap({
 
         return next;
       });
-      setLastEventCount(events.length);
     }, BUCKET_SECONDS * 1000);
 
     return () => clearInterval(interval);
-  }, [buildings, events, lastEventCount]);
+  }, [buildings, events]);
 
   // Hottest building + total events
   const { hottest, totalEvents } = useMemo(() => {
