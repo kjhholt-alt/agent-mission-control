@@ -11,6 +11,7 @@ import {
   Filter,
   Clock,
   ChevronDown,
+  Brain,
 } from "lucide-react";
 import type { OpsEvent, OpsTask, OpsWorker } from "@/lib/ops-types";
 import {
@@ -20,6 +21,7 @@ import {
   formatTimeAgo,
   formatDuration,
 } from "@/lib/ops-types";
+import { IntelPanel } from "./IntelPanel";
 
 interface Props {
   events: OpsEvent[];
@@ -30,7 +32,7 @@ interface Props {
   onClearSelection: () => void;
 }
 
-type TabKey = "timeline" | "details";
+type TabKey = "timeline" | "details" | "intel";
 
 // ─── EVENT ICON ───────────────────────────────────────────────────────────────
 
@@ -571,12 +573,26 @@ export function TimelinePanel({
             <span className="ml-1 w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block" />
           )}
         </button>
+        <button
+          onClick={() => {
+            if (hasSelection) onClearSelection();
+            setActiveTab("intel");
+          }}
+          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+            currentTab === "intel"
+              ? "text-violet-400 bg-violet-500/10"
+              : "text-zinc-600 hover:text-zinc-400"
+          }`}
+        >
+          <Brain className="w-3 h-3" />
+          Intel
+        </button>
       </div>
 
       {/* Tab content */}
       <div className="flex-1 min-h-0 rounded-lg border border-zinc-800/40" style={{ background: "rgba(10,10,18,0.5)" }}>
         <AnimatePresence mode="wait">
-          {currentTab === "timeline" ? (
+          {currentTab === "timeline" && (
             <motion.div
               key="timeline"
               initial={{ opacity: 0, y: -10 }}
@@ -587,7 +603,8 @@ export function TimelinePanel({
             >
               <TimelineTab events={events} tasks={tasks} workers={workers} />
             </motion.div>
-          ) : (
+          )}
+          {currentTab === "details" && (
             <motion.div
               key="details"
               initial={{ opacity: 0, y: -10 }}
@@ -602,6 +619,18 @@ export function TimelinePanel({
                 tasks={tasks}
                 onClear={onClearSelection}
               />
+            </motion.div>
+          )}
+          {currentTab === "intel" && (
+            <motion.div
+              key="intel"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="h-full"
+            >
+              <IntelPanel />
             </motion.div>
           )}
         </AnimatePresence>

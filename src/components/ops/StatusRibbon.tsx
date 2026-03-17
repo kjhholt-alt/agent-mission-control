@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Satellite, Users, Play, CheckCircle, DollarSign, Network } from "lucide-react";
+import { Satellite, Users, Play, CheckCircle, DollarSign, Network, Shield } from "lucide-react";
 import Link from "next/link";
 import type { OpsWorker, OpsTask, OpsBudget } from "@/lib/ops-types";
 import { formatTimeAgo } from "@/lib/ops-types";
@@ -54,8 +54,35 @@ function AnimatedCounter({ value, label, icon: Icon, color }: {
   );
 }
 
+function gradeColor(grade: string): string {
+  if (grade === "A") return "#10b981";
+  if (grade === "B") return "#22c55e";
+  if (grade === "C") return "#eab308";
+  if (grade === "D") return "#f97316";
+  return "#ef4444";
+}
+
 export function StatusRibbon({ workers, tasks, budget, connected, lastUpdated }: Props) {
   const [clock, setClock] = useState("");
+  const [healthGrade, setHealthGrade] = useState<string | null>(null);
+  const [healthScore, setHealthScore] = useState<number>(0);
+
+  // Fetch health score periodically
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch("/api/metrics");
+        if (res.ok) {
+          const data = await res.json();
+          setHealthGrade(data.health?.grade ?? null);
+          setHealthScore(data.health?.score ?? 0);
+        }
+      } catch { /* silent */ }
+    };
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const update = () => {
@@ -157,6 +184,19 @@ export function StatusRibbon({ workers, tasks, budget, connected, lastUpdated }:
             </span>
           </div>
         </div>
+        {healthGrade && (
+          <div className="flex items-center gap-2 px-4">
+            <Shield className="w-4 h-4 flex-shrink-0" style={{ color: gradeColor(healthGrade) }} />
+            <div className="flex flex-col">
+              <span className="text-lg font-bold tabular-nums" style={{ color: gradeColor(healthGrade) }}>
+                {healthGrade}
+              </span>
+              <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                Health {healthScore}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right: Clock + Updated */}
