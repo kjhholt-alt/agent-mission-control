@@ -25,6 +25,7 @@ import { DaemonPanel } from "@/components/daemon-panel";
 import { Workbench } from "@/components/workbench";
 import { useRealtimeConnection } from "@/lib/use-realtime-connection";
 import { LastUpdated } from "@/components/last-updated";
+import { Sparkline } from "@/components/sparkline";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -334,6 +335,20 @@ export default function MissionControl() {
                       ACTIVE
                     </span>
                   </div>
+
+                  {/* Tool usage sparkline */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <Sparkline
+                      value={session.tool_count || 0}
+                      color="#a855f7"
+                      width={80}
+                      height={20}
+                    />
+                    <span className="text-[10px] text-zinc-600">
+                      {session.tool_count || 0} tool{session.tool_count !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
                   {session.current_tool && (
                     <p className="text-xs text-zinc-500 mb-2 truncate">
                       Using:{" "}
@@ -343,8 +358,6 @@ export default function MissionControl() {
                     </p>
                   )}
                   <div className="flex items-center gap-3 text-[10px] text-zinc-600">
-                    <span>{session.tool_count || 0} tools</span>
-                    <span className="text-zinc-800">|</span>
                     <span>{formatCost(Number(session.cost_usd) || 0)}</span>
                     <span className="text-zinc-800">|</span>
                     <span className="text-zinc-500">
