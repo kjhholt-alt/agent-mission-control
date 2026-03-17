@@ -11,13 +11,14 @@ import { DataFeed } from "@/components/terminal/DataFeed";
 import { DataFlowMap } from "@/components/terminal/DataFlowMap";
 import { AgentRoster } from "@/components/terminal/AgentRoster";
 import { SystemMonitor } from "@/components/terminal/SystemMonitor";
+import { Minimap } from "@/components/terminal/Minimap";
 import { CommandInput } from "@/components/terminal/CommandInput";
 import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
 import { BuildingDetail } from "@/components/terminal/BuildingDetail";
 import { useTerminalTheme } from "@/components/terminal/useTerminalTheme";
 import { useSpawnTask } from "@/components/terminal/useSpawnTask";
 
-type RightPanel = "events" | "flows" | "agents" | "system";
+type RightPanel = "events" | "flows" | "agents" | "system" | "map";
 
 export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
@@ -113,11 +114,11 @@ export default function GamePage() {
             <div className="terminal-feed terminal-quadrant flex flex-col">
               {/* Tab switcher */}
               <div className="flex shrink-0" style={{ borderBottom: `1px solid ${theme.dim}` }}>
-                {(["events", "flows", "agents", "system"] as const).map((tab) => (
+                {(["events", "flows", "agents", "system", "map"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setRightPanel(tab)}
-                    className="flex-1 text-[11px] font-bold tracking-wider uppercase py-1 text-center cursor-pointer transition-colors"
+                    className="flex-1 text-[10px] font-bold tracking-wider uppercase py-1 text-center cursor-pointer transition-colors"
                     style={{
                       color: rightPanel === tab ? theme.primary : theme.dim,
                       backgroundColor: rightPanel === tab ? "rgba(255,255,255,0.03)" : "transparent",
@@ -135,6 +136,9 @@ export default function GamePage() {
                 {rightPanel === "agents" && <AgentRoster workers={workers} buildings={BUILDINGS} theme={theme} />}
                 {rightPanel === "system" && (
                   <SystemMonitor workers={workers} buildings={BUILDINGS} events={events} budget={budget} theme={theme} />
+                )}
+                {rightPanel === "map" && (
+                  <Minimap buildings={BUILDINGS} workers={workers} conveyors={CONVEYORS} theme={theme} />
                 )}
               </div>
             </div>

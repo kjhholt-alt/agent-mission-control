@@ -244,7 +244,7 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
         // focus <tab>
         if (trimmed.startsWith("focus ")) {
           const tab = trimmed.slice(6).trim().toLowerCase();
-          const validTabs = ["events", "flows", "agents", "system"];
+          const validTabs = ["events", "flows", "agents", "system", "map"];
           if (!validTabs.includes(tab)) {
             output = `  Unknown panel '${tab}'. Options: ${validTabs.join(", ")}`;
             type = "error";
