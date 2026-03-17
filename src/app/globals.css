@@ -171,6 +171,16 @@
   text-shadow: 0 0 10px rgba(0, 200, 255, 0.5), 0 0 20px rgba(0, 200, 255, 0.2);
 }
 
+/* Shimmer loading animation */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* Stats ticker scrolling animation */
 @keyframes ticker-scroll {
   0% { transform: translateX(0); }

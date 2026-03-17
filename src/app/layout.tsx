@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AlertBanner } from "@/components/AlertBanner";
+import { ConnectionStatus } from "@/components/connection-status";
+import { MobileNav } from "@/components/MobileNav";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -25,10 +27,14 @@ export const metadata: Metadata = {
 function GlobalNav() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-[100] flex items-center justify-between px-4 h-10 bg-[#0a0a12]/95 backdrop-blur-sm border-b border-white/5">
-      <a href="/" className="text-sm font-bold tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors">
-        NEXUS
-      </a>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-3">
+        <MobileNav />
+        <a href="/" className="text-sm font-bold tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors">
+          NEXUS
+        </a>
+        <ConnectionStatus />
+      </div>
+      <div className="hidden md:flex items-center gap-1">
         <a href="/" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-colors">
           Dashboard
         </a>

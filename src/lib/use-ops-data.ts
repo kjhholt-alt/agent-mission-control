@@ -10,6 +10,7 @@ export interface OpsData {
   budget: OpsBudget | null;
   events: OpsEvent[];
   connected: boolean;
+  loading: boolean;
   lastUpdated: Date;
   refreshAll: () => Promise<void>;
   updateTaskStatus: (taskId: string, status: string) => Promise<void>;

@@ -6,6 +6,7 @@ import {
   Sun, CheckCircle2, XCircle, Clock, Loader2, Brain,
   TrendingUp, DollarSign, Users, Zap, RefreshCw, Rocket,
 } from "lucide-react";
+import { TodayPageLoading } from "@/components/loading-states";
 
 interface TodayData {
   date: string;
@@ -120,10 +121,8 @@ export default function TodayPage() {
             <p className="text-sm">Failed to load: {error}</p>
             <button onClick={fetchData} className="text-xs text-cyan-400 hover:text-cyan-300">Retry</button>
           </div>
-        ) : !data ? (
-          <div className="flex items-center justify-center py-20 text-zinc-600">
-            <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading...
-          </div>
+        ) : loading || !data ? (
+          <TodayPageLoading />
         ) : (
           <>
             {/* Stats row */}

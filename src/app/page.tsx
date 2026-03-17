@@ -23,6 +23,8 @@ import { checkAchievements, type Achievement } from "@/lib/achievements";
 import { playSound, playSpawnSound } from "@/lib/audio";
 import { DaemonPanel } from "@/components/daemon-panel";
 import { Workbench } from "@/components/workbench";
+import { useRealtimeConnection } from "@/lib/use-realtime-connection";
+import { LastUpdated } from "@/components/last-updated";
 
 export default function MissionControl() {
   const [agents, setAgents] = useState<AgentActivity[]>([]);
@@ -32,6 +34,7 @@ export default function MissionControl() {
   const [liveSessions, setLiveSessions] = useState<NexusSession[]>([]);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [workbenchTaskId, setWorkbenchTaskId] = useState<string | null>(null);
+  const { markDataUpdate, lastUpdate } = useRealtimeConnection();
 
   // Check achievements when data changes
   useEffect(() => {
@@ -106,6 +109,7 @@ export default function MissionControl() {
         "postgres_changes",
         { event: "*", schema: "public", table: "agent_activity" },
         (payload) => {
+          markDataUpdate();
           if (payload.eventType === "INSERT") {
             setAgents((prev) => [payload.new as AgentActivity, ...prev]);
           } else if (payload.eventType === "UPDATE") {
@@ -132,7 +136,7 @@ export default function MissionControl() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [markDataUpdate]);
 
   // Supabase realtime — nexus_sessions (live Claude Code sessions)
   useEffect(() => {
@@ -142,6 +146,7 @@ export default function MissionControl() {
         "postgres_changes",
         { event: "*", schema: "public", table: "nexus_sessions" },
         (payload) => {
+          markDataUpdate();
           if (payload.eventType === "INSERT") {
             setLiveSessions((prev) => [
               payload.new as NexusSession,
@@ -164,7 +169,7 @@ export default function MissionControl() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [markDataUpdate]);
 
   const activeAgents = agents.filter((a) => a.status === "running");
   const activeSessions = liveSessions.filter((s) => s.status === "active");
@@ -311,6 +316,8 @@ export default function MissionControl() {
               <span className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20">
                 {activeSessions.length}
               </span>
+              <div className="flex-1" />
+              <LastUpdated timestamp={lastUpdate} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {activeSessions.map((session) => (
@@ -396,6 +403,8 @@ export default function MissionControl() {
                 {activeAgents.length}
               </span>
             )}
+            <div className="flex-1" />
+            <LastUpdated timestamp={lastUpdate} />
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

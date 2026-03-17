@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Radio, Trophy, Zap, Clock, Cpu, DollarSign, ListChecks } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useRealtimeConnection } from "@/lib/use-realtime-connection";
+import { LastUpdated } from "./last-updated";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -253,6 +255,7 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
     queuedTasks: 0,
   });
   const workerMapRef = useRef<Map<string, SwarmWorker>>(new Map());
+  const { markDataUpdate, lastUpdate } = useRealtimeConnection();
 
   // Build a lookup: worker_id -> worker_type
   const getWorkerType = useCallback((task: SwarmTask): string => {
@@ -359,6 +362,7 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
           filter: "status=eq.completed",
         },
         (payload) => {
+          markDataUpdate();
           const newTask = payload.new as SwarmTask;
           setTasks((prev) => {
             // Avoid duplicates
@@ -382,6 +386,7 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
           filter: "status=eq.completed",
         },
         (payload) => {
+          markDataUpdate();
           const newTask = payload.new as SwarmTask;
           setTasks((prev) => {
             const filtered = prev.filter((t) => t.id !== newTask.id);
@@ -394,7 +399,7 @@ export function LiveFeed({ onTaskClick }: { onTaskClick?: (id: string) => void }
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [markDataUpdate]);
 
   return (
     <div className="space-y-4">
