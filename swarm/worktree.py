@@ -8,6 +8,7 @@ On completion, changes are committed to a branch ready for merge.
 
 import logging
 import os
+import re
 import subprocess
 import shutil
 from pathlib import Path
@@ -58,17 +59,17 @@ def create_worktree(
     Returns:
         Path to the worktree directory, or None if creation failed
     """
+    # Validate task_id format (defensive — prevents path traversal via crafted IDs)
+    if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', task_id):
+        logger.error("Invalid task_id format: %s", task_id[:40])
+        return None
+
     short_id = task_id[:8]
     branch_name = f"agent/{short_id}"
     worktree_path = str(WORKTREE_BASE / short_id)
 
     # Ensure base directory exists
     WORKTREE_BASE.mkdir(parents=True, exist_ok=True)
-
-    # Check if worktree already exists
-    if os.path.exists(worktree_path):
-        logger.warning("Worktree already exists at %s, reusing", worktree_path)
-        return worktree_path
 
     # Check if this is a git repo
     result = _run_git(["rev-parse", "--git-dir"], cwd=project_dir)
@@ -86,7 +87,7 @@ def create_worktree(
         else:
             base_branch = "master"
 
-    # Create the worktree with a new branch
+    # Create the worktree with a new branch — let git be the lock (no TOCTOU race)
     result = _run_git(
         ["worktree", "add", "-b", branch_name, worktree_path, base_branch],
         cwd=project_dir,
@@ -99,6 +100,10 @@ def create_worktree(
             cwd=project_dir,
         )
         if result.returncode != 0:
+            # Worktree may exist from a previous run — reuse if path exists
+            if os.path.exists(worktree_path):
+                logger.warning("Worktree already exists at %s, reusing", worktree_path)
+                return worktree_path
             logger.error(
                 "Failed to create worktree for task %s: %s",
                 short_id,
@@ -204,6 +209,10 @@ def merge_worktree(
             "error": result.stderr.strip() if not pushed else None,
         }
 
+    # Save current branch so we can restore on failure
+    original_ref = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=project_dir)
+    original_branch = original_ref.stdout.strip() if original_ref.returncode == 0 else None
+
     # Auto-merge: switch to target branch in main repo and merge
     _run_git(["checkout", target_branch], cwd=project_dir)
     result = _run_git(
@@ -212,8 +221,10 @@ def merge_worktree(
     )
 
     if result.returncode != 0:
-        # Merge conflict — abort and leave branch for manual resolution
+        # Merge conflict — abort and restore original branch
         _run_git(["merge", "--abort"], cwd=project_dir)
+        if original_branch and original_branch != target_branch:
+            _run_git(["checkout", original_branch], cwd=project_dir)
         logger.warning("Merge conflict for agent/%s, branch preserved", short_id)
         return {
             "merged": False,
@@ -225,6 +236,10 @@ def merge_worktree(
 
     sha_result = _run_git(["rev-parse", "HEAD"], cwd=project_dir)
     sha = sha_result.stdout.strip() if sha_result.returncode == 0 else None
+
+    # Restore original branch if different from target
+    if original_branch and original_branch != target_branch:
+        _run_git(["checkout", original_branch], cwd=project_dir)
 
     logger.info("Merged agent/%s into %s: %s", short_id, target_branch, sha[:8] if sha else "???")
     return {
