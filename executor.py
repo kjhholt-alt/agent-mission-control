@@ -690,9 +690,16 @@ def execute_task(task):
 
     try:
         start = time.time()
+        # Hide cmd.exe windows on Windows so they don't spam the desktop
+        startupinfo = None
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
         result = subprocess.run(
             shell_cmd, cwd=cwd, capture_output=True, text=True,
             timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
+            startupinfo=startupinfo,
         )
         duration = round(time.time() - start, 1)
 
