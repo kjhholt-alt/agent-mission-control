@@ -6,7 +6,7 @@ import type { TERMINAL_THEMES } from "./terminal-constants";
 interface TerminalStatusBarProps {
   workers: Worker[];
   buildings: Building[];
-  budget: { daily_budget: number; spent_today: number };
+  budget: { apiSpent: number; apiLimit: number; minutesUsed: number; minutesLimit: number; tasksCompleted: number; tasksFailed: number } | null;
   isConnected: boolean;
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
   themeName: string;
@@ -33,7 +33,11 @@ export function TerminalStatusBar({
 
   const activeWorkers = workers.filter(w => w.status === "working").length;
   const activeBuildings = buildings.filter(b => b.status === "active").length;
-  const spentPct = budget.daily_budget > 0 ? ((budget.spent_today / budget.daily_budget) * 100).toFixed(0) : "0";
+  const apiSpent = budget ? (budget.apiSpent / 100) : 0;
+  const apiLimit = budget ? (budget.apiLimit / 100) : 0;
+  const spentPct = apiLimit > 0 ? ((apiSpent / apiLimit) * 100).toFixed(0) : "0";
+  const tasksCompleted = budget?.tasksCompleted ?? 0;
+  const tasksFailed = budget?.tasksFailed ?? 0;
 
   return (
     <div
@@ -76,9 +80,15 @@ export function TerminalStatusBar({
         <span>
           <span style={{ color: theme.dim }}>SPEND:</span>{" "}
           <span style={{ color: Number(spentPct) > 80 ? "#ff3333" : Number(spentPct) > 50 ? "#ffb000" : "#00ff41" }}>
-            ${budget.spent_today.toFixed(2)}
+            ${apiSpent.toFixed(2)}
           </span>
-          <span style={{ color: theme.dim }}>/${budget.daily_budget.toFixed(0)} ({spentPct}%)</span>
+          <span style={{ color: theme.dim }}>/${apiLimit.toFixed(0)} ({spentPct}%)</span>
+        </span>
+        <span>
+          <span style={{ color: theme.dim }}>TASKS:</span>{" "}
+          <span style={{ color: "#00ff41" }}>{tasksCompleted}</span>
+          <span style={{ color: theme.dim }}>/</span>
+          <span style={{ color: tasksFailed > 0 ? "#ff3333" : theme.dim }}>{tasksFailed}F</span>
         </span>
       </div>
 
