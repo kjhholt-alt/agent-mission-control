@@ -3,6 +3,8 @@ CC Light worker: uses Claude Code CLI for strategic thinking tasks (eval, plan, 
 
 Free on Max plan, uses Opus instead of Haiku API — much smarter for strategic work.
 Shorter timeout than heavy worker since these are thinking tasks, not code-writing tasks.
+
+Supports worktree isolation for tasks that touch code (when use_worktree=True).
 """
 
 import json
@@ -14,6 +16,7 @@ from typing import Any
 
 from swarm.config import BLOCKED_PROJECTS, CLAUDE_CLI_PATH, PROJECTS
 from swarm.context import gather_project_context
+from swarm.worktree import create_worktree, commit_worktree_changes, cleanup_worktree
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.cc_light")
@@ -50,9 +53,22 @@ class CCLightWorker(BaseWorker):
         # Resolve project and inject context
         project_key = task.get("project", "")
         project_config = PROJECTS.get(project_key, {})
-        cwd = project_config.get("dir", None)
+        project_dir = project_config.get("dir", None)
+        cwd = project_dir
         if not cwd:
             cwd = input_data.get("cwd", "C:/Users/Kruz/Desktop/Projects")
+
+        # Worktree isolation for code-touching tasks
+        use_worktree = input_data.get("use_worktree", False)
+        worktree_path = None
+
+        if use_worktree and project_dir:
+            worktree_path = create_worktree(project_dir, task["id"])
+            if worktree_path:
+                cwd = worktree_path
+                logger.info("Using worktree at %s for cc_light task %s", worktree_path, task["id"][:8])
+            else:
+                logger.warning("Worktree creation failed, falling back to project dir")
 
         # Add project context if available (skip blocked projects)
         if project_key and project_key in PROJECTS and project_key not in BLOCKED_PROJECTS:
@@ -144,7 +160,7 @@ class CCLightWorker(BaseWorker):
                 duration_minutes,
             )
 
-            return {
+            output_data = {
                 "response": stdout,
                 "stdout": stdout,
                 "stderr": stderr,
@@ -154,6 +170,23 @@ class CCLightWorker(BaseWorker):
                 "cwd": cwd,
                 "tier": "cc_light",
             }
+
+            # Worktree: commit any changes
+            if worktree_path:
+                commit_sha = commit_worktree_changes(
+                    worktree_path,
+                    task["id"],
+                    task.get("title", "cc_light task"),
+                    worker_name="cc_light",
+                )
+                output_data["worktree"] = {
+                    "path": worktree_path,
+                    "branch": f"agent/{task['id'][:8]}",
+                    "commit_sha": commit_sha,
+                    "isolated": True,
+                }
+
+            return output_data
 
         except subprocess.TimeoutExpired:
             duration_seconds = round(time.time() - start_time, 1)
@@ -168,3 +201,9 @@ class CCLightWorker(BaseWorker):
                     os.remove(prompt_file)
             except Exception:
                 pass
+            # Clean up worktree (branch preserved for review)
+            if worktree_path and project_dir:
+                try:
+                    cleanup_worktree(project_dir, worktree_path, task["id"], delete_branch=False)
+                except Exception as e:
+                    logger.warning("Worktree cleanup failed: %s", e)

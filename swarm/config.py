@@ -101,6 +101,23 @@ AUTO_MERGE_ENABLED = True
 AUTO_MERGE_MAX_FILES_CHANGED = 10
 AUTO_MERGE_MIN_QUALITY_SCORE = 7
 
+# ── Model routing (migrated from executor v3) ──────────────────────────
+# Maps cost_tier → Claude model flag for API-based workers
+MODEL_ROUTING = {
+    "haiku": "claude-haiku-4-5",
+    "sonnet": "claude-sonnet-4-5",
+    "light": "claude-haiku-4-5",
+    # cc_light and heavy use Claude Code CLI (default Opus on Max plan)
+}
+
+# Task types routed to Haiku (trivial, fast operations)
+HAIKU_TASK_TYPES = {"eval", "check", "health", "status", "ping"}
+# Task types routed to Sonnet minimum (real work)
+SONNET_TASK_TYPES = {
+    "build", "scout", "builder", "implement", "fix", "refactor",
+    "review", "analyze", "plan", "research", "audit", "inspector", "miner",
+}
+
 # ── Claude Code CLI path ────────────────────────────────────────────────
 CLAUDE_CLI_PATH = os.environ.get("CLAUDE_CLI_PATH", "C:/nvm4w/nodejs/claude.cmd")
 

@@ -11,13 +11,25 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 
 ## Architecture
 - **Frontend**: 17 pages at `src/app/*/page.tsx`
-- **API Routes**: 25+ endpoints at `src/app/api/*/route.ts`
-- **Supabase**: 11 tables on `ytvtaorgityczrdhhzqv`
-- **Executor v3**: `executor.py` — parallel task execution (ThreadPoolExecutor), agent handoffs, shared memory, model routing, specialization tracking
-- **Scheduler v2**: `scheduler.py` — cron + workflow pipelines + predictive scheduling
-- **Context Library**: `contexts/` — auto-loaded markdown files (finance terminology, report templates, email style)
+- **API Routes**: 26+ endpoints at `src/app/api/*/route.ts`
+- **Supabase**: 14 tables on `ytvtaorgityczrdhhzqv`
+- **Executor v3**: `executor.py` — legacy standalone executor (DEPRECATED: use swarm package)
+- **Swarm Package**: `swarm/` — unified orchestration system:
+  - `orchestrator.py` — daemon: worker scaling, health, budgets, scouts, oracle
+  - `teams.py` — multi-agent team coordination with shared goals
+  - `worktree.py` — git worktree isolation for parallel agent work
+  - `workers/base.py` — base worker with memory, persona, quality gate, specialization tracking, chain_next handoffs
+  - `workers/light_worker.py` — Haiku API worker (fast, cheap tasks)
+  - `workers/cc_light_worker.py` — Claude Code CLI worker with worktree support (strategic tasks)
+  - `workers/heavy_worker.py` — Claude Code CLI worker with worktree + auto-merge (code changes)
+  - `workers/browser_worker.py` — Playwright browser automation
+  - `tasks/task_manager.py` — DAG dependencies, output chaining, smart worker matching
+  - `goal_decomposer.py` — breaks goals into structured task DAGs
+  - `memory.py` — shared context bank across tasks
+  - `config.py` — project registry, model routing, budget limits
+- **Scheduler v2**: `scheduler.py` — cron + workflow pipelines
+- **Context Library**: `contexts/` — auto-loaded markdown files
 - **Desktop**: `src-tauri/` — Tauri v2 with smart loader, daemon watchdog, devtools
-- **Swarm**: `swarm/` — full orchestrator with workers, scouts, oracle, supervisor
 - **Scripts**: `scripts/` — 47+ operational scripts
 
 ## Pages
@@ -52,6 +64,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/tasks` | GET | Public | Task query with filters |
 | `/api/tasks/approve` | POST | API Key | Approve/reject pending tasks |
 | `/api/spawn` | POST | API Key | Create mission |
+| `/api/teams` | GET/POST | API Key | Agent team management (create, list, progress) |
 | `/api/deploy` | GET/POST | API Key | Deploy management |
 | `/api/heartbeat` | POST | Public | Agent heartbeat |
 | `/api/radiant` | GET | Public | Auto-generated quest suggestions |
@@ -84,6 +97,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 - `swarm_budgets` — Daily budget tracking
 - `agent_activity` — Agent heartbeats
 - `agent_specializations` — Per-project/task_type success patterns + best practices
+- `swarm_teams` — Agent team coordination (Realtime enabled)
 - `oracle_decisions` — Decision history
 - `cost_tracking` — API usage costs: tokens, model, cost_usd per task
 - `cost_budget_alerts` — Budget threshold alerts (daily/weekly/monthly)
@@ -93,7 +107,8 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 npm run dev                          # Start dev server
 npm run build                        # Production build
 python executor.py --loop            # Start executor daemon (1 worker)
-python executor.py --loop --workers 3  # Start with 3 parallel workers
+python executor.py --loop --workers 3  # Start with 3 parallel workers (DEPRECATED)
+python -m swarm.orchestrator             # Start swarm orchestrator daemon (preferred)
 python scheduler.py --loop           # Start scheduler daemon
 python scripts/ops/weekly-retrospective.py  # Generate weekly report
 python scripts/ops/morning-briefing.py      # Generate morning brief

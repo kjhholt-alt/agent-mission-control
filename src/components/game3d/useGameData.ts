@@ -257,6 +257,19 @@ export interface SessionInfo {
   current_tool: string | null;
 }
 
+export interface TeamInfo {
+  id: string;
+  name: string;
+  goal: string;
+  project: string;
+  status: string;
+  tasks_total: number;
+  tasks_completed: number;
+  cost_cents: number;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export interface GameData {
   workers: Worker[];
   buildings: Building[];
@@ -275,6 +288,7 @@ export interface GameData {
   completedTaskIds: Set<string>;
   hookEvents: HookEvent[];
   sessions: SessionInfo[];
+  teams: TeamInfo[];
 }
 
 // ─── HOOK EVENT ROW TYPE ─────────────────────────────────────────────────────
@@ -310,6 +324,7 @@ export function useGameData() {
   const [recentSessions, setRecentSessions] = useState<CompletedSessionRow[]>([]);
   const [hookEvents, setHookEvents] = useState<HookEvent[]>([]);
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
+  const [teams, setTeams] = useState<TeamInfo[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Track previous task statuses for completion detection
@@ -358,6 +373,15 @@ export function useGameData() {
       if (recentSessionsRes.data) setRecentSessions(recentSessionsRes.data);
       if (hookEventsRes.data) setHookEvents(hookEventsRes.data as HookEvent[]);
       if (allSessionsRes.data) setAllSessions(allSessionsRes.data as SessionInfo[]);
+
+      // Fetch active teams
+      const teamsRes = await supabase
+        .from("swarm_teams")
+        .select("*")
+        .in("status", ["planning", "active"])
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (teamsRes.data) setTeams(teamsRes.data as TeamInfo[]);
 
       // Seed event feed from real hook events instead of static demo data
       if (hookEventsRes.data && hookEventsRes.data.length > 0) {
@@ -593,6 +617,21 @@ export function useGameData() {
               : [s, ...prev];
             return updated.slice(0, 20);
           });
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "swarm_teams" }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          const t = payload.new as TeamInfo;
+          setTeams((prev) => [t, ...prev].slice(0, 10));
+          addEvent(`Team "${t.name}" created: ${t.goal.slice(0, 50)}`, "success");
+        } else if (payload.eventType === "UPDATE") {
+          const t = payload.new as TeamInfo;
+          setTeams((prev) => prev.map((p) => p.id === t.id ? t : p));
+          if (t.status === "completed") {
+            addEvent(`Team "${t.name}" completed`, "success");
+          } else if (t.status === "failed") {
+            addEvent(`Team "${t.name}" failed`, "error");
+          }
         }
       })
       .subscribe();
@@ -852,5 +891,6 @@ export function useGameData() {
     completedTaskIds,
     hookEvents,
     sessions: allSessions,
+    teams,
   };
 }
