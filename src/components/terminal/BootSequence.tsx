@@ -47,7 +47,7 @@ export function BootSequence({ theme, onComplete }: BootSequenceProps) {
       className="flex items-center justify-center w-full h-full"
       style={{ backgroundColor: theme.bg }}
     >
-      <div className="font-mono text-[13px] leading-relaxed max-w-lg px-8">
+      <div className="font-mono text-[16px] leading-relaxed max-w-lg px-8">
         {BOOT_LINES.slice(0, visibleLines).map((line, i) => (
           <div key={i} style={{ color: i === 0 ? theme.primary : line.text.includes("OK") ? "#00ff41" : theme.secondary }}>
             {line.text || "\u00A0"}

@@ -50,12 +50,12 @@ export function ProjectQuadrant({
     <div className="terminal-quadrant flex flex-col h-full">
       {/* Quadrant header */}
       <div
-        className="flex items-center gap-2 px-3 py-1 border-b text-[10px] font-bold tracking-[0.15em] uppercase shrink-0"
+        className="flex items-center gap-2 px-3 py-1 border-b text-[13px] font-bold tracking-[0.15em] uppercase shrink-0"
         style={{ borderColor: theme.dim, color: theme.secondary }}
       >
         <span style={{ color: theme.primary }}>■</span>
         {title}
-        <span className="ml-auto flex items-center gap-2 text-[9px]">
+        <span className="ml-auto flex items-center gap-2 text-[12px]">
           {activeFlows.length > 0 && (
             <span style={{ color: theme.dim }}>
               {activeFlows.length} flow{activeFlows.length !== 1 ? "s" : ""}
@@ -92,26 +92,26 @@ export function ProjectQuadrant({
               />
               <div className="flex-1 min-w-0">
                 {/* Building header line */}
-                <div className="flex items-center gap-2 text-[11px] font-mono">
+                <div className="flex items-center gap-2 text-[14px] font-mono">
                   <span style={{ color: statusColor }}>{statusChar}</span>
                   <span style={{ color: theme.primary }} className="font-bold tracking-wider">
                     {building.shortName}
                   </span>
-                  <span style={{ color: theme.dim }} className="text-[9px] truncate">
+                  <span style={{ color: theme.dim }} className="text-[12px] truncate">
                     {building.name}
                   </span>
-                  <span className="ml-auto text-[9px] tabular-nums" style={{ color: theme.dim }}>
+                  <span className="ml-auto text-[12px] tabular-nums" style={{ color: theme.dim }}>
                     {building.stats.uptime}
                   </span>
                 </div>
 
                 {/* Description */}
-                <div className="text-[8px] mt-0.5 pl-4 truncate" style={{ color: theme.dim }}>
+                <div className="text-[11px] mt-0.5 pl-4 truncate" style={{ color: theme.dim }}>
                   {building.description}
                 </div>
 
                 {/* Stats line */}
-                <div className="flex items-center gap-3 text-[9px] mt-0.5 pl-4" style={{ color: theme.dim }}>
+                <div className="flex items-center gap-3 text-[12px] mt-0.5 pl-4" style={{ color: theme.dim }}>
                   <span>tests:{building.stats.tests}</span>
                   <span>deploys:{building.stats.deploys}</span>
                 {bWorkers.length > 0 && (
@@ -128,7 +128,7 @@ export function ProjectQuadrant({
                     const icon = WORKER_ICONS[w.type] || "?";
                     const workerColor = WORKER_TYPE_CONFIG[w.type]?.color || theme.primary;
                     return (
-                      <div key={w.id} className="flex items-center gap-1 text-[9px]">
+                      <div key={w.id} className="flex items-center gap-1 text-[12px]">
                         <span style={{ color: workerColor }}>{icon}</span>
                         <span style={{ color: theme.secondary }}>{w.name}</span>
                         {w.status === "working" && (
@@ -148,7 +148,7 @@ export function ProjectQuadrant({
                           </>
                         )}
                         {w.status === "moving" && (
-                          <span style={{ color: theme.dim }} className="text-[8px]">
+                          <span style={{ color: theme.dim }} className="text-[11px]">
                             → {w.task.slice(0, 20)}
                           </span>
                         )}
@@ -167,7 +167,7 @@ export function ProjectQuadrant({
       {relevantEvents.length > 0 && (
         <div className="shrink-0 border-t px-3 py-0.5" style={{ borderColor: theme.dim }}>
           {relevantEvents.slice(-1).map(e => (
-            <div key={e.id} className="text-[9px] truncate" style={{ color: theme.dim }}>
+            <div key={e.id} className="text-[12px] truncate" style={{ color: theme.dim }}>
               <span className="tabular-nums">{e.time}</span>{" "}
               <span style={{ color: e.type === "error" ? "#ff3333" : e.type === "success" ? "#00ff41" : theme.dim }}>
                 {e.message}

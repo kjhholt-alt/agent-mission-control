@@ -35,7 +35,7 @@ export function DataFeed({ events, theme, maxLines = 50, title = "EVENT LOG" }: 
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-3 py-1.5 border-b text-[10px] font-bold tracking-widest uppercase"
+        className="flex items-center gap-2 px-3 py-1.5 border-b text-[13px] font-bold tracking-widest uppercase"
         style={{ borderColor: theme.dim, color: theme.dim }}
       >
         <span style={{ color: theme.primary }}>{"\u25B8"}</span>
@@ -48,7 +48,7 @@ export function DataFeed({ events, theme, maxLines = 50, title = "EVENT LOG" }: 
       {/* Scrolling log */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 py-1 font-mono text-[11px] leading-relaxed"
+        className="flex-1 overflow-y-auto px-3 py-1 font-mono text-[13px] leading-relaxed"
         style={{ scrollbarWidth: "thin", scrollbarColor: `${theme.dim} transparent` }}
       >
         {visibleEvents.map((event) => {

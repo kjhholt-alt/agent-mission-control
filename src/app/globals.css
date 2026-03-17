@@ -551,7 +551,7 @@
 /* Terminal grid layout — header + 4 quadrants + event feed + command + status bar */
 .terminal-grid {
   display: grid;
-  grid-template-rows: 32px 1fr 0.6fr 0.4fr 28px;
+  grid-template-rows: 38px 1fr 0.6fr 0.4fr 32px;
   grid-template-columns: 1fr 1fr minmax(240px, 0.6fr);
   grid-template-areas:
     "header header header"
@@ -610,7 +610,7 @@
 /* Responsive — stack on mobile */
 @media (max-width: 1023px) {
   .terminal-grid {
-    grid-template-rows: 32px repeat(4, minmax(180px, 1fr)) minmax(150px, 0.4fr) minmax(120px, 0.3fr) 28px;
+    grid-template-rows: 38px repeat(4, minmax(200px, 1fr)) minmax(160px, 0.4fr) minmax(140px, 0.3fr) 32px;
     grid-template-columns: 1fr;
     grid-template-areas:
       "header"
