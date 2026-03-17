@@ -66,18 +66,29 @@ class BudgetManager:
         return row["api_spent_cents"] < row["daily_api_budget_cents"]
 
     def record_spend(self, cents: float = 0, tokens: int = 0, minutes: float = 0):
-        """Record API spend for today. Minutes param ignored (CC is unlimited)."""
+        """Record API spend for today using atomic increment. Minutes param ignored (CC is unlimited)."""
+        if cents <= 0:
+            return
+
         row = self._get_today()
-        update: dict[str, Any] = {}
-        if cents > 0:
-            new_cents = row["api_spent_cents"] + cents
-            update["api_spent_cents"] = int(round(float(new_cents)))
+        increment = int(round(float(cents)))
 
-        if update:
-            update["updated_at"] = datetime.now(timezone.utc).isoformat()
-            self.sb.table(self.TABLE).update(update).eq("id", row["id"]).execute()
+        # Try atomic increment via RPC first (race-safe)
+        try:
+            self.sb.rpc("increment_budget_spend", {
+                "row_id": row["id"],
+                "cents_to_add": increment,
+            }).execute()
+        except Exception:
+            # Fallback: read-modify-write (minor race under concurrency)
+            fresh = self._get_today()
+            new_cents = fresh["api_spent_cents"] + increment
+            self.sb.table(self.TABLE).update({
+                "api_spent_cents": int(round(float(new_cents))),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", row["id"]).execute()
 
-        # Check thresholds
+        # Check thresholds (single read after write)
         new_row = self._get_today()
         api_pct = (
             new_row["api_spent_cents"] / new_row["daily_api_budget_cents"] * 100
@@ -94,9 +105,19 @@ class BudgetManager:
         """Increment tasks_completed or tasks_failed for today."""
         row = self._get_today()
         field = "tasks_completed" if success else "tasks_failed"
-        self.sb.table(self.TABLE).update(
-            {field: row[field] + 1, "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", row["id"]).execute()
+
+        # Try atomic increment via RPC first
+        try:
+            self.sb.rpc("increment_budget_field", {
+                "row_id": row["id"],
+                "field_name": field,
+            }).execute()
+        except Exception:
+            # Fallback: read-modify-write
+            fresh = self._get_today()
+            self.sb.table(self.TABLE).update(
+                {field: fresh[field] + 1, "updated_at": datetime.now(timezone.utc).isoformat()}
+            ).eq("id", row["id"]).execute()
 
     def get_status(self) -> dict[str, Any]:
         """Return current budget status. Only real API spend — no fake CC metrics."""

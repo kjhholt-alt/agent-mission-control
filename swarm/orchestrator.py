@@ -82,6 +82,8 @@ class SwarmOrchestrator:
         self.worker_processes: dict[str, multiprocessing.Process] = {}
         self._last_cleanup: float = 0
         self._cleanup_interval: float = 6 * 60 * 60  # 6 hours
+        self._last_unblock: float = 0
+        self._unblock_interval: float = 30  # seconds (complete_task handles the fast path)
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -99,7 +101,10 @@ class SwarmOrchestrator:
         while self.alive:
             try:
                 self.check_recurring_tasks()
-                self.task_manager.unblock_ready_tasks()
+                # Throttled: complete_task already unblocks on the fast path
+                if time.time() - self._last_unblock > self._unblock_interval:
+                    self.task_manager.unblock_ready_tasks()
+                    self._last_unblock = time.time()
                 self.scale_workers()
                 self.check_worker_health()
                 self.recover_stuck_tasks()
@@ -400,6 +405,7 @@ class SwarmOrchestrator:
 
     def cleanup_stale_data(self):
         """Remove failed tasks older than 24h and dead workers older than 12h."""
+        self._last_cleanup = time.time()  # Set early to prevent retry storms on error
         now = datetime.now(timezone.utc)
 
         # Delete failed tasks older than 24 hours
@@ -443,7 +449,6 @@ class SwarmOrchestrator:
         except Exception as e:
             logger.debug("Failed to clean up old task logs: %s", e)
 
-        self._last_cleanup = time.time()
         logger.info("Periodic cleanup complete")
 
     # ── Shutdown ──────────────────────────────────────────────────────────

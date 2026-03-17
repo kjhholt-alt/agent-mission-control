@@ -495,6 +495,7 @@ class Supervisor:
                 self.sb.table(self.WORKERS_TABLE)
                 .delete()
                 .eq("status", "dead")
+                .neq("tier", "system")  # Preserve supervisor row
                 .lt("died_at", cutoff)
                 .execute()
             )

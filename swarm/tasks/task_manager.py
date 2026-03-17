@@ -673,6 +673,7 @@ class TaskManager:
 
         # Build parent output context
         parent_sections: list[str] = []
+        parent_titles: list[str] = []  # Track titles for fan-in header
         for dep in completed_deps:
             title = dep.get("title", "Unknown task")
             output = dep.get("output_data", {})
@@ -707,16 +708,16 @@ class TaskManager:
             parent_sections.append(
                 f'Task: "{title}"\nOutput: {output_text}'
             )
+            parent_titles.append(title)
 
         if not parent_sections:
             return input_data
 
         # Fan-in summary header for many parents
         if len(parent_sections) > 3:
-            titles = [dep.get("title", "?") for dep in completed_deps if dep.get("output_data")]
             chained_context = (
                 f"This task depends on {len(parent_sections)} completed upstream tasks: "
-                f"{', '.join(t[:40] for t in titles)}.\n"
+                f"{', '.join(t[:40] for t in parent_titles)}.\n"
                 f"Key outputs from each:\n---\n"
             )
         else:
