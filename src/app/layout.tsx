@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/MobileNav";
 import { KeyboardShortcutsProvider } from "@/components/keyboard-shortcuts-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -112,15 +113,17 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ToastProvider>
-            <TooltipProvider>
-              <KeyboardShortcutsProvider>
-                <GlobalNav />
-                <AlertBanner />
-                <div className="pt-10">{children}</div>
-              </KeyboardShortcutsProvider>
-            </TooltipProvider>
-          </ToastProvider>
+          <ErrorBoundary>
+            <ToastProvider>
+              <TooltipProvider>
+                <KeyboardShortcutsProvider>
+                  <GlobalNav />
+                  <AlertBanner />
+                  <div className="pt-10">{children}</div>
+                </KeyboardShortcutsProvider>
+              </TooltipProvider>
+            </ToastProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>

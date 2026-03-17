@@ -35,6 +35,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/templates` | Mission template library (6 default + 5 Deere + 8 personal) |
 | `/workflows` | Multi-step pipeline builder (5 presets: standup, ship, close, variance, review) |
 | `/fusion` | Cross-project intelligence + git activity + export |
+| `/costs` | Cost tracking dashboard: daily spend chart, project breakdown, budget alerts |
 | `/achievements` | Trophy gallery (16 achievements) |
 | `/setup` | Onboarding wizard |
 | `/settings` | API connection manager |
@@ -68,6 +69,8 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/export` | GET | Public | CSV/JSON report export |
 | `/api/schedules` | GET/POST/DELETE | Public | Schedule management |
 | `/api/building-activity` | GET | Public | Building stats |
+| `/api/costs` | GET/POST | Public | Cost tracking: log usage, query costs |
+| `/api/costs/alerts` | GET/POST/DELETE | Public | Budget alert management |
 
 ## Supabase Tables
 - `nexus_sessions` — Claude Code session tracking (Realtime enabled)
@@ -82,6 +85,8 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 - `agent_activity` — Agent heartbeats
 - `agent_specializations` — Per-project/task_type success patterns + best practices
 - `oracle_decisions` — Decision history
+- `cost_tracking` — API usage costs: tokens, model, cost_usd per task
+- `cost_budget_alerts` — Budget threshold alerts (daily/weekly/monthly)
 
 ## Key Commands
 ```bash

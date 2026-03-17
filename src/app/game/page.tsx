@@ -1,9 +1,23 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/lib/use-mobile";
-import { Megaphone } from "lucide-react";
+import {
+  Megaphone,
+  Wifi,
+  WifiOff,
+  Activity,
+  Users,
+  DollarSign,
+  CheckCircle2,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Radio,
+  MapPin,
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Building, Worker, AlertEvent, WorkerType } from "@/components/game3d/types";
 import {
@@ -29,8 +43,16 @@ function formatTime(): string {
   return new Date().toLocaleTimeString("en-US", { hour12: false });
 }
 
+function formatDate(): string {
+  return new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  }).toUpperCase();
+}
+
 function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return "\u2014";
   const diff = Date.now() - new Date(dateStr).getTime();
   if (diff < 60_000) return "now";
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
@@ -69,12 +91,105 @@ const BUILDING_TO_PROJECT: Record<string, string> = {
   "nexus-hq": "nexus",
 };
 
-function StatusIcon({ status }: { status: string }) {
-  if (status === "completed") return <span style={{ color: "#22c55e" }}>&#10003;</span>;
-  if (status === "failed") return <span style={{ color: "#ef4444" }}>&#10007;</span>;
-  if (status === "running" || status === "in_progress") return <span style={{ color: "#eab308" }}>&#10227;</span>;
-  return <span style={{ color: "#6b7280" }}>&#8226;</span>;
+// Minimap isometric projection
+const TILE_W = 80;
+const TILE_H = 40;
+function gridToIso(gx: number, gy: number): { x: number; y: number } {
+  return {
+    x: (gx - gy) * (TILE_W / 2),
+    y: (gx + gy) * (TILE_H / 2),
+  };
 }
+
+// ─── SHARED: Corner Brackets ────────────────────────────────────────────────
+
+function CornerBrackets({ color, size = 6 }: { color: string; size?: number }) {
+  const style = { position: "absolute" as const };
+  const b = `1px solid ${color}`;
+  return (
+    <>
+      <div style={{ ...style, top: 0, left: 0, width: size, height: size, borderLeft: b, borderTop: b }} />
+      <div style={{ ...style, top: 0, right: 0, width: size, height: size, borderRight: b, borderTop: b }} />
+      <div style={{ ...style, bottom: 0, left: 0, width: size, height: size, borderLeft: b, borderBottom: b }} />
+      <div style={{ ...style, bottom: 0, right: 0, width: size, height: size, borderRight: b, borderBottom: b }} />
+    </>
+  );
+}
+
+// ─── SHARED: Status LED ─────────────────────────────────────────────────────
+
+function StatusLED({ color, pulse = false, size = 6 }: { color: string; pulse?: boolean; size?: number }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: color,
+        boxShadow: `0 0 ${size}px ${color}, 0 0 ${size * 2}px ${color}44`,
+        animation: pulse ? "ledPulse 2s ease-in-out infinite" : undefined,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+// ─── SHARED: Panel Shell ────────────────────────────────────────────────────
+
+function HUDPanel({
+  children,
+  className = "",
+  style = {},
+  accentColor = "rgba(6, 182, 212, 0.4)",
+  interactive = true,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  accentColor?: string;
+  interactive?: boolean;
+}) {
+  return (
+    <div
+      className={`relative ${className}`}
+      style={{
+        background: "rgba(12, 16, 24, 0.85)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        border: "1px solid #1a2235",
+        fontFamily: "'JetBrains Mono', monospace",
+        pointerEvents: interactive ? "auto" : "none",
+        ...style,
+      }}
+    >
+      {/* Top accent line */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1,
+          background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
+        }}
+      />
+      <CornerBrackets color="rgba(6, 182, 212, 0.25)" size={5} />
+      {children}
+    </div>
+  );
+}
+
+// ─── StatusIcon ─────────────────────────────────────────────────────────────
+
+function StatusIcon({ status }: { status: string }) {
+  if (status === "completed") return <span style={{ color: "#10b981" }}>{"\u2713"}</span>;
+  if (status === "failed") return <span style={{ color: "#ef4444" }}>{"\u2717"}</span>;
+  if (status === "running" || status === "in_progress") return <span style={{ color: "#e8a019" }}>{"\u27F3"}</span>;
+  return <span style={{ color: "#6b7280" }}>{"\u2022"}</span>;
+}
+
+// ─── ActivityFeed ───────────────────────────────────────────────────────────
 
 function ActivityFeed({
   tasks,
@@ -89,60 +204,59 @@ function ActivityFeed({
 }) {
   return (
     <div
-      className="px-4 pb-3"
+      className="px-3 pb-2"
       style={{ borderTop: `1px solid ${accentColor}15` }}
     >
       <div
-        className="text-[8px] uppercase tracking-[0.2em] font-bold pt-3 pb-2"
-        style={{ color: `${accentColor}99` }}
+        className="text-[7px] uppercase tracking-[0.25em] font-bold pt-2 pb-1.5"
+        style={{ color: `${accentColor}88` }}
       >
         RECENT ACTIVITY
       </div>
 
       {loading ? (
-        <div className="text-[10px] py-3 text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+        <div className="text-[9px] py-2 text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
           Loading...
         </div>
       ) : tasks.length === 0 ? (
-        <div className="text-[10px] py-3 text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
+        <div className="text-[9px] py-2 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
           No activity recorded
         </div>
       ) : (
-        <div className="space-y-0.5">
+        <div className="space-y-px">
           {tasks.map((task) => (
             <div
               key={task.id}
-              className="flex items-center gap-2 py-1 px-2"
+              className="flex items-center gap-1.5 py-0.5 px-1.5"
               style={{
-                background: "rgba(255,255,255,0.02)",
-                borderRadius: 3,
-                fontFamily: "monospace",
+                background: "rgba(255,255,255,0.015)",
+                borderRadius: 2,
               }}
             >
-              <span className="text-xs flex-shrink-0 w-4 text-center">
+              <span className="text-[9px] flex-shrink-0 w-3 text-center">
                 <StatusIcon status={task.status} />
               </span>
               <span
-                className="text-[10px] flex-1 truncate"
-                style={{ color: "rgba(255,255,255,0.7)" }}
+                className="text-[9px] flex-1 truncate"
+                style={{ color: "rgba(255,255,255,0.6)" }}
                 title={task.title}
               >
-                {task.title.length > 40 ? task.title.slice(0, 40) + "..." : task.title}
+                {task.title.length > 35 ? task.title.slice(0, 35) + "..." : task.title}
               </span>
               <span
-                className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 flex-shrink-0"
+                className="text-[7px] uppercase tracking-wider px-1 py-px flex-shrink-0"
                 style={{
                   color: accentColor,
-                  background: `${accentColor}12`,
-                  border: `1px solid ${accentColor}25`,
+                  background: `${accentColor}10`,
+                  border: `1px solid ${accentColor}20`,
                   borderRadius: 2,
                 }}
               >
                 {task.task_type}
               </span>
               <span
-                className="text-[9px] tabular-nums flex-shrink-0 w-12 text-right"
-                style={{ color: "rgba(255,255,255,0.35)" }}
+                className="text-[8px] tabular-nums flex-shrink-0 w-10 text-right"
+                style={{ color: "rgba(255,255,255,0.3)" }}
               >
                 {timeAgo(task.updated_at)}
               </span>
@@ -153,18 +267,18 @@ function ActivityFeed({
 
       {stats && !loading && (
         <div
-          className="flex items-center gap-3 mt-2 pt-2"
+          className="flex items-center gap-2 mt-1.5 pt-1.5"
           style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
         >
-          <span className="text-[9px] tabular-nums" style={{ color: "#22c55e" }}>
-            {stats.completed} completed
+          <span className="text-[8px] tabular-nums" style={{ color: "#10b981" }}>
+            {stats.completed} ok
           </span>
-          <span className="text-[9px] tabular-nums" style={{ color: "#ef4444" }}>
-            {stats.failed} failed
+          <span className="text-[8px] tabular-nums" style={{ color: "#ef4444" }}>
+            {stats.failed} fail
           </span>
           {stats.lastActivity && (
-            <span className="text-[9px] ml-auto" style={{ color: "rgba(255,255,255,0.3)" }}>
-              Last: {timeAgo(stats.lastActivity)}
+            <span className="text-[8px] ml-auto" style={{ color: "rgba(255,255,255,0.25)" }}>
+              {timeAgo(stats.lastActivity)}
             </span>
           )}
         </div>
@@ -173,319 +287,104 @@ function ActivityFeed({
   );
 }
 
-// Minimap still uses isometric projection for the 2D overlay
-const TILE_W = 80;
-const TILE_H = 40;
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 1: TOP RIBBON
+// ═══════════════════════════════════════════════════════════════════════════
 
-function gridToIso(gx: number, gy: number): { x: number; y: number } {
-  return {
-    x: (gx - gy) * (TILE_W / 2),
-    y: (gx + gy) * (TILE_H / 2),
-  };
-}
-
-// ─── BACKGROUND PARTICLES ───────────────────────────────────────────────────
-
-function BackgroundParticles({ count = 60 }: { count?: number }) {
-  const particles = useMemo(
-    () =>
-      Array.from({ length: count }, (_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        size: Math.random() * 2 + 1,
-        opacity: Math.random() * 0.15 + 0.05,
-        duration: Math.random() * 8 + 6,
-        delay: Math.random() * 5,
-        color:
-          Math.random() > 0.7
-            ? "rgba(6, 182, 212, 0.5)"
-            : Math.random() > 0.5
-            ? "rgba(232, 160, 25, 0.4)"
-            : "rgba(139, 92, 246, 0.3)",
-      })),
-    [count]
-  );
-
-  return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-      {particles.map((p) => (
-        <motion.div
-          key={p.id}
-          className="absolute rounded-full"
-          style={{
-            width: p.size,
-            height: p.size,
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            background: `${p.color}`,
-            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-            opacity: p.opacity,
-          }}
-          animate={{
-            y: [0, -30, 0],
-            x: [0, Math.random() * 20 - 10, 0],
-            opacity: [p.opacity, p.opacity * 2, p.opacity],
-          }}
-          transition={{
-            duration: p.duration,
-            repeat: Infinity,
-            delay: p.delay,
-            ease: "easeInOut",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── MINIMAP with fog of war ─────────────────────────────────────────────────
-
-function Minimap({
-  buildings,
-  workers,
-  hidden,
+function TopRibbon({
+  time,
+  date,
+  workerCount,
+  isDemo,
+  isConnected,
 }: {
-  buildings: Building[];
-  workers: Worker[];
-  hidden?: boolean;
+  time: string;
+  date: string;
+  workerCount: number;
+  isDemo: boolean;
+  isConnected: boolean;
 }) {
-  if (hidden) return null;
   return (
     <div
-      className="absolute bottom-4 left-4 z-30 overflow-hidden"
+      className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4"
       style={{
-        width: 200,
-        height: 140,
-        background: "rgba(5, 5, 8, 0.9)",
-        border: "2px solid rgba(6, 182, 212, 0.3)",
-        borderRadius: 4,
-        boxShadow: "0 0 15px rgba(6, 182, 212, 0.1), inset 0 0 30px rgba(0,0,0,0.5)",
+        height: 32,
+        background: "rgba(12, 16, 24, 0.9)",
+        backdropFilter: "blur(12px)",
+        borderBottom: "1px solid #1a2235",
+        fontFamily: "'JetBrains Mono', monospace",
+        pointerEvents: "auto",
       }}
     >
-      <div
-        style={{
-          height: 2,
-          background: "linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent)",
-        }}
-      />
-      <div
-        className="absolute top-1 left-2 text-[7px] uppercase tracking-[0.2em] font-bold"
-        style={{ color: "rgba(6, 182, 212, 0.6)" }}
-      >
-        TACTICAL MAP
-      </div>
-      <svg viewBox="-120 -20 600 340" width={200} height={140}>
-        {/* Grid dots */}
-        {Array.from({ length: 14 }, (_, x) =>
-          Array.from({ length: 14 }, (_, y) => {
-            const pos = gridToIso(x, y);
-            return (
-              <circle
-                key={`${x}-${y}`}
-                cx={pos.x}
-                cy={pos.y}
-                r={0.5}
-                fill="rgba(6, 182, 212, 0.08)"
-              />
-            );
-          })
-        )}
-
-        {/* Building dots */}
-        {buildings.map((b) => {
-          const pos = gridToIso(b.gridX, b.gridY);
-          return (
-            <g key={b.id}>
-              <rect
-                x={pos.x - 3 * b.size}
-                y={pos.y - 2 * b.size}
-                width={6 * b.size}
-                height={4 * b.size}
-                fill={b.color}
-                opacity={b.status === "active" ? 0.9 : 0.3}
-                rx={1}
-              />
-              {b.status === "active" && (
-                <rect
-                  x={pos.x - 4 * b.size}
-                  y={pos.y - 3 * b.size}
-                  width={8 * b.size}
-                  height={6 * b.size}
-                  fill={b.color}
-                  opacity={0.15}
-                  rx={2}
-                >
-                  <animate attributeName="opacity" values="0.1;0.25;0.1" dur="2s" repeatCount="indefinite" />
-                </rect>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Worker dots */}
-        {workers.map((w) => {
-          const cur = buildings.find((b) => b.id === w.currentBuildingId);
-          const tgt = buildings.find((b) => b.id === w.targetBuildingId);
-          if (!cur || !tgt) return null;
-          const pp1 = gridToIso(cur.gridX, cur.gridY);
-          const pp2 = gridToIso(tgt.gridX, tgt.gridY);
-          const tt = w.progress / 100;
-          return (
-            <circle
-              key={w.id}
-              cx={pp1.x + (pp2.x - pp1.x) * tt}
-              cy={pp1.y + (pp2.y - pp1.y) * tt}
-              r={2}
-              fill={WORKER_TYPE_CONFIG[w.type].color}
-            >
-              <animate
-                attributeName="opacity"
-                values="0.5;1;0.5"
-                dur="1s"
-                repeatCount="indefinite"
-              />
-            </circle>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
-// ─── ALERT FEED ──────────────────────────────────────────────────────────────
-
-function AlertFeed({ events, isMobile }: { events: AlertEvent[]; isMobile?: boolean }) {
-  const [collapsed, setCollapsed] = useState(isMobile ? true : false);
-  const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
-
-  const typeColors: Record<string, string> = {
-    success: "#22c55e",
-    info: "#06b6d4",
-    warning: "#f59e0b",
-    error: "#ef4444",
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setSwipeStartY(e.touches[0].clientY);
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (swipeStartY === null) return;
-    const dy = e.changedTouches[0].clientY - swipeStartY;
-    if (dy > 50) setCollapsed(true);
-    if (dy < -50) setCollapsed(false);
-    setSwipeStartY(null);
-  };
-
-  return (
-    <motion.div
-      className={`absolute z-30 overflow-hidden ${
-        isMobile ? "bottom-0 left-0 right-0" : "bottom-4 right-4"
-      }`}
-      style={{
-        width: isMobile ? "100%" : 370,
-        maxHeight: isMobile ? (collapsed ? 36 : 220) : 210,
-        background: "rgba(5, 5, 8, 0.95)",
-        border: "2px solid rgba(6, 182, 212, 0.2)",
-        borderRadius: isMobile ? "12px 12px 0 0" : 4,
-        boxShadow: "0 0 15px rgba(6, 182, 212, 0.05), inset 0 0 30px rgba(0,0,0,0.5)",
-        transition: "max-height 0.3s ease",
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      {isMobile && (
-        <div
-          className="flex justify-center py-1 cursor-pointer"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <div className="w-8 h-1 rounded-full bg-zinc-600" />
+      {/* Left cluster */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <StatusLED color={isConnected ? "#10b981" : "#ef4444"} pulse={isConnected} size={5} />
+          <span
+            className="text-[10px] font-bold uppercase tracking-[0.3em]"
+            style={{ color: "#e8a019", textShadow: "0 0 12px rgba(232, 160, 25, 0.3)" }}
+          >
+            NEXUS FACTORY
+          </span>
         </div>
-      )}
-      <div
-        style={{
-          height: 2,
-          background: "linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.4), transparent)",
-        }}
-      />
-      <div
-        className="flex items-center justify-between px-3 py-1.5"
-        style={{ borderBottom: "1px solid rgba(6, 182, 212, 0.08)" }}
-      >
-        <span
-          className="text-[8px] uppercase tracking-[0.2em] font-bold"
-          style={{ color: "rgba(6, 182, 212, 0.6)" }}
-        >
-          ALERT FEED
-        </span>
+        <div style={{ width: 1, height: 14, background: "#1a2235" }} />
         <div className="flex items-center gap-1">
-          <div
-            className="w-1.5 h-1.5 rounded-full"
-            style={{
-              background: "#22c55e",
-              boxShadow: "0 0 4px rgba(34, 197, 94, 0.6)",
-            }}
-          />
-          <span className="text-[8px]" style={{ color: "rgba(255,255,255,0.3)" }}>
-            LIVE
+          {isConnected ? <Wifi size={9} style={{ color: "#10b981" }} /> : <WifiOff size={9} style={{ color: "#ef4444" }} />}
+          <span className="text-[8px] uppercase tracking-wider" style={{ color: isConnected ? "#10b981" : "#ef4444" }}>
+            {isConnected ? "CONNECTED" : "OFFLINE"}
           </span>
         </div>
       </div>
-      <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 170 : 160 }}>
-        <AnimatePresence mode="popLayout">
-          {events.slice(0, isMobile ? 5 : 8).map((event) => (
-            <motion.div
-              key={event.id}
-              initial={{ opacity: 0, x: 20, height: 0 }}
-              animate={{ opacity: 1, x: 0, height: "auto" }}
-              exit={{ opacity: 0, x: -20, height: 0 }}
-              className="flex items-start gap-2 px-3 py-1.5"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}
-            >
-              <div
-                className="w-1 h-1 rounded-full mt-1.5 flex-shrink-0"
-                style={{
-                  background: typeColors[event.type],
-                  boxShadow: `0 0 4px ${typeColors[event.type]}`,
-                }}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-[8px] tabular-nums"
-                    style={{ color: "rgba(255,255,255,0.25)" }}
-                  >
-                    {event.time}
-                  </span>
-                </div>
-                <p
-                  className="text-[9px] leading-tight truncate"
-                  style={{ color: "rgba(255,255,255,0.55)" }}
-                >
-                  {event.message}
-                </p>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+
+      {/* Center: clock */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] tabular-nums font-bold" style={{ color: "rgba(6, 182, 212, 0.9)", textShadow: "0 0 8px rgba(6, 182, 212, 0.3)" }}>
+          {time}
+        </span>
+        <span className="text-[8px] tabular-nums" style={{ color: "rgba(255,255,255,0.25)" }}>
+          {date}
+        </span>
       </div>
-    </motion.div>
+
+      {/* Right cluster */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <Users size={9} style={{ color: "rgba(255,255,255,0.4)" }} />
+          <span className="text-[9px] tabular-nums font-bold" style={{ color: "#06b6d4" }}>
+            {workerCount}
+          </span>
+          <span className="text-[7px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
+            WORKERS
+          </span>
+        </div>
+        <div style={{ width: 1, height: 14, background: "#1a2235" }} />
+        <div
+          className="px-1.5 py-px text-[7px] uppercase tracking-[0.2em] font-bold"
+          style={{
+            color: isDemo ? "#e8a019" : "#10b981",
+            background: isDemo ? "rgba(232, 160, 25, 0.1)" : "rgba(16, 185, 129, 0.1)",
+            border: `1px solid ${isDemo ? "rgba(232, 160, 25, 0.3)" : "rgba(16, 185, 129, 0.3)"}`,
+            borderRadius: 2,
+          }}
+        >
+          {isDemo ? "DEMO" : "LIVE"}
+        </div>
+      </div>
+    </div>
   );
 }
 
-// ─── BUILDING PANEL (StarCraft info panel style) ─────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 2: LEFT SIDEBAR (Selected building details)
+// ═══════════════════════════════════════════════════════════════════════════
 
-function BuildingPanel({
+function LeftSidebar({
   building,
   onClose,
-  isMobile,
 }: {
   building: Building;
   onClose: () => void;
-  isMobile?: boolean;
 }) {
-  const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
   const [recentTasks, setRecentTasks] = useState<ActivityTask[]>([]);
   const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(true);
@@ -508,177 +407,123 @@ function BuildingPanel({
     fetchActivity();
   }, [building.id]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setSwipeStartY(e.touches[0].clientY);
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (swipeStartY === null) return;
-    if (e.changedTouches[0].clientY - swipeStartY > 80) onClose();
-    setSwipeStartY(null);
-  };
+  const statusColor =
+    building.status === "active" ? "#10b981"
+    : building.status === "warning" ? "#e8a019"
+    : building.status === "error" ? "#ef4444"
+    : "#6b7280";
+
+  const statusLabel =
+    building.status === "active" ? "OPERATIONAL"
+    : building.status === "warning" ? "DEGRADED"
+    : building.status === "error" ? "CRITICAL"
+    : "STANDBY";
 
   return (
     <motion.div
-      initial={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
-      animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
-      exit={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
-      transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className={`absolute z-40 overflow-hidden ${
-        isMobile
-          ? "bottom-0 left-0 right-0"
-          : "top-16 right-4"
-      }`}
+      initial={{ x: -280, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: -280, opacity: 0 }}
+      transition={{ type: "spring", damping: 28, stiffness: 260 }}
+      className="absolute left-0 z-30 overflow-y-auto overflow-x-hidden"
       style={{
-        width: isMobile ? "100%" : 340,
-        maxHeight: isMobile ? "70vh" : undefined,
-        borderRadius: isMobile ? "16px 16px 0 0" : 4,
-        background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
-        border: `2px solid ${building.color}44`,
-        boxShadow: `0 0 30px ${building.glowColor}, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
+        top: 32,
+        bottom: 36,
+        width: 280,
+        pointerEvents: "auto",
       }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
     >
-      {isMobile && (
-        <div className="flex justify-center py-2">
-          <div className="w-10 h-1 rounded-full bg-zinc-600" />
-        </div>
-      )}
-      <div
-        style={{
-          height: 3,
-          background: `linear-gradient(90deg, transparent, ${building.color}, transparent)`,
-          opacity: 0.6,
-        }}
-      />
-      <div className="absolute top-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${building.color}66`, borderTop: `2px solid ${building.color}66` }} />
-      <div className="absolute top-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${building.color}66`, borderTop: `2px solid ${building.color}66` }} />
-
-      <div
-        className="p-4"
-        style={{ borderBottom: `1px solid ${building.color}22`, background: `linear-gradient(180deg, ${building.color}08, transparent)` }}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{
-                background: building.color,
-                boxShadow: `0 0 8px ${building.glowColor}, 0 0 16px ${building.glowColor}`,
-              }}
-            />
-            <span
-              className="text-sm font-bold uppercase tracking-wider"
-              style={{
-                color: building.color,
-                textShadow: `0 0 10px ${building.glowColor}`,
-              }}
+      <HUDPanel accentColor={building.color} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div className="p-3" style={{ borderBottom: `1px solid ${building.color}22` }}>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <StatusLED color={statusColor} pulse={building.status === "active"} size={6} />
+              <span
+                className="text-[10px] font-bold uppercase tracking-[0.15em]"
+                style={{ color: building.color, textShadow: `0 0 8px ${building.glowColor}` }}
+              >
+                {building.name}
+              </span>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center w-5 h-5 transition-opacity opacity-40 hover:opacity-100"
+              style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, background: "rgba(255,255,255,0.03)" }}
             >
-              {building.name}
+              <X size={10} />
+            </button>
+          </div>
+          <p className="text-[9px] leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+            {building.description}
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <div
+              className="px-1.5 py-px text-[7px] uppercase tracking-[0.15em] font-bold"
+              style={{ color: statusColor, background: `${statusColor}15`, border: `1px solid ${statusColor}30`, borderRadius: 2 }}
+            >
+              {statusLabel}
+            </div>
+            <span className="text-[8px] tabular-nums" style={{ color: "rgba(255,255,255,0.25)" }}>
+              [{building.gridX}, {building.gridY}]
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[9px] uppercase tracking-wider opacity-40 hover:opacity-100 transition-opacity px-2 py-1"
-            style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2 }}
-          >
-            ESC
-          </button>
         </div>
-        <p
-          className="text-[10px] mt-2 leading-relaxed"
-          style={{ color: "rgba(255,255,255,0.5)" }}
-        >
-          {building.description}
-        </p>
-      </div>
 
-      <div className="p-4 grid grid-cols-3 gap-3">
-        {[
-          { label: "Tests", value: building.stats.tests, color: "#22c55e", icon: ">" },
-          { label: "Deploys", value: building.stats.deploys, color: "#3b82f6", icon: "^" },
-          { label: "Uptime", value: building.stats.uptime, color: "#e8a019", icon: "~" },
-        ].map((stat) => (
-          <div key={stat.label} className="text-center p-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 3 }}>
-            <div className="text-[8px] uppercase tracking-wider mb-1" style={{ color: stat.color, opacity: 0.7 }}>
-              {stat.icon} {stat.label}
-            </div>
+        {/* Stats grid */}
+        <div className="grid grid-cols-3 gap-px p-2" style={{ background: "rgba(0,0,0,0.2)" }}>
+          {[
+            { label: "TESTS", value: building.stats.tests, color: "#10b981" },
+            { label: "DEPLOYS", value: building.stats.deploys, color: "#06b6d4" },
+            { label: "UPTIME", value: building.stats.uptime, color: "#e8a019" },
+          ].map((stat) => (
             <div
-              className="text-lg font-bold tabular-nums"
-              style={{
-                color: stat.color,
-                textShadow: `0 0 8px ${stat.color}44`,
-              }}
+              key={stat.label}
+              className="text-center py-1.5 px-1"
+              style={{ background: "rgba(12, 16, 24, 0.6)" }}
             >
-              {stat.value}
+              <div className="text-[7px] uppercase tracking-[0.2em] mb-0.5" style={{ color: `${stat.color}88` }}>
+                {stat.label}
+              </div>
+              <div className="text-sm font-bold tabular-nums" style={{ color: stat.color, textShadow: `0 0 6px ${stat.color}33` }}>
+                {stat.value}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="px-4 pb-4 flex items-center gap-2">
-        <div
-          className="px-3 py-1 text-[9px] uppercase tracking-wider font-bold"
-          style={{
-            background:
-              building.status === "active"
-                ? "rgba(34, 197, 94, 0.15)"
-                : building.status === "warning"
-                ? "rgba(245, 158, 11, 0.15)"
-                : "rgba(107, 114, 128, 0.15)",
-            color:
-              building.status === "active"
-                ? "#22c55e"
-                : building.status === "warning"
-                ? "#f59e0b"
-                : "#6b7280",
-            border: `1px solid ${
-              building.status === "active"
-                ? "rgba(34, 197, 94, 0.3)"
-                : building.status === "warning"
-                ? "rgba(245, 158, 11, 0.3)"
-                : "rgba(107, 114, 128, 0.3)"
-            }`,
-            borderRadius: 2,
-          }}
-        >
-          {building.status}
+          ))}
         </div>
-        <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.3)" }}>
-          Sector [{building.gridX}, {building.gridY}]
-        </span>
-      </div>
 
-      <ActivityFeed
-        tasks={recentTasks}
-        stats={activityStats}
-        loading={loadingActivity}
-        accentColor={building.color}
-      />
+        {/* Activity feed */}
+        <div className="flex-1 overflow-y-auto">
+          <ActivityFeed
+            tasks={recentTasks}
+            stats={activityStats}
+            loading={loadingActivity}
+            accentColor={building.color}
+          />
+        </div>
 
-      <div className="absolute bottom-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${building.color}44`, borderBottom: `2px solid ${building.color}44` }} />
-      <div className="absolute bottom-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${building.color}44`, borderBottom: `2px solid ${building.color}44` }} />
+        <CornerBrackets color={`${building.color}44`} size={6} />
+      </HUDPanel>
     </motion.div>
   );
 }
 
-// ─── WORKER PANEL (Pokemon-style info card) ──────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 2b: LEFT SIDEBAR (Selected worker details)
+// ═══════════════════════════════════════════════════════════════════════════
 
-function WorkerPanel({
+function LeftSidebarWorker({
   worker,
   buildings,
   onClose,
-  isMobile,
 }: {
   worker: Worker;
   buildings: Building[];
   onClose: () => void;
-  isMobile?: boolean;
 }) {
+  const config = WORKER_TYPE_CONFIG[worker.type];
   const current = buildings.find((b) => b.id === worker.currentBuildingId);
   const target = buildings.find((b) => b.id === worker.targetBuildingId);
-  const config = WORKER_TYPE_CONFIG[worker.type];
-  const [swipeStartY, setSwipeStartY] = useState<number | null>(null);
   const [recentTasks, setRecentTasks] = useState<ActivityTask[]>([]);
   const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(true);
@@ -701,456 +546,572 @@ function WorkerPanel({
     fetchActivity();
   }, [worker.id]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setSwipeStartY(e.touches[0].clientY);
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (swipeStartY === null) return;
-    if (e.changedTouches[0].clientY - swipeStartY > 80) onClose();
-    setSwipeStartY(null);
-  };
+  const statusColor = worker.status === "working" ? "#10b981" : worker.status === "idle" ? "#6b7280" : "#06b6d4";
 
   return (
     <motion.div
-      initial={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
-      animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
-      exit={isMobile ? { y: 400, opacity: 0 } : { x: 400, opacity: 0 }}
-      transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className={`absolute z-40 overflow-hidden ${
-        isMobile
-          ? "bottom-0 left-0 right-0"
-          : "top-16 right-4"
-      }`}
+      initial={{ x: -280, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: -280, opacity: 0 }}
+      transition={{ type: "spring", damping: 28, stiffness: 260 }}
+      className="absolute left-0 z-30 overflow-y-auto overflow-x-hidden"
       style={{
-        width: isMobile ? "100%" : 340,
-        maxHeight: isMobile ? "70vh" : undefined,
-        borderRadius: isMobile ? "16px 16px 0 0" : 4,
-        background: "linear-gradient(180deg, rgba(10, 12, 18, 0.97) 0%, rgba(5, 5, 8, 0.97) 100%)",
-        border: `2px solid ${config.color}44`,
-        boxShadow: `0 0 30px ${config.color}33, 0 0 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)`,
+        top: 32,
+        bottom: 36,
+        width: 280,
+        pointerEvents: "auto",
       }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
     >
-      {isMobile && (
-        <div className="flex justify-center py-2">
-          <div className="w-10 h-1 rounded-full bg-zinc-600" />
-        </div>
-      )}
-      <div
-        style={{
-          height: 3,
-          background: `linear-gradient(90deg, transparent, ${config.color}, transparent)`,
-          opacity: 0.6,
-        }}
-      />
-      <div className="absolute top-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${config.color}66`, borderTop: `2px solid ${config.color}66` }} />
-      <div className="absolute top-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${config.color}66`, borderTop: `2px solid ${config.color}66` }} />
-
-      <div
-        className="p-4"
-        style={{ borderBottom: `1px solid ${config.color}22`, background: `linear-gradient(180deg, ${config.color}08, transparent)` }}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
-              style={{
-                background: `${config.color}20`,
-                color: config.color,
-                border: `1px solid ${config.color}44`,
-                boxShadow: `0 0 12px ${config.color}33`,
-              }}
-            >
-              {config.icon}
-            </div>
-            <div>
+      <HUDPanel accentColor={config.color} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div className="p-3" style={{ borderBottom: `1px solid ${config.color}22` }}>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
               <div
-                className="text-sm font-bold"
-                style={{
-                  color: config.color,
-                  textShadow: `0 0 10px ${config.color}55`,
-                }}
+                className="w-6 h-6 flex items-center justify-center text-[10px] font-bold"
+                style={{ background: `${config.color}18`, color: config.color, border: `1px solid ${config.color}33`, borderRadius: 3 }}
               >
-                {worker.name}
+                {config.icon}
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[9px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.4)" }}>
+              <div>
+                <div className="text-[10px] font-bold" style={{ color: config.color, textShadow: `0 0 8px ${config.color}44` }}>
+                  {worker.name}
+                </div>
+                <div className="text-[7px] uppercase tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.3)" }}>
                   {config.label}
-                </span>
-                <span className="text-[9px] font-bold px-1.5 py-0.5" style={{ background: `${config.color}15`, color: config.color, borderRadius: 3, border: `1px solid ${config.color}33` }}>
-                  Lv.{worker.level}
-                </span>
+                </div>
               </div>
             </div>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center w-5 h-5 transition-opacity opacity-40 hover:opacity-100"
+              style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, background: "rgba(255,255,255,0.03)" }}
+            >
+              <X size={10} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[9px] uppercase tracking-wider opacity-40 hover:opacity-100 transition-opacity px-2 py-1"
-            style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2 }}
-          >
-            ESC
-          </button>
-        </div>
-      </div>
 
-      <div className="px-4 pt-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
-            XP
-          </span>
-          <span className="text-[9px]" style={{ color: "#eab308" }}>
-            {worker.xp}/100
-          </span>
-        </div>
-        <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: "linear-gradient(90deg, #eab308, #f59e0b)", boxShadow: "0 0 6px #eab30866" }}
-            initial={{ width: 0 }}
-            animate={{ width: `${worker.xp}%` }}
-            transition={{ duration: 0.5 }}
-          />
-        </div>
-      </div>
-
-      <div className="p-4 space-y-3">
-        <div>
-          <div
-            className="text-[9px] uppercase tracking-wider mb-1"
-            style={{ color: "rgba(255,255,255,0.35)" }}
-          >
-            Current Task
-          </div>
-          <div className="text-xs" style={{ color: "rgba(255,255,255,0.8)" }}>
-            {worker.task}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 3 }}>
-            <div className="text-[8px] uppercase tracking-wider mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>
-              From
+          {/* Status + Level */}
+          <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-1">
+              <StatusLED color={statusColor} pulse={worker.status === "working"} size={5} />
+              <span className="text-[7px] uppercase tracking-[0.15em] font-bold" style={{ color: statusColor }}>
+                {worker.status}
+              </span>
             </div>
-            <div className="text-[11px] font-bold" style={{ color: current?.color }}>
-              {current?.shortName}
-            </div>
-          </div>
-          <div className="p-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 3 }}>
-            <div className="text-[8px] uppercase tracking-wider mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>
-              To
-            </div>
-            <div className="text-[11px] font-bold" style={{ color: target?.color }}>
-              {target?.shortName}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>
-              Progress
-            </span>
-            <span className="text-[10px] font-bold tabular-nums" style={{ color: config.color }}>
-              {Math.round(worker.progress)}%
+            <span className="text-[8px] font-bold px-1 py-px" style={{ background: `${config.color}12`, color: config.color, borderRadius: 2, border: `1px solid ${config.color}25` }}>
+              Lv.{worker.level}
             </span>
           </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
-            <motion.div
+        </div>
+
+        {/* XP bar */}
+        <div className="px-3 pt-2">
+          <div className="flex items-center justify-between mb-0.5">
+            <span className="text-[7px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>XP</span>
+            <span className="text-[8px] tabular-nums" style={{ color: "#e8a019" }}>{worker.xp}/100</span>
+          </div>
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <div
               className="h-full rounded-full"
-              style={{ background: config.color, boxShadow: `0 0 6px ${config.color}66` }}
-              initial={{ width: 0 }}
-              animate={{ width: `${worker.progress}%` }}
-              transition={{ duration: 0.5 }}
+              style={{ width: `${worker.xp}%`, background: "linear-gradient(90deg, #e8a019, #f59e0b)", boxShadow: "0 0 4px #e8a01966", transition: "width 0.5s ease" }}
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div
-            className="px-3 py-1 text-[9px] uppercase tracking-wider font-bold"
-            style={{
-              background: `${config.color}15`,
-              color: config.color,
-              border: `1px solid ${config.color}33`,
-              borderRadius: 2,
-            }}
-          >
-            {worker.status}
+        {/* Current task */}
+        <div className="px-3 pt-2 pb-1">
+          <div className="text-[7px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>CURRENT TASK</div>
+          <div className="text-[9px]" style={{ color: "rgba(255,255,255,0.7)" }}>{worker.task}</div>
+        </div>
+
+        {/* Route */}
+        <div className="px-3 py-1.5 grid grid-cols-2 gap-1.5">
+          <div className="p-1.5" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 2 }}>
+            <div className="text-[7px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.25)" }}>FROM</div>
+            <div className="text-[9px] font-bold" style={{ color: current?.color }}>{current?.shortName || "\u2014"}</div>
+          </div>
+          <div className="p-1.5" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 2 }}>
+            <div className="text-[7px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.25)" }}>TO</div>
+            <div className="text-[9px] font-bold" style={{ color: target?.color }}>{target?.shortName || "\u2014"}</div>
           </div>
         </div>
-      </div>
 
-      <ActivityFeed
-        tasks={recentTasks}
-        stats={activityStats}
-        loading={loadingActivity}
-        accentColor={config.color}
-      />
+        {/* Progress */}
+        <div className="px-3 py-1">
+          <div className="flex items-center justify-between mb-0.5">
+            <span className="text-[7px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>PROGRESS</span>
+            <span className="text-[8px] tabular-nums font-bold" style={{ color: config.color }}>{Math.round(worker.progress)}%</span>
+          </div>
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${worker.progress}%`, background: config.color, boxShadow: `0 0 4px ${config.color}66`, transition: "width 0.5s ease" }}
+            />
+          </div>
+        </div>
 
-      <div
-        className="p-4 grid grid-cols-3 gap-2"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(0,0,0,0.2)" }}
-      >
-        {[
-          { label: "Resume", color: "#22c55e", action: "resume" },
-          { label: "Redirect", color: "#f59e0b", action: "redirect" },
-          { label: "Stop", color: "#ef4444", action: "stop" },
-        ].map((btn) => (
-          <button
-            key={btn.label}
-            className="py-1.5 text-[9px] uppercase tracking-wider font-bold transition-all hover:brightness-125 cursor-pointer"
-            style={{
-              background: `${btn.color}10`,
-              color: btn.color,
-              border: `1px solid ${btn.color}33`,
-              borderRadius: 2,
-            }}
-            onClick={async () => {
-              if (btn.action === "stop") {
-                if (!confirm("Stop this worker?")) return;
-                await fetch("/api/webhook", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026" },
-                  body: JSON.stringify({ event: "stop_worker", data: { worker_id: worker.id } }),
-                });
-                onClose();
-              } else if (btn.action === "redirect") {
-                const newGoal = prompt("Enter new instructions for this worker:");
-                if (!newGoal) return;
-                await fetch("/api/webhook", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026" },
-                  body: JSON.stringify({ goal: newGoal, project: "nexus" }),
-                });
-                alert("New task created! Worker will pick it up shortly.");
-              } else if (btn.action === "resume") {
-                alert("Worker is already running.");
-              }
-            }}
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
+        {/* Action buttons */}
+        <div className="px-3 py-2 grid grid-cols-3 gap-1">
+          {[
+            { label: "Resume", color: "#10b981", action: "resume" },
+            { label: "Redirect", color: "#e8a019", action: "redirect" },
+            { label: "Stop", color: "#ef4444", action: "stop" },
+          ].map((btn) => (
+            <button
+              key={btn.label}
+              className="py-1 text-[7px] uppercase tracking-[0.1em] font-bold transition-all cursor-pointer"
+              style={{
+                background: `${btn.color}08`,
+                color: btn.color,
+                border: `1px solid ${btn.color}30`,
+                borderRadius: 2,
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = `${btn.color}18`; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = `${btn.color}08`; }}
+              onClick={async () => {
+                if (btn.action === "stop") {
+                  if (!confirm("Stop this worker?")) return;
+                  await fetch("/api/webhook", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026" },
+                    body: JSON.stringify({ event: "stop_worker", data: { worker_id: worker.id } }),
+                  });
+                  onClose();
+                } else if (btn.action === "redirect") {
+                  const newGoal = prompt("Enter new instructions for this worker:");
+                  if (!newGoal) return;
+                  await fetch("/api/webhook", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-nexus-key": process.env.NEXT_PUBLIC_NEXUS_API_KEY || "nexus-hive-2026" },
+                    body: JSON.stringify({ goal: newGoal, project: "nexus" }),
+                  });
+                  alert("New task created! Worker will pick it up shortly.");
+                } else if (btn.action === "resume") {
+                  alert("Worker is already running.");
+                }
+              }}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
 
-      <div className="absolute bottom-0 left-0 w-3 h-3" style={{ borderLeft: `2px solid ${config.color}44`, borderBottom: `2px solid ${config.color}44` }} />
-      <div className="absolute bottom-0 right-0 w-3 h-3" style={{ borderRight: `2px solid ${config.color}44`, borderBottom: `2px solid ${config.color}44` }} />
+        {/* Activity feed */}
+        <div className="flex-1 overflow-y-auto">
+          <ActivityFeed
+            tasks={recentTasks}
+            stats={activityStats}
+            loading={loadingActivity}
+            accentColor={config.color}
+          />
+        </div>
+
+        <CornerBrackets color={`${config.color}44`} size={6} />
+      </HUDPanel>
     </motion.div>
   );
 }
 
-// ─── HUD TOP BAR (StarCraft style) ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 3: BOTTOM STRIP (Event ticker)
+// ═══════════════════════════════════════════════════════════════════════════
 
-function HUDTopBar({
-  time,
-  activeCount,
-  completedCount,
-  testCount,
-  isMobile,
-  onStandup,
-  hasActiveWorkers,
+function BottomStrip({ events }: { events: AlertEvent[] }) {
+  const typeColors: Record<string, string> = {
+    success: "#10b981",
+    info: "#06b6d4",
+    warning: "#e8a019",
+    error: "#ef4444",
+  };
+
+  const visible = events.slice(0, 6);
+
+  return (
+    <div
+      className="absolute bottom-0 left-0 right-0 z-30 flex items-center"
+      style={{
+        height: 36,
+        background: "rgba(12, 16, 24, 0.9)",
+        backdropFilter: "blur(12px)",
+        borderTop: "1px solid #1a2235",
+        fontFamily: "'JetBrains Mono', monospace",
+        pointerEvents: "auto",
+      }}
+    >
+      {/* Label */}
+      <div className="flex items-center gap-1.5 px-3 h-full flex-shrink-0" style={{ borderRight: "1px solid #1a2235" }}>
+        <Radio size={8} style={{ color: "#06b6d4" }} />
+        <span className="text-[7px] uppercase tracking-[0.2em] font-bold" style={{ color: "rgba(6, 182, 212, 0.6)" }}>
+          EVENT FEED
+        </span>
+        <StatusLED color="#10b981" pulse size={4} />
+      </div>
+
+      {/* Scrolling events */}
+      <div className="flex-1 overflow-hidden h-full flex items-center">
+        <div className="flex items-center gap-4 px-3 animate-ticker">
+          {visible.map((event) => (
+            <div key={event.id} className="flex items-center gap-1.5 flex-shrink-0">
+              <StatusLED color={typeColors[event.type] || "#06b6d4"} size={4} />
+              <span className="text-[8px] tabular-nums" style={{ color: "rgba(255,255,255,0.25)" }}>
+                {event.time}
+              </span>
+              <span className="text-[8px]" style={{ color: "rgba(255,255,255,0.55)" }}>
+                {event.message.length > 60 ? event.message.slice(0, 57) + "..." : event.message}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 4: RIGHT MINI-PANEL (Worker roster)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function WorkerRoster({
+  workers,
+  selectedWorkerId,
+  onSelectWorker,
 }: {
-  time: string;
-  activeCount: number;
-  completedCount: number;
-  testCount: number;
-  isMobile?: boolean;
-  onStandup: () => void;
-  hasActiveWorkers: boolean;
+  workers: Worker[];
+  selectedWorkerId: string | null;
+  onSelectWorker: (id: string) => void;
 }) {
-  const stats = [
-    { label: "WORKERS", value: activeCount, color: "#22c55e", icon: ">" },
-    { label: "COMPLETED", value: completedCount, color: "#06b6d4", icon: "+" },
-    { label: "TESTS", value: testCount, color: "#8b5cf6", icon: "#" },
+  const statusColor = (s: Worker["status"]) =>
+    s === "working" ? "#10b981" : s === "idle" ? "#6b7280" : "#06b6d4";
+
+  return (
+    <div
+      className="absolute right-0 z-30 overflow-y-auto overflow-x-hidden"
+      style={{
+        top: 32,
+        bottom: 36,
+        width: 200,
+        pointerEvents: "auto",
+      }}
+    >
+      <HUDPanel accentColor="rgba(6, 182, 212, 0.4)" style={{ height: "100%" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-2.5 py-2" style={{ borderBottom: "1px solid #1a2235" }}>
+          <div className="flex items-center gap-1.5">
+            <Users size={9} style={{ color: "#06b6d4" }} />
+            <span className="text-[7px] uppercase tracking-[0.2em] font-bold" style={{ color: "rgba(6, 182, 212, 0.7)" }}>
+              WORKER ROSTER
+            </span>
+          </div>
+          <span className="text-[8px] tabular-nums font-bold" style={{ color: "#06b6d4" }}>
+            {workers.length}
+          </span>
+        </div>
+
+        {/* Worker list */}
+        <div className="p-1.5 space-y-1 overflow-y-auto" style={{ maxHeight: "calc(100% - 32px)" }}>
+          {workers.map((w) => {
+            const config = WORKER_TYPE_CONFIG[w.type];
+            const isSelected = w.id === selectedWorkerId;
+            return (
+              <div
+                key={w.id}
+                className="relative cursor-pointer p-1.5 transition-colors"
+                style={{
+                  background: isSelected ? `${config.color}12` : "rgba(255,255,255,0.015)",
+                  border: isSelected ? `1px solid ${config.color}44` : "1px solid transparent",
+                  borderRadius: 3,
+                }}
+                onClick={() => onSelectWorker(w.id)}
+                onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
+                onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.015)"; }}
+              >
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  {/* Type icon */}
+                  <div
+                    className="w-4 h-4 flex items-center justify-center text-[8px] font-bold flex-shrink-0"
+                    style={{ background: `${config.color}15`, color: config.color, borderRadius: 2 }}
+                  >
+                    {config.icon}
+                  </div>
+                  <span className="text-[8px] font-bold truncate" style={{ color: config.color }}>
+                    {w.name}
+                  </span>
+                  <div className="ml-auto flex items-center gap-1">
+                    <StatusLED color={statusColor(w.status)} size={4} />
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="h-px rounded-full overflow-hidden ml-5" style={{ background: "rgba(255,255,255,0.05)" }}>
+                  <div
+                    className="h-full"
+                    style={{
+                      width: `${w.progress}%`,
+                      background: config.color,
+                      transition: "width 0.4s ease",
+                    }}
+                  />
+                </div>
+                <div className="text-[7px] truncate ml-5 mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  {w.task.length > 28 ? w.task.slice(0, 25) + "..." : w.task}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </HUDPanel>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 5: BOTTOM-RIGHT MINIMAP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function MinimapHUD({
+  buildings,
+  workers,
+}: {
+  buildings: Building[];
+  workers: Worker[];
+}) {
+  return (
+    <div
+      className="absolute z-30"
+      style={{
+        right: 200,
+        bottom: 36,
+        width: 180,
+        height: 120,
+        pointerEvents: "auto",
+      }}
+    >
+      <HUDPanel accentColor="rgba(6, 182, 212, 0.3)" style={{ width: "100%", height: "100%", overflow: "hidden" }}>
+        <div className="flex items-center gap-1 px-2 py-1" style={{ borderBottom: "1px solid #1a2235" }}>
+          <MapPin size={7} style={{ color: "rgba(6, 182, 212, 0.5)" }} />
+          <span className="text-[6px] uppercase tracking-[0.2em] font-bold" style={{ color: "rgba(6, 182, 212, 0.5)" }}>
+            TACTICAL MAP
+          </span>
+        </div>
+        <svg viewBox="-120 -20 600 340" width={180} height={100} className="block">
+          {/* Grid dots */}
+          {Array.from({ length: 14 }, (_, x) =>
+            Array.from({ length: 14 }, (_, y) => {
+              const pos = gridToIso(x, y);
+              return (
+                <circle
+                  key={`${x}-${y}`}
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={0.4}
+                  fill="rgba(6, 182, 212, 0.06)"
+                />
+              );
+            })
+          )}
+          {/* Building dots */}
+          {buildings.map((b) => {
+            const pos = gridToIso(b.gridX, b.gridY);
+            return (
+              <g key={b.id}>
+                <rect
+                  x={pos.x - 3 * b.size}
+                  y={pos.y - 2 * b.size}
+                  width={6 * b.size}
+                  height={4 * b.size}
+                  fill={b.color}
+                  opacity={b.status === "active" ? 0.85 : 0.25}
+                  rx={1}
+                />
+                {b.status === "active" && (
+                  <rect
+                    x={pos.x - 4 * b.size}
+                    y={pos.y - 3 * b.size}
+                    width={8 * b.size}
+                    height={6 * b.size}
+                    fill={b.color}
+                    opacity={0.12}
+                    rx={2}
+                  >
+                    <animate attributeName="opacity" values="0.08;0.2;0.08" dur="2s" repeatCount="indefinite" />
+                  </rect>
+                )}
+              </g>
+            );
+          })}
+          {/* Worker dots */}
+          {workers.map((w) => {
+            const cur = buildings.find((b) => b.id === w.currentBuildingId);
+            const tgt = buildings.find((b) => b.id === w.targetBuildingId);
+            if (!cur || !tgt) return null;
+            const pp1 = gridToIso(cur.gridX, cur.gridY);
+            const pp2 = gridToIso(tgt.gridX, tgt.gridY);
+            const tt = w.progress / 100;
+            return (
+              <circle
+                key={w.id}
+                cx={pp1.x + (pp2.x - pp1.x) * tt}
+                cy={pp1.y + (pp2.y - pp1.y) * tt}
+                r={1.8}
+                fill={WORKER_TYPE_CONFIG[w.type].color}
+              >
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="1s" repeatCount="indefinite" />
+              </circle>
+            );
+          })}
+        </svg>
+      </HUDPanel>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 6: TOP-RIGHT BUDGET/METRICS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function MetricsPanel({
+  budget,
+}: {
+  budget: { apiSpent: number; apiLimit: number; minutesUsed: number; minutesLimit: number; tasksCompleted: number; tasksFailed: number } | null;
+}) {
+  const apiSpent = budget ? (budget.apiSpent / 100).toFixed(2) : "0.00";
+  const apiLimit = budget ? (budget.apiLimit / 100).toFixed(0) : "10";
+  const apiPct = budget ? Math.min((budget.apiSpent / budget.apiLimit) * 100, 100) : 0;
+  const tasksOk = budget?.tasksCompleted ?? 0;
+  const tasksFail = budget?.tasksFailed ?? 0;
+
+  const rows = [
+    { label: "API SPEND", value: `$${apiSpent}`, max: `$${apiLimit}`, pct: apiPct, color: apiPct > 80 ? "#ef4444" : "#e8a019" },
+    { label: "COMPLETED", value: `${tasksOk}`, max: "", pct: 100, color: "#10b981" },
+    { label: "FAILED", value: `${tasksFail}`, max: "", pct: 100, color: tasksFail > 0 ? "#ef4444" : "#6b7280" },
   ];
 
   return (
     <div
-      className={`absolute top-0 left-0 right-0 z-30 ${
-        isMobile ? "px-3 py-2" : "px-6 py-3"
-      }`}
+      className="absolute z-30"
       style={{
-        background:
-          "linear-gradient(180deg, rgba(5,5,8,0.97) 0%, rgba(5,5,8,0.8) 70%, transparent 100%)",
-        borderBottom: "1px solid rgba(6, 182, 212, 0.1)",
+        top: 40,
+        right: 8,
+        width: 184,
+        pointerEvents: "auto",
       }}
     >
-      <div className={`flex items-center justify-between ${isMobile ? "flex-wrap gap-1" : ""}`}>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{
-              background: "#22c55e",
-              boxShadow: "0 0 8px rgba(34, 197, 94, 0.6)",
-            }}
-          />
-          <span
-            className={`font-bold tracking-[0.2em] uppercase ${isMobile ? "text-[10px]" : "text-sm tracking-[0.3em]"}`}
-            style={{
-              color: "#e8a019",
-              textShadow: "0 0 20px rgba(232, 160, 25, 0.4)",
-            }}
-          >
-            NEXUS
+      <HUDPanel accentColor="rgba(232, 160, 25, 0.4)">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5" style={{ borderBottom: "1px solid #1a2235" }}>
+          <DollarSign size={8} style={{ color: "#e8a019" }} />
+          <span className="text-[7px] uppercase tracking-[0.2em] font-bold" style={{ color: "rgba(232, 160, 25, 0.7)" }}>
+            BUDGET / METRICS
           </span>
-          {!isMobile && (
-            <>
-              <span className="text-xs" style={{ color: "rgba(255,255,255,0.15)" }}>|</span>
-              <span className="text-[10px] uppercase tracking-wider" style={{ color: "rgba(6, 182, 212, 0.5)" }}>
-                Tactical View
-              </span>
-            </>
-          )}
         </div>
-
-        <div
-          className={`font-bold tabular-nums ${isMobile ? "text-[10px] px-2 py-0.5" : "text-sm px-4 py-1"}`}
-          style={{
-            color: "rgba(6, 182, 212, 0.8)",
-            textShadow: "0 0 10px rgba(6, 182, 212, 0.3)",
-            background: "rgba(6, 182, 212, 0.03)",
-            border: "1px solid rgba(6, 182, 212, 0.1)",
-            borderRadius: 3,
-          }}
-        >
-          {time}
-        </div>
-
-        <div className={`flex items-center gap-2 ${isMobile ? "w-full justify-center mt-1" : "gap-4"}`}>
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className={`flex items-center gap-1 ${isMobile ? "px-1.5 py-0.5" : "gap-1.5 px-2 py-0.5"}`}
-              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 2 }}
-            >
-              <span className={`font-bold ${isMobile ? "text-[8px]" : "text-[9px]"}`} style={{ color: stat.color }}>{stat.icon}</span>
-              {!isMobile && (
-                <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
-                  {stat.label}
+        <div className="p-2 space-y-2">
+          {rows.map((r) => (
+            <div key={r.label}>
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[7px] uppercase tracking-[0.15em]" style={{ color: "rgba(255,255,255,0.3)" }}>{r.label}</span>
+                <span className="text-[9px] tabular-nums font-bold" style={{ color: r.color }}>
+                  {r.value}
+                  {r.max && <span style={{ color: "rgba(255,255,255,0.2)" }}> / {r.max}</span>}
                 </span>
+              </div>
+              {r.max && (
+                <div className="h-px rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                  <div className="h-full" style={{ width: `${r.pct}%`, background: r.color, transition: "width 0.5s ease" }} />
+                </div>
               )}
-              <span
-                className={`font-bold tabular-nums ${isMobile ? "text-[9px]" : "text-xs"}`}
-                style={{
-                  color: stat.color,
-                  textShadow: `0 0 8px ${stat.color}44`,
-                }}
-              >
-                {stat.value}
-              </span>
             </div>
           ))}
-
-          {/* STANDUP button */}
-          <button
-            onClick={onStandup}
-            className={`flex items-center gap-1.5 cursor-pointer transition-all hover:brightness-125 ${
-              isMobile ? "px-2 py-0.5" : "px-3 py-1"
-            }`}
-            style={{
-              background: hasActiveWorkers
-                ? "rgba(232, 160, 25, 0.12)"
-                : "rgba(232, 160, 25, 0.06)",
-              border: "1px solid rgba(232, 160, 25, 0.35)",
-              borderRadius: 3,
-              color: "#e8a019",
-              boxShadow: hasActiveWorkers
-                ? "0 0 12px rgba(232, 160, 25, 0.15)"
-                : "none",
-              animation: hasActiveWorkers ? "standupPulse 2s ease-in-out infinite" : "none",
-            }}
-            title="Standup Briefing (S)"
-          >
-            <Megaphone size={isMobile ? 10 : 12} />
-            {!isMobile && (
-              <span className="text-[9px] uppercase tracking-[0.15em] font-bold">
-                STANDUP
-              </span>
-            )}
-          </button>
         </div>
-      </div>
+      </HUDPanel>
     </div>
   );
 }
 
-// ─── RESOURCE BAR (StarCraft style) ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  HUD PANEL 7: STANDUP BUTTON (floating)
+// ═══════════════════════════════════════════════════════════════════════════
 
-function ResourceBar({ isMobile, budget }: { isMobile?: boolean; budget?: { apiSpent: number; apiLimit: number; minutesUsed: number; minutesLimit: number; tasksCompleted: number; tasksFailed: number } | null }) {
-  const apiPct = budget ? Math.min((budget.apiSpent / budget.apiLimit) * 100, 100) : 84.7;
-  const minPct = budget ? Math.min((budget.minutesUsed / budget.minutesLimit) * 100, 100) : 21.4;
-  const taskTotal = budget ? budget.tasksCompleted + budget.tasksFailed : 0;
-  const taskPct = budget && taskTotal > 0 ? (budget.tasksCompleted / taskTotal) * 100 : 95;
-
-  const resources = budget
-    ? [
-        { label: "API Spend", value: `$${(budget.apiSpent / 100).toFixed(2)}`, max: `$${(budget.apiLimit / 100).toFixed(0)}`, pct: apiPct, color: apiPct > 80 ? "#ef4444" : "#e8a019", icon: "$" },
-        { label: "CC Minutes", value: `${budget.minutesUsed}m`, max: `${budget.minutesLimit}m`, pct: minPct, color: minPct > 80 ? "#ef4444" : "#06b6d4", icon: "T" },
-        { label: "Success", value: `${budget.tasksCompleted}/${taskTotal}`, max: "", pct: taskPct, color: taskPct < 50 ? "#ef4444" : "#22c55e", icon: ">" },
-      ]
-    : [
-        { label: "API Tokens", value: "847K", max: "1M", pct: 84.7, color: "#e8a019", icon: "T" },
-        { label: "Session Cost", value: "$2.14", max: "$10", pct: 21.4, color: "#06b6d4", icon: "$" },
-        { label: "Uptime", value: "6d 14h", max: "", pct: 95, color: "#22c55e", icon: "^" },
-      ];
-
+function StandupButton({
+  onClick,
+  hasActiveWorkers,
+}: {
+  onClick: () => void;
+  hasActiveWorkers: boolean;
+}) {
   return (
-    <div
-      className={`absolute z-30 ${
-        isMobile
-          ? "top-[52px] left-2 right-2 overflow-x-auto"
-          : "top-14 left-1/2 -translate-x-1/2"
-      }`}
+    <button
+      onClick={onClick}
+      className="absolute z-30 flex items-center gap-1.5 cursor-pointer transition-all"
+      style={{
+        bottom: 44,
+        left: 8,
+        padding: "5px 10px",
+        background: hasActiveWorkers ? "rgba(232, 160, 25, 0.12)" : "rgba(12, 16, 24, 0.85)",
+        backdropFilter: "blur(12px)",
+        border: `1px solid ${hasActiveWorkers ? "rgba(232, 160, 25, 0.4)" : "#1a2235"}`,
+        borderRadius: 3,
+        color: "#e8a019",
+        fontFamily: "'JetBrains Mono', monospace",
+        pointerEvents: "auto",
+        boxShadow: hasActiveWorkers ? "0 0 12px rgba(232, 160, 25, 0.15)" : "none",
+        animation: hasActiveWorkers ? "standupGlow 2s ease-in-out infinite" : "none",
+      }}
+      title="Standup Briefing (S)"
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(232, 160, 25, 0.6)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = hasActiveWorkers ? "rgba(232, 160, 25, 0.4)" : "#1a2235"; }}
     >
-      <div
-        className={`flex items-center ${isMobile ? "gap-3 px-3 py-1.5 min-w-max" : "gap-5 px-5 py-2"}`}
-        style={{
-          background: "rgba(5, 5, 8, 0.85)",
-          border: "1px solid rgba(6, 182, 212, 0.1)",
-          borderRadius: 3,
-          boxShadow: "0 2px 10px rgba(0,0,0,0.5)",
-        }}
-      >
-        {resources.map((r) => (
-          <div key={r.label} className="flex items-center gap-1.5">
-            <span className={`font-bold ${isMobile ? "text-[8px]" : "text-[9px]"}`} style={{ color: r.color }}>{r.icon}</span>
-            {!isMobile && (
-              <span className="text-[8px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
-                {r.label}
-              </span>
-            )}
-            <div
-              className={`h-1.5 rounded-sm overflow-hidden ${isMobile ? "w-12" : "w-20"}`}
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.03)" }}
-            >
-              <div
-                className="h-full"
-                style={{
-                  width: `${r.pct}%`,
-                  background: `linear-gradient(90deg, ${r.color}88, ${r.color})`,
-                  boxShadow: `0 0 6px ${r.color}66`,
-                }}
-              />
-            </div>
-            <span
-              className={`font-bold tabular-nums ${isMobile ? "text-[8px]" : "text-[9px]"}`}
-              style={{ color: r.color }}
-            >
-              {r.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+      <Megaphone size={11} />
+      <span className="text-[8px] uppercase tracking-[0.15em] font-bold">
+        STANDUP
+      </span>
+    </button>
   );
 }
 
-// ─── MAIN PAGE ──────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  HOVER TOOLTIP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BuildingTooltip({ building }: { building: Building }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: 0.15 }}
+      className="fixed z-40 pointer-events-none px-2.5 py-1.5"
+      style={{
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        background: "rgba(12, 16, 24, 0.92)",
+        backdropFilter: "blur(8px)",
+        border: `1px solid ${building.color}44`,
+        borderRadius: 3,
+        boxShadow: `0 0 16px ${building.glowColor}`,
+        fontFamily: "'JetBrains Mono', monospace",
+      }}
+    >
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <StatusLED color={building.color} size={5} />
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: building.color }}>
+          {building.name}
+        </span>
+      </div>
+      <div className="text-[8px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+        {building.description}
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MAIN PAGE
+// ═══════════════════════════════════════════════════════════════════════════
 
 export default function GamePage() {
   const isMobile = useIsMobile();
   const [time, setTime] = useState(formatTime());
+  const [date, setDate] = useState(formatDate());
   const gameData = useGameData();
   const [demoWorkers, setDemoWorkers] = useState(INITIAL_WORKERS);
   const [demoEvents, setDemoEvents] = useState(INITIAL_EVENTS);
@@ -1166,7 +1127,10 @@ export default function GamePage() {
 
   // Clock
   useEffect(() => {
-    const interval = setInterval(() => setTime(formatTime()), 1000);
+    const interval = setInterval(() => {
+      setTime(formatTime());
+      setDate(formatDate());
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1188,8 +1152,7 @@ export default function GamePage() {
           let newEvolving = false;
 
           if (Math.random() < 0.05) {
-            newSpeech =
-              SPEECH_BUBBLES[Math.floor(Math.random() * SPEECH_BUBBLES.length)];
+            newSpeech = SPEECH_BUBBLES[Math.floor(Math.random() * SPEECH_BUBBLES.length)];
           } else if (Math.random() < 0.15) {
             newSpeech = null;
           }
@@ -1262,10 +1225,7 @@ export default function GamePage() {
 
     const interval = setInterval(() => {
       if (Math.random() < 0.4) {
-        const msg =
-          NEW_EVENT_MESSAGES[
-            Math.floor(Math.random() * NEW_EVENT_MESSAGES.length)
-          ];
+        const msg = NEW_EVENT_MESSAGES[Math.floor(Math.random() * NEW_EVENT_MESSAGES.length)];
         const newEvent: AlertEvent = {
           id: `e-${Date.now()}`,
           time: formatTime(),
@@ -1291,7 +1251,6 @@ export default function GamePage() {
         }
       }
       if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // Don't trigger if typing in an input
         const target = e.target as HTMLElement;
         if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
         setShowStandup((prev) => !prev);
@@ -1301,23 +1260,16 @@ export default function GamePage() {
     return () => window.removeEventListener("keydown", handler);
   }, [showStandup]);
 
-  const selectedBuildingData = buildings.find(
-    (b) => b.id === selectedBuilding
-  );
+  // Derived
+  const selectedBuildingData = buildings.find((b) => b.id === selectedBuilding);
   const selectedWorkerData = workers.find((w) => w.id === selectedWorker);
-
-  const activeCount = workers.filter(
-    (w) => w.status === "moving" || w.status === "working"
-  ).length;
-
-  const completedCount = gameData.budget?.tasksCompleted ?? 47;
-  const tasksFailed = gameData.budget?.tasksFailed ?? 0;
-
   const hoveredBuildingData = buildings.find((b) => b.id === hoveredBuilding);
+
+  const activeCount = workers.filter((w) => w.status === "moving" || w.status === "working").length;
+  const hasLeftPanel = !!selectedBuildingData || !!selectedWorkerData;
 
   const handleClickBuilding = useCallback((id: string) => {
     if (id === "") {
-      // Clicked empty space
       setSelectedBuilding(null);
       setSelectedWorker(null);
     } else {
@@ -1335,69 +1287,12 @@ export default function GamePage() {
     <div
       className="fixed inset-0 overflow-hidden select-none"
       style={{
-        background: "#050508",
-        fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
+        background: "#080b12",
+        fontFamily: "'JetBrains Mono', monospace",
       }}
     >
-      {/* Vignette (dark edges) */}
-      <div
-        className="fixed inset-0 pointer-events-none z-[55]"
-        style={{
-          background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 80%, rgba(0,0,0,0.7) 100%)",
-        }}
-      />
-
-      {/* Scanline overlay */}
-      <div
-        className="fixed inset-0 pointer-events-none z-50"
-        style={{
-          background:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.025) 2px, rgba(0, 255, 255, 0.025) 4px)",
-          mixBlendMode: "overlay",
-        }}
-      />
-
-      {/* CRT flicker removed — was causing strobe effect with R3F */}
-
-      {/* Tech grid background pattern */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-            linear-gradient(rgba(6, 182, 212, 0.015) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(6, 182, 212, 0.015) 1px, transparent 1px)
-          `,
-          backgroundSize: "80px 80px, 80px 80px, 20px 20px, 20px 20px",
-        }}
-      />
-
-      {/* Background particles */}
-      <BackgroundParticles count={isMobile ? 30 : 60} />
-
-      {/* Edge fog/atmosphere */}
-      <div className="fixed inset-0 pointer-events-none z-[5]">
-        <div className="absolute top-0 left-0 right-0 h-32" style={{ background: "linear-gradient(180deg, rgba(5,5,8,0.8) 0%, transparent 100%)" }} />
-        <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: "linear-gradient(0deg, rgba(5,5,8,0.8) 0%, transparent 100%)" }} />
-        <div className="absolute top-0 left-0 bottom-0 w-32" style={{ background: "linear-gradient(90deg, rgba(5,5,8,0.6) 0%, transparent 100%)" }} />
-        <div className="absolute top-0 right-0 bottom-0 w-32" style={{ background: "linear-gradient(270deg, rgba(5,5,8,0.6) 0%, transparent 100%)" }} />
-      </div>
-
-      {/* HUD */}
-      <HUDTopBar
-        time={time}
-        activeCount={activeCount}
-        completedCount={completedCount}
-        testCount={gameData.isDemo ? 872 : completedCount + tasksFailed}
-        isMobile={isMobile}
-        onStandup={() => setShowStandup(true)}
-        hasActiveWorkers={activeCount > 0}
-      />
-      <ResourceBar isMobile={isMobile} budget={gameData.budget} />
-
-      {/* 3D Viewport -- React Three Fiber Canvas */}
-      <div className="absolute inset-0 z-10">
+      {/* ── 3D CANVAS (full background) ── */}
+      <div className="absolute inset-0 z-0">
         <GameCanvas
           hoveredBuilding={hoveredBuilding}
           selectedBuilding={selectedBuilding}
@@ -1413,90 +1308,95 @@ export default function GamePage() {
         />
       </div>
 
-      {/* Building tooltip on hover */}
-      <AnimatePresence>
-        {hoveredBuildingData && !selectedBuilding && !isMobile && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 5 }}
-            className="fixed z-40 pointer-events-none px-3 py-2"
-            style={{
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              background: "rgba(5, 5, 8, 0.95)",
-              border: `1px solid ${hoveredBuildingData.color}44`,
-              borderRadius: 3,
-              boxShadow: `0 0 20px ${hoveredBuildingData.glowColor}`,
-            }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{ background: hoveredBuildingData.color, boxShadow: `0 0 6px ${hoveredBuildingData.glowColor}` }}
-              />
-              <span
-                className="text-xs font-bold uppercase tracking-wider"
-                style={{ color: hoveredBuildingData.color }}
-              >
-                {hoveredBuildingData.name}
-              </span>
-            </div>
-            <div
-              className="text-[9px]"
-              style={{ color: "rgba(255,255,255,0.5)" }}
-            >
-              {hoveredBuildingData.description}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Vignette ── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          background: "radial-gradient(ellipse at center, transparent 40%, rgba(8, 11, 18, 0.5) 75%, rgba(8, 11, 18, 0.85) 100%)",
+        }}
+      />
 
-      {/* Side panels */}
-      <AnimatePresence>
-        {selectedBuildingData && (
-          <BuildingPanel
-            building={selectedBuildingData}
-            onClose={() => setSelectedBuilding(null)}
-            isMobile={isMobile}
+      {/* ── Scanline overlay (subtle) ── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          background: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(6, 182, 212, 0.015) 3px, rgba(6, 182, 212, 0.015) 4px)",
+          mixBlendMode: "overlay",
+        }}
+      />
+
+      {/* ── HUD OVERLAY CONTAINER (pointer-events: none, children opt-in) ── */}
+      <div className="fixed inset-0 z-20 pointer-events-none">
+
+        {/* 1. Top Ribbon */}
+        <TopRibbon
+          time={time}
+          date={date}
+          workerCount={workers.length}
+          isDemo={gameData.isDemo}
+          isConnected={!gameData.isDemo}
+        />
+
+        {/* 2. Left Sidebar (building or worker) */}
+        <AnimatePresence>
+          {selectedBuildingData && !isMobile && (
+            <LeftSidebar
+              key={`building-${selectedBuildingData.id}`}
+              building={selectedBuildingData}
+              onClose={() => setSelectedBuilding(null)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {selectedWorkerData && !isMobile && (
+            <LeftSidebarWorker
+              key={`worker-${selectedWorkerData.id}`}
+              worker={selectedWorkerData}
+              buildings={buildings}
+              onClose={() => setSelectedWorker(null)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* 3. Bottom Event Strip */}
+        <BottomStrip events={events} />
+
+        {/* 4. Right Worker Roster */}
+        {!isMobile && (
+          <WorkerRoster
+            workers={workers}
+            selectedWorkerId={selectedWorker}
+            onSelectWorker={handleClickWorker}
           />
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {selectedWorkerData && (
-          <WorkerPanel
-            worker={selectedWorkerData}
-            buildings={buildings}
-            onClose={() => setSelectedWorker(null)}
-            isMobile={isMobile}
+        {/* 5. Minimap */}
+        {!isMobile && (
+          <MinimapHUD buildings={buildings} workers={workers} />
+        )}
+
+        {/* 6. Budget/Metrics */}
+        {!isMobile && (
+          <MetricsPanel budget={gameData.budget} />
+        )}
+
+        {/* 7. Standup Button */}
+        {!isMobile && (
+          <StandupButton
+            onClick={() => setShowStandup(true)}
+            hasActiveWorkers={activeCount > 0}
           />
         )}
-      </AnimatePresence>
 
-      {/* Demo mode badge */}
-      {gameData.isDemo && (
-        <div
-          className="absolute top-16 left-4 z-40 px-2 py-1 text-[9px] uppercase tracking-[0.2em] font-bold"
-          style={{
-            color: "#f59e0b",
-            background: "rgba(245, 158, 11, 0.1)",
-            border: "1px solid rgba(245, 158, 11, 0.3)",
-            borderRadius: 3,
-          }}
-        >
-          DEMO
-        </div>
-      )}
+        {/* Building hover tooltip */}
+        <AnimatePresence>
+          {hoveredBuildingData && !selectedBuilding && !isMobile && (
+            <BuildingTooltip building={hoveredBuildingData} />
+          )}
+        </AnimatePresence>
+      </div>
 
-      {/* Minimap */}
-      <Minimap buildings={buildings} workers={workers} hidden={isMobile} />
-
-      {/* Alert feed */}
-      <AlertFeed events={events} isMobile={isMobile} />
-
-      {/* Standup Board Modal */}
+      {/* ── Standup Board Modal ── */}
       <AnimatePresence>
         {showStandup && (
           <StandupBoard
@@ -1506,15 +1406,22 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* CSS animations */}
+      {/* ── CSS Animations ── */}
       <style jsx global>{`
-        @keyframes crtFlicker {
-          0% { opacity: 0.97; }
-          100% { opacity: 1; }
+        @keyframes ledPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
-        @keyframes standupPulse {
-          0%, 100% { box-shadow: 0 0 8px rgba(232, 160, 25, 0.1); }
-          50% { box-shadow: 0 0 16px rgba(232, 160, 25, 0.3); }
+        @keyframes standupGlow {
+          0%, 100% { box-shadow: 0 0 6px rgba(232, 160, 25, 0.1); }
+          50% { box-shadow: 0 0 14px rgba(232, 160, 25, 0.3); }
+        }
+        @keyframes ticker {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-ticker {
+          /* Simple left-align; no infinite scroll needed for 6 items */
         }
       `}</style>
     </div>

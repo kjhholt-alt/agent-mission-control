@@ -141,6 +141,65 @@ def log_task_event(task_id, event_type, title, project="", details=""):
     })
 
 
+def log_cost(project, task_id, model, tokens_in, tokens_out, cost_usd):
+    """Log API usage cost to cost_tracking table via Nexus API."""
+    try:
+        data = json.dumps({
+            "project": project,
+            "task_id": task_id,
+            "model": model,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost_usd": cost_usd,
+            "operation_type": "task_execution",
+        }).encode()
+
+        req = urllib.request.Request(
+            f"{NEXUS_URL}/api/costs",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        print(f"  Failed to log cost: {e}")
+        return None
+
+
+def estimate_cost(model, prompt_length, output_length, duration):
+    """
+    Estimate API cost based on model and usage.
+
+    Token estimates (rough):
+    - 1 token ≈ 4 characters
+    - tokens_in = prompt_length / 4
+    - tokens_out = output_length / 4
+
+    Claude pricing (approximate per 1M tokens):
+    - Haiku: $0.25 input / $1.25 output
+    - Sonnet: $3.00 input / $15.00 output
+    - Opus: $15.00 input / $75.00 output
+    """
+    tokens_in = int(prompt_length / 4)
+    tokens_out = int(output_length / 4)
+
+    # Pricing per 1M tokens (USD)
+    if "haiku" in str(model).lower():
+        input_cost = (tokens_in / 1_000_000) * 0.25
+        output_cost = (tokens_out / 1_000_000) * 1.25
+    elif "sonnet" in str(model).lower():
+        input_cost = (tokens_in / 1_000_000) * 3.00
+        output_cost = (tokens_out / 1_000_000) * 15.00
+    else:  # opus or default
+        input_cost = (tokens_in / 1_000_000) * 15.00
+        output_cost = (tokens_out / 1_000_000) * 75.00
+
+    total_cost = input_cost + output_cost
+    return tokens_in, tokens_out, total_cost
+
+
 def send_heartbeat(agent_name, project, status, step, steps_done=0, total=1, output=None):
     try:
         data = json.dumps({
@@ -557,9 +616,10 @@ def fetch_next_task():
         result = supabase_request("GET", "swarm_tasks?status=eq.approved&order=priority.asc&limit=1")
         if result and len(result) > 0:
             task = result[0]
+            task_id = task['id']
             # Optimistic lock: only claim if still approved (prevents double-execution)
             claimed = supabase_request("PATCH",
-                f"swarm_tasks?id=eq.{task['id']}&status=eq.approved", {
+                f"swarm_tasks?id=eq.{task_id}&status=eq.approved", {
                     "status": "running",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "assigned_worker_id": WORKER_ID,
@@ -567,14 +627,17 @@ def fetch_next_task():
             if claimed and len(claimed) > 0:
                 return task
             # Another worker claimed it, fall through
+            print(f"  RACE: Task {task_id[:8]} already claimed by another worker (was approved)")
+            log_task_event(task_id, "race_condition", f"Task claim race: already claimed", task.get("project", "general"))
 
         # Queued tasks
         result = supabase_request("GET", "swarm_tasks?status=eq.queued&order=priority.asc&limit=1")
         if result and len(result) > 0:
             task = result[0]
+            task_id = task['id']
             # Optimistic lock: only claim if still queued
             claimed = supabase_request("PATCH",
-                f"swarm_tasks?id=eq.{task['id']}&status=eq.queued", {
+                f"swarm_tasks?id=eq.{task_id}&status=eq.queued", {
                     "status": "running",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "assigned_worker_id": WORKER_ID,
@@ -582,6 +645,8 @@ def fetch_next_task():
             if claimed and len(claimed) > 0:
                 return task
             # Another worker claimed it
+            print(f"  RACE: Task {task_id[:8]} already claimed by another worker (was queued)")
+            log_task_event(task_id, "race_condition", f"Task claim race: already claimed", task.get("project", "general"))
 
         return None
 
@@ -702,18 +767,26 @@ def execute_task(task):
 
     try:
         start = time.time()
+        print(f"  Starting subprocess: {shell_cmd[:100]}...")
+        log_task_event(task_id, "subprocess_start", f"Launching Claude CLI for {title}", project, f"CWD: {cwd}, Model: {model or 'default'}")
+
         # Hide cmd.exe windows on Windows so they don't spam the desktop
         startupinfo = None
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
+
         result = subprocess.run(
             shell_cmd, cwd=cwd, capture_output=True, text=True,
             timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
             startupinfo=startupinfo,
         )
         duration = round(time.time() - start, 1)
+
+        print(f"  Subprocess completed: exit_code={result.returncode}, duration={duration}s, stdout_len={len(result.stdout)}, stderr_len={len(result.stderr)}")
+        log_task_event(task_id, "subprocess_complete", f"Claude CLI finished for {title}", project,
+                      f"Exit: {result.returncode}, Duration: {duration}s, Output: {len(result.stdout)} chars")
 
         stdout = result.stdout or ""
         stderr = result.stderr or ""
@@ -756,15 +829,24 @@ def execute_task(task):
                     _session_stats["failed"] += 1
                     _session_stats["xp"] += 2
 
+                # Log cost even for rejected tasks
+                tokens_in, tokens_out, cost_usd = estimate_cost(model or "opus", len(prompt), len(stdout), duration)
+                actual_cost_cents = int(cost_usd * 100)
+                log_cost(project, task_id, model or "opus", tokens_in, tokens_out, cost_usd)
+
                 error_reason = "Model requested clarification instead of executing"
                 update_task(task_id, {
                     "status": "failed",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "error_message": error_reason,
+                    "actual_cost_cents": actual_cost_cents,
                     "output_data": json.dumps({
                         "response": stdout, "duration_seconds": duration,
                         "exit_code": 0, "model": model or "default",
                         "rejection_reason": "clarification_instead_of_execution",
+                        "tokens_in": tokens_in,
+                        "tokens_out": tokens_out,
+                        "cost_usd": cost_usd,
                     }),
                 })
                 log_task_event(task_id, "rejected", f"Clarification instead of work: {title}", project, error_reason)
@@ -786,14 +868,24 @@ def execute_task(task):
 
             output_path = save_output(task_id, project, stdout) if len(stdout) > 100 else None
 
+            # Estimate and log cost
+            tokens_in, tokens_out, cost_usd = estimate_cost(model or "opus", len(prompt), len(stdout), duration)
+            actual_cost_cents = int(cost_usd * 100)  # Convert to cents
+
+            log_cost(project, task_id, model or "opus", tokens_in, tokens_out, cost_usd)
+
             update_task(task_id, {
                 "status": "completed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
+                "actual_cost_cents": actual_cost_cents,
                 "output_data": json.dumps({
                     "response": stdout, "duration_seconds": duration,
                     "exit_code": 0, "output_file": output_path,
                     "model": model or "default",
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "cost_usd": cost_usd,
                 }),
             })
             log_task_event(task_id, "completed", f"Completed in {duration}s: {title}", project)
@@ -824,13 +916,22 @@ def execute_task(task):
                 _session_stats["failed"] += 1
                 _session_stats["xp"] += 2
 
+            # Log cost for failed tasks
+            tokens_in, tokens_out, cost_usd = estimate_cost(model or "opus", len(prompt), len(stdout), duration)
+            actual_cost_cents = int(cost_usd * 100)
+            log_cost(project, task_id, model or "opus", tokens_in, tokens_out, cost_usd)
+
             update_task(task_id, {
                 "status": "failed",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "error_message": error_msg,
+                "actual_cost_cents": actual_cost_cents,
                 "output_data": json.dumps({
                     "stdout": stdout[:5000], "stderr": stderr[:5000],
                     "duration_seconds": duration, "exit_code": result.returncode,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "cost_usd": cost_usd,
                 }),
             })
             log_task_event(task_id, "failed", f"Failed: {title}", project, error_msg)

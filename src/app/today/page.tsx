@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   Sun, CheckCircle2, XCircle, Clock, Loader2, Brain,
   TrendingUp, DollarSign, Users, Zap, RefreshCw, Rocket, BarChart3,
+  Activity, Target, Timer,
 } from "lucide-react";
 import { TodayPageLoading } from "@/components/loading-states";
 import { TaskTrendChart, CostTrendChart } from "@/components/charts/dashboard-charts";
@@ -35,6 +36,21 @@ interface TodayData {
   sessions: { active: number; total: number };
   weekTasks?: Array<{ status: string; created_at: string }>;
   weekSessions?: Array<{ cost_usd: string; last_activity: string; model?: string; project_name?: string }>;
+}
+
+interface Analytics {
+  successRate: number;
+  avgDuration: number;
+  costPerTask: number;
+  totalCost: number;
+  summary: {
+    totalTasks: number;
+    completed: number;
+    failed: number;
+    avgDurationMinutes: number;
+  };
+  tasksPerDay: Array<{ date: string; count: number }>;
+  costPerDay: Array<{ date: string; cost: number }>;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -70,16 +86,28 @@ function StatBox({ label, value, icon, color }: {
 
 export default function TodayPage() {
   const [data, setData] = useState<TodayData | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/today");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json);
+      const [todayRes, analyticsRes] = await Promise.all([
+        fetch("/api/today"),
+        fetch("/api/analytics"),
+      ]);
+
+      if (!todayRes.ok) throw new Error(`Today API: HTTP ${todayRes.status}`);
+      if (!analyticsRes.ok) throw new Error(`Analytics API: HTTP ${analyticsRes.status}`);
+
+      const [todayData, analyticsData] = await Promise.all([
+        todayRes.json(),
+        analyticsRes.json(),
+      ]);
+
+      setData(todayData);
+      setAnalytics(analyticsData);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch");
@@ -296,6 +324,122 @@ export default function TodayPage() {
                   </div>
                   <div className="p-4">
                     <CostTrendChart sessions={data.weekSessions} />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Analytics Panel (30 Days) */}
+            {analytics && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+                className="bg-zinc-900/50 border border-cyan-500/20 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                    30-Day Analytics
+                  </h2>
+                  <span className="ml-auto text-[10px] text-zinc-500">
+                    {analytics.summary.totalTasks} tasks tracked
+                  </span>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-zinc-800/30 rounded-lg p-4 border border-emerald-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Target className="w-4 h-4 text-emerald-400" />
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Success Rate</span>
+                      </div>
+                      <div className="text-3xl font-bold text-emerald-400">{analytics.successRate}%</div>
+                      <div className="text-[10px] text-zinc-600 mt-1">
+                        {analytics.summary.completed} completed / {analytics.summary.failed} failed
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-800/30 rounded-lg p-4 border border-cyan-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Timer className="w-4 h-4 text-cyan-400" />
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Avg Duration</span>
+                      </div>
+                      <div className="text-3xl font-bold text-cyan-400">{analytics.summary.avgDurationMinutes}m</div>
+                      <div className="text-[10px] text-zinc-600 mt-1">
+                        {analytics.avgDuration}s per task
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-800/30 rounded-lg p-4 border border-amber-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DollarSign className="w-4 h-4 text-amber-400" />
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Cost / Task</span>
+                      </div>
+                      <div className="text-3xl font-bold text-amber-400">${analytics.costPerTask.toFixed(3)}</div>
+                      <div className="text-[10px] text-zinc-600 mt-1">
+                        per execution
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-800/30 rounded-lg p-4 border border-purple-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="w-4 h-4 text-purple-400" />
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Total Cost</span>
+                      </div>
+                      <div className="text-3xl font-bold text-purple-400">${analytics.totalCost.toFixed(2)}</div>
+                      <div className="text-[10px] text-zinc-600 mt-1">
+                        last 30 days
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mini sparkline charts */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Tasks per day sparkline */}
+                    <div className="bg-zinc-800/20 rounded-lg p-3 border border-zinc-700/30">
+                      <div className="text-xs text-zinc-400 mb-2 flex items-center gap-2">
+                        <BarChart3 className="w-3 h-3" />
+                        Tasks per Day
+                      </div>
+                      <div className="flex items-end gap-0.5 h-16">
+                        {analytics.tasksPerDay.slice(-14).map((d, i) => {
+                          const maxCount = Math.max(...analytics.tasksPerDay.map(x => x.count));
+                          const height = maxCount > 0 ? (d.count / maxCount) * 100 : 0;
+                          return (
+                            <div key={i} className="flex-1 flex flex-col justify-end group relative">
+                              <div
+                                className="bg-cyan-500/60 hover:bg-cyan-500 transition-colors rounded-sm"
+                                style={{ height: `${height}%` }}
+                              />
+                              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-[9px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                                {d.date}: {d.count} tasks
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Cost per day sparkline */}
+                    <div className="bg-zinc-800/20 rounded-lg p-3 border border-zinc-700/30">
+                      <div className="text-xs text-zinc-400 mb-2 flex items-center gap-2">
+                        <DollarSign className="w-3 h-3" />
+                        Cost per Day
+                      </div>
+                      <div className="flex items-end gap-0.5 h-16">
+                        {analytics.costPerDay.slice(-14).map((d, i) => {
+                          const maxCost = Math.max(...analytics.costPerDay.map(x => x.cost));
+                          const height = maxCost > 0 ? (d.cost / maxCost) * 100 : 0;
+                          return (
+                            <div key={i} className="flex-1 flex flex-col justify-end group relative">
+                              <div
+                                className="bg-amber-500/60 hover:bg-amber-500 transition-colors rounded-sm"
+                                style={{ height: `${height}%` }}
+                              />
+                              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-[9px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                                {d.date}: ${d.cost.toFixed(2)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </motion.div>

@@ -34,8 +34,8 @@ interface GameCanvasProps {
 
 /**
  * Main React Three Fiber canvas for the Nexus game view.
- * Factorio-style factory floor with industrial lighting, fog,
- * buildings, workers, conveyor belts, pipes, environment details.
+ * Cinematic industrial factory floor with volumetric-feel lighting,
+ * atmospheric fog, buildings, workers, conveyor belts, pipes.
  */
 export default function GameCanvas({
   hoveredBuilding,
@@ -86,7 +86,7 @@ export default function GameCanvas({
       (targetBuilding.gridY - currentBuilding.gridY) * progress;
 
     return { position: [x, 0.02, z], color: worker.color };
-  }, [selectedWorker, workers]);
+  }, [selectedWorker, workers, BUILDINGS]);
 
   const activeBelts = useMemo(
     () => (isMobile ? CONVEYORS.filter((b) => b.active).slice(0, 4) : CONVEYORS),
@@ -100,19 +100,19 @@ export default function GameCanvas({
       dpr={[1, 2]}
       performance={{ min: 0.5 }}
       shadows={!isMobile}
-      style={{ background: "#050508" }}
+      style={{ background: "#030305" }}
       onPointerMissed={handlePointerMissed}
     >
-      {/* Isometric camera */}
+      {/* Dramatic isometric camera — slightly lower angle with tilt for depth */}
       <OrthographicCamera
         makeDefault
-        position={[30, 30, 30]}
+        position={[28, 35, 32]}
         zoom={25}
         near={0.1}
-        far={300}
+        far={400}
       />
 
-      {/* Camera controls: smooth pan + zoom with improved responsiveness */}
+      {/* Camera controls: smooth pan + zoom */}
       <OrbitControls
         enableRotate={false}
         enablePan={true}
@@ -128,63 +128,86 @@ export default function GameCanvas({
           RIGHT: 2,
         }}
         enableDamping
-        dampingFactor={0.08}
+        dampingFactor={0.06}
         screenSpacePanning={true}
       />
 
-      {/* Enhanced industrial fog — deeper atmosphere */}
-      <fog attach="fog" args={["#050508", 25, 95]} />
+      {/* Deep atmospheric fog — dark navy-black with slow falloff */}
+      <fog attach="fog" args={["#020308", 20, 110]} />
 
-      {/* Hemisphere light — industrial: dark blue sky, warm orange ground */}
-      <hemisphereLight
-        args={["#1a2448", "#2a1808", 0.5]}
-      />
+      {/* Hemisphere light — deep blue sky, warm amber ground bounce */}
+      <hemisphereLight args={["#0a1030", "#1a0f04", 0.45]} />
 
-      {/* Ambient fill — enhanced warm industrial tint */}
-      <ambientLight intensity={0.4} color="#ffe8d0" />
+      {/* Ambient fill — very subtle warm wash so nothing is pure black */}
+      <ambientLight intensity={0.25} color="#ffe0c0" />
 
-      {/* Primary directional — brighter warm industrial light */}
+      {/* Primary key light — warm industrial overhead, strong shadows */}
       <directionalLight
-        position={[18, 15, 18]}
-        intensity={0.9}
-        color="#ffead0"
+        position={[20, 18, 22]}
+        intensity={1.0}
+        color="#ffe4c8"
         castShadow={!isMobile}
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
-        shadow-camera-far={85}
-        shadow-camera-left={-40}
-        shadow-camera-right={40}
-        shadow-camera-top={40}
-        shadow-camera-bottom={-40}
+        shadow-camera-far={100}
+        shadow-camera-left={-45}
+        shadow-camera-right={45}
+        shadow-camera-top={45}
+        shadow-camera-bottom={-45}
         shadow-bias={-0.0001}
       />
 
-      {/* Secondary warm fill from the other side — enhanced */}
+      {/* Secondary warm fill — softer, from opposite side */}
       <directionalLight
-        position={[-5, 6, -5]}
-        intensity={0.35}
-        color="#ffcc88"
+        position={[-8, 8, -8]}
+        intensity={0.25}
+        color="#ffbb77"
       />
 
-      {/* Enhanced cool rim light for depth */}
+      {/* Cyan rim light — cool edge highlight from below-right for sci-fi depth */}
       <directionalLight
-        position={[0, -3, -10]}
-        intensity={0.12}
+        position={[-2, -4, -12]}
+        intensity={0.18}
         color="#06b6d4"
       />
 
-      {/* Factory floor overhead lights — brighter for better visibility */}
+      {/* Overhead factory fluorescent — slightly greenish-white */}
       <directionalLight
-        position={[15, 18, 15]}
-        intensity={0.25}
-        color="#ffe8c0"
+        position={[15, 22, 15]}
+        intensity={0.2}
+        color="#e0ecd8"
       />
 
-      {/* Additional accent light for active areas */}
+      {/* Emerald accent — low from the left, hits building edges */}
       <directionalLight
-        position={[5, 10, 5]}
-        intensity={0.2}
+        position={[2, 6, 28]}
+        intensity={0.12}
         color="#10b981"
+      />
+
+      {/* Amber accent — warm industrial glow from far side */}
+      <directionalLight
+        position={[30, 4, 2]}
+        intensity={0.1}
+        color="#e8a019"
+      />
+
+      {/* Cyan point light — pooled glow near center, simulates overhead hologram */}
+      <pointLight
+        position={[15, 8, 15]}
+        intensity={0.6}
+        color="#06b6d4"
+        distance={30}
+        decay={2}
+      />
+
+      {/* Warm point light — distant factory glow */}
+      <pointLight
+        position={[4, 3, 4]}
+        intensity={0.3}
+        color="#e8a019"
+        distance={20}
+        decay={2}
       />
 
       {/* Ground plane — factory floor */}
@@ -279,7 +302,7 @@ export default function GameCanvas({
       {/* Spawn ring effects */}
       <SpawnRingEffects workers={workers} buildings={BUILDINGS} />
 
-      {/* Post-processing: bloom, chromatic aberration, vignette */}
+      {/* Post-processing: bloom, noise, vignette, SMAA, tone mapping */}
       <PostProcessing />
     </Canvas>
   );

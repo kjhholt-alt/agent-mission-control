@@ -245,7 +245,7 @@ export default function CostsPage() {
                   cx="50%"
                   cy="50%"
                   outerRadius={100}
-                  label={(entry) => `${entry.project}: $${parseFloat(entry.total_cost_usd).toFixed(2)}`}
+                  label
                 >
                   {projectSummary.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
