@@ -41,7 +41,7 @@ export function TerminalStatusBar({
 
   return (
     <div
-      className="flex items-center justify-between px-3 h-full text-[10px] font-mono select-none"
+      className="flex items-center justify-between px-3 h-full text-[12px] font-mono select-none"
       style={{
         backgroundColor: theme.dim + "33",
         borderTop: `1px solid ${theme.dim}`,

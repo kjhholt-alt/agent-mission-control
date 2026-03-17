@@ -29,7 +29,7 @@ export function TerminalHeader({ theme, isConnected, workerCount, eventCount }: 
 
   return (
     <div
-      className="flex items-center justify-between px-4 h-full text-[10px] font-mono select-none"
+      className="flex items-center justify-between px-4 h-full text-[13px] font-mono select-none"
       style={{
         borderBottom: `1px solid ${theme.dim}`,
         backgroundColor: "rgba(0,0,0,0.3)",
@@ -37,7 +37,7 @@ export function TerminalHeader({ theme, isConnected, workerCount, eventCount }: 
     >
       {/* Left: Branding */}
       <div className="flex items-center gap-3">
-        <span className="crt-glow font-bold text-[13px] tracking-[0.25em]" style={{ color: theme.primary }}>
+        <span className="crt-glow font-bold text-[16px] tracking-[0.25em]" style={{ color: theme.primary }}>
           NEXUS
         </span>
         <span style={{ color: theme.dim }}>|</span>

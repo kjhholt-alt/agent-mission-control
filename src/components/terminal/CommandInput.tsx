@@ -160,7 +160,7 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
     <div className="flex flex-col h-full" onClick={() => inputRef.current?.focus()}>
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-3 py-1 border-b text-[10px] font-bold tracking-[0.15em] uppercase shrink-0"
+        className="flex items-center gap-2 px-3 py-1 border-b text-[13px] font-bold tracking-[0.15em] uppercase shrink-0"
         style={{ borderColor: theme.dim, color: theme.secondary }}
       >
         <span style={{ color: theme.primary }}>▸</span>
@@ -171,7 +171,7 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
       </div>
 
       {/* History output */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto terminal-scroll px-3 py-1 font-mono text-[11px]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto terminal-scroll px-3 py-1 font-mono text-[14px]">
         {history.map((entry, i) => (
           <div key={i} className="mb-1">
             {/* Input line */}
@@ -181,7 +181,7 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
             </div>
             {/* Output */}
             <pre
-              className="whitespace-pre-wrap text-[10px] leading-relaxed pl-3"
+              className="whitespace-pre-wrap text-[13px] leading-relaxed pl-3"
               style={{
                 color: entry.type === "error" ? "#ff3333" : entry.type === "success" ? theme.primary : theme.dim,
               }}
@@ -204,7 +204,7 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 bg-transparent outline-none text-[11px] font-mono caret-transparent"
+          className="flex-1 bg-transparent outline-none text-[14px] font-mono caret-transparent"
           style={{ color: theme.primary }}
           spellCheck={false}
           autoComplete="off"

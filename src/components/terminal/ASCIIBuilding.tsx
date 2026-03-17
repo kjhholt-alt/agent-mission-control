@@ -32,12 +32,12 @@ export function ASCIIBuilding({ building, theme, compact }: ASCIIBuildingProps) 
   }, [art, building.shortName]);
 
   return (
-    <div className="font-mono text-[10px] leading-tight whitespace-pre select-none">
+    <div className="font-mono text-[13px] leading-tight whitespace-pre select-none">
       <div className="flex items-center gap-1 mb-0.5">
         <span style={{ color: statusColor }}>{statusChar}</span>
         <span
           style={{ color: theme.primary }}
-          className="text-[9px] font-bold tracking-wider uppercase"
+          className="text-[12px] font-bold tracking-wider uppercase"
         >
           {building.shortName}
         </span>
