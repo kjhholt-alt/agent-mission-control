@@ -116,38 +116,74 @@ def check_schedules():
     schedules = sb_get("nexus_schedules?enabled=eq.true")
 
     ran = 0
+    failed = 0
     for schedule in schedules:
         if should_run(schedule["cron_expression"], schedule.get("last_run_at"), now):
-            print(f"  RUNNING: {schedule['name']}")
+            schedule_name = schedule['name']
+            print(f"  RUNNING: {schedule_name}")
+
+            success = False
+            error_msg = None
 
             # Workflow-type schedules have steps array
             workflow_steps = schedule.get("workflow_steps")
             if workflow_steps and isinstance(workflow_steps, list):
-                result = run_workflow(workflow_steps, schedule["name"])
-                if result:
-                    step_count = result.get("steps_created", "?")
-                    print(f"    Workflow started: {step_count} steps queued")
-                else:
-                    print(f"    Failed to start workflow")
-                    continue
+                try:
+                    result = run_workflow(workflow_steps, schedule_name)
+                    if result:
+                        step_count = result.get("steps_created", "?")
+                        print(f"    Workflow started: {step_count} steps queued")
+                        success = True
+                    else:
+                        error_msg = "Workflow API returned None (both local and prod endpoints failed)"
+                        print(f"    ERROR: {error_msg}")
+                except Exception as e:
+                    error_msg = f"Workflow execution error: {str(e)}"
+                    print(f"    ERROR: {error_msg}")
             else:
-                result = spawn_mission(
-                    schedule["goal"],
-                    schedule.get("project", "nexus"),
-                    schedule.get("worker_type", "scout"),
-                    schedule.get("priority", 50),
-                )
-                if result:
-                    print(f"    Spawned: {result.get('task_id', '?')[:8]}...")
-                else:
-                    print(f"    Failed to spawn")
-                    continue
+                try:
+                    result = spawn_mission(
+                        schedule["goal"],
+                        schedule.get("project", "nexus"),
+                        schedule.get("worker_type", "scout"),
+                        schedule.get("priority", 50),
+                    )
+                    if result:
+                        task_id = result.get('task_id', '?')
+                        print(f"    Spawned: {task_id[:8]}...")
+                        success = True
+                    else:
+                        error_msg = "Spawn API returned None (both local and prod endpoints failed)"
+                        print(f"    ERROR: {error_msg}")
+                except Exception as e:
+                    error_msg = f"Spawn execution error: {str(e)}"
+                    print(f"    ERROR: {error_msg}")
 
-            sb_patch(f"nexus_schedules?id=eq.{schedule['id']}", {
-                "last_run_at": now.isoformat(),
-                "run_count": (schedule.get("run_count") or 0) + 1,
-            })
-            ran += 1
+            if success:
+                # Update schedule last_run_at and increment run_count
+                sb_patch(f"nexus_schedules?id=eq.{schedule['id']}", {
+                    "last_run_at": now.isoformat(),
+                    "run_count": (schedule.get("run_count") or 0) + 1,
+                })
+                ran += 1
+            else:
+                # Log failure but DON'T update last_run_at so it retries on next cycle
+                failed += 1
+                # Log to task log for visibility
+                try:
+                    data = json.dumps({
+                        "task_id": f"sched-{schedule['id']}",
+                        "event": "schedule_failed",
+                        "details": f"Schedule '{schedule_name}' failed: {error_msg}",
+                    }).encode()
+                    req = urllib.request.Request(f"{SB_URL}/rest/v1/swarm_task_log",
+                        data, headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json"})
+                    urllib.request.urlopen(req, timeout=5)
+                except Exception:
+                    pass  # Don't fail the scheduler loop if logging fails
+
+    if failed > 0:
+        print(f"\n  WARNING: {failed} schedule(s) failed to execute")
 
     return ran
 
@@ -215,12 +251,18 @@ def predict_schedules():
     """Analyze task history and suggest recurring schedules (Feature 7)."""
     from datetime import timedelta
 
-    now = datetime.now(timezone.utc)
-    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    try:
+        now = datetime.now(timezone.utc)
+        thirty_days_ago = (now - timedelta(days=30)).isoformat()
 
-    # Fetch completed tasks from last 30 days
-    tasks = sb_get(f"swarm_tasks?status=eq.completed&created_at=gte.{thirty_days_ago}&select=project,task_type,title,created_at")
-    if not tasks:
+        # Fetch completed tasks from last 30 days
+        # URL-encode the datetime for Supabase filter
+        encoded_date = urllib.parse.quote(thirty_days_ago)
+        tasks = sb_get(f"swarm_tasks?status=eq.completed&created_at=gte.{encoded_date}&select=project,task_type,title,created_at")
+        if not tasks:
+            return 0
+    except Exception as e:
+        print(f"  Predictive scheduling error: {e}")
         return 0
 
     # Group by project+task_type+day_of_week
@@ -299,9 +341,12 @@ def main():
                     # Run predictive scheduling every ~6 hours (360 cycles * 60s)
                     predict_counter += 1
                     if predict_counter >= 360:
-                        suggested = predict_schedules()
-                        if suggested:
-                            print(f"  [{datetime.now().strftime('%H:%M')}] Predicted {suggested} new schedules")
+                        try:
+                            suggested = predict_schedules()
+                            if suggested:
+                                print(f"  [{datetime.now().strftime('%H:%M')}] Predicted {suggested} new schedules")
+                        except Exception as e:
+                            print(f"  Predictive scheduling failed: {e}")
                         predict_counter = 0
 
                 except Exception as e:

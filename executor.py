@@ -616,9 +616,10 @@ def fetch_next_task():
         result = supabase_request("GET", "swarm_tasks?status=eq.approved&order=priority.asc&limit=1")
         if result and len(result) > 0:
             task = result[0]
+            task_id = task['id']
             # Optimistic lock: only claim if still approved (prevents double-execution)
             claimed = supabase_request("PATCH",
-                f"swarm_tasks?id=eq.{task['id']}&status=eq.approved", {
+                f"swarm_tasks?id=eq.{task_id}&status=eq.approved", {
                     "status": "running",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "assigned_worker_id": WORKER_ID,
@@ -626,14 +627,17 @@ def fetch_next_task():
             if claimed and len(claimed) > 0:
                 return task
             # Another worker claimed it, fall through
+            print(f"  RACE: Task {task_id[:8]} already claimed by another worker (was approved)")
+            log_task_event(task_id, "race_condition", f"Task claim race: already claimed", task.get("project", "general"))
 
         # Queued tasks
         result = supabase_request("GET", "swarm_tasks?status=eq.queued&order=priority.asc&limit=1")
         if result and len(result) > 0:
             task = result[0]
+            task_id = task['id']
             # Optimistic lock: only claim if still queued
             claimed = supabase_request("PATCH",
-                f"swarm_tasks?id=eq.{task['id']}&status=eq.queued", {
+                f"swarm_tasks?id=eq.{task_id}&status=eq.queued", {
                     "status": "running",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "assigned_worker_id": WORKER_ID,
@@ -641,6 +645,8 @@ def fetch_next_task():
             if claimed and len(claimed) > 0:
                 return task
             # Another worker claimed it
+            print(f"  RACE: Task {task_id[:8]} already claimed by another worker (was queued)")
+            log_task_event(task_id, "race_condition", f"Task claim race: already claimed", task.get("project", "general"))
 
         return None
 
@@ -761,18 +767,26 @@ def execute_task(task):
 
     try:
         start = time.time()
+        print(f"  Starting subprocess: {shell_cmd[:100]}...")
+        log_task_event(task_id, "subprocess_start", f"Launching Claude CLI for {title}", project, f"CWD: {cwd}, Model: {model or 'default'}")
+
         # Hide cmd.exe windows on Windows so they don't spam the desktop
         startupinfo = None
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
+
         result = subprocess.run(
             shell_cmd, cwd=cwd, capture_output=True, text=True,
             timeout=TASK_TIMEOUT, shell=True, encoding="utf-8", errors="replace",
             startupinfo=startupinfo,
         )
         duration = round(time.time() - start, 1)
+
+        print(f"  Subprocess completed: exit_code={result.returncode}, duration={duration}s, stdout_len={len(result.stdout)}, stderr_len={len(result.stderr)}")
+        log_task_event(task_id, "subprocess_complete", f"Claude CLI finished for {title}", project,
+                      f"Exit: {result.returncode}, Duration: {duration}s, Output: {len(result.stdout)} chars")
 
         stdout = result.stdout or ""
         stderr = result.stderr or ""
