@@ -11,6 +11,7 @@ export interface OpsTask {
   assigned_worker_id: string | null;
   worker_type: string | null;
   parent_task_id: string | null;
+  depends_on: string[] | null;
   cost_cents: number;
   tokens_used: number;
   started_at: string | null;

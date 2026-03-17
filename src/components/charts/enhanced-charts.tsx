@@ -22,12 +22,25 @@ import {
 import { formatCost, formatTokens } from "@/lib/pricing";
 
 // Custom tooltip component with formatted data
-interface CustomTooltipProps extends TooltipProps<number, string> {
-  formatter?: (value: number) => string;
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    name?: string;
+    value?: number;
+    color?: string;
+    dataKey?: string;
+  }>;
+  label?: string;
+  formatter?: (value: number | undefined) => string;
 }
 
 function CustomTooltip({ active, payload, label, formatter }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
+
+  const formatValue = (value: number | undefined) => {
+    if (value === undefined) return "—";
+    return formatter ? formatter(value) : value.toFixed(2);
+  };
 
   return (
     <div className="bg-zinc-900 border border-cyan-500/30 rounded-lg p-3 shadow-xl backdrop-blur-sm">
@@ -58,7 +71,7 @@ interface EnhancedAreaChartProps {
   dataKeys: Array<{ key: string; name: string; color: string }>;
   xKey: string;
   height?: number;
-  formatter?: (value: number) => string;
+  formatter?: (value: number | undefined) => string;
   showLegend?: boolean;
 }
 
@@ -166,7 +179,7 @@ interface EnhancedLineChartProps {
   dataKeys: Array<{ key: string; name: string; color: string }>;
   xKey: string;
   height?: number;
-  formatter?: (value: number) => string;
+  formatter?: (value: number | undefined) => string;
   showLegend?: boolean;
 }
 
@@ -267,7 +280,7 @@ interface EnhancedBarChartProps {
   dataKeys: Array<{ key: string; name: string; color: string }>;
   xKey: string;
   height?: number;
-  formatter?: (value: number) => string;
+  formatter?: (value: number | undefined) => string;
   showLegend?: boolean;
   stacked?: boolean;
 }
@@ -375,7 +388,7 @@ interface EnhancedPieChartProps {
   data: Array<{ name: string; value: number }>;
   colors: string[];
   height?: number;
-  formatter?: (value: number) => string;
+  formatter?: (value: number | undefined) => string;
   showLegend?: boolean;
 }
 

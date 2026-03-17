@@ -6,6 +6,8 @@ import { AlertBanner } from "@/components/AlertBanner";
 import { ConnectionStatus } from "@/components/connection-status";
 import { MobileNav } from "@/components/MobileNav";
 import { KeyboardShortcutsProvider } from "@/components/keyboard-shortcuts-provider";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -41,6 +43,9 @@ function GlobalNav() {
           <span>or</span>
           <kbd className="px-1 bg-white/10 rounded border border-white/20">?</kbd>
         </div>
+      </div>
+      <div className="md:hidden">
+        <ThemeToggle />
       </div>
       <div className="hidden md:flex items-center gap-1">
         <a href="/" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-colors">
@@ -82,6 +87,9 @@ function GlobalNav() {
         <a href="/settings" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white hover:bg-white/5 rounded transition-colors">
           Settings
         </a>
+        <div className="ml-2 pl-2 border-l border-white/10">
+          <ThemeToggle />
+        </div>
       </div>
     </nav>
   );
@@ -93,17 +101,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${jetbrainsMono.variable} antialiased`}>
-        <ToastProvider>
-          <TooltipProvider>
-            <KeyboardShortcutsProvider>
-              <GlobalNav />
-              <AlertBanner />
-              <div className="pt-10">{children}</div>
-            </KeyboardShortcutsProvider>
-          </TooltipProvider>
-        </ToastProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ToastProvider>
+            <TooltipProvider>
+              <KeyboardShortcutsProvider>
+                <GlobalNav />
+                <AlertBanner />
+                <div className="pt-10">{children}</div>
+              </KeyboardShortcutsProvider>
+            </TooltipProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

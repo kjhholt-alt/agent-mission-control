@@ -10,7 +10,7 @@ import { PostProcessing } from "./PostProcessing";
 import { Worker3D } from "./Worker3D";
 import { ConveyorBelt3D } from "./ConveyorBelt3D";
 import { DataPackets } from "./DataPackets";
-import { BuildingSparkles, CompletionBursts, SpawnRingEffects } from "./ParticleEffects";
+import { BuildingSparkles, CompletionBursts, SpawnRingEffects, TaskParticleSystem } from "./ParticleEffects";
 import { SelectionRing } from "./SelectionRing";
 import { ForceField3D } from "./ForceField3D";
 import { Pipes3D } from "./Pipes3D";
@@ -112,70 +112,79 @@ export default function GameCanvas({
         far={300}
       />
 
-      {/* Camera controls: pan + zoom only, no rotation */}
+      {/* Camera controls: smooth pan + zoom with improved responsiveness */}
       <OrbitControls
         enableRotate={false}
         enablePan={true}
         enableZoom={true}
         target={[15, 0, 15]}
-        minZoom={10}
-        maxZoom={100}
-        panSpeed={1.2}
-        zoomSpeed={0.8}
+        minZoom={15}
+        maxZoom={80}
+        panSpeed={1.5}
+        zoomSpeed={1.2}
         mouseButtons={{
           LEFT: 2,
           MIDDLE: 1,
           RIGHT: 2,
         }}
         enableDamping
-        dampingFactor={0.1}
+        dampingFactor={0.08}
+        screenSpacePanning={true}
       />
 
-      {/* Industrial fog — depth cue and atmosphere */}
-      <fog attach="fog" args={["#050508", 30, 90]} />
+      {/* Enhanced industrial fog — deeper atmosphere */}
+      <fog attach="fog" args={["#050508", 25, 95]} />
 
       {/* Hemisphere light — industrial: dark blue sky, warm orange ground */}
       <hemisphereLight
-        args={["#1a2040", "#2a1a08", 0.4]}
+        args={["#1a2448", "#2a1808", 0.5]}
       />
 
-      {/* Ambient fill — slightly warm industrial tint */}
-      <ambientLight intensity={0.3} color="#ffe8d0" />
+      {/* Ambient fill — enhanced warm industrial tint */}
+      <ambientLight intensity={0.4} color="#ffe8d0" />
 
-      {/* Primary directional — warm industrial orange tint */}
+      {/* Primary directional — brighter warm industrial light */}
       <directionalLight
-        position={[15, 12, 15]}
-        intensity={0.7}
-        color="#ffe0b0"
+        position={[18, 15, 18]}
+        intensity={0.9}
+        color="#ffead0"
         castShadow={!isMobile}
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
-        shadow-camera-far={80}
-        shadow-camera-left={-35}
-        shadow-camera-right={35}
-        shadow-camera-top={35}
-        shadow-camera-bottom={-35}
+        shadow-camera-far={85}
+        shadow-camera-left={-40}
+        shadow-camera-right={40}
+        shadow-camera-top={40}
+        shadow-camera-bottom={-40}
+        shadow-bias={-0.0001}
       />
 
-      {/* Secondary warm fill from the other side */}
+      {/* Secondary warm fill from the other side — enhanced */}
       <directionalLight
-        position={[-3, 5, -3]}
-        intensity={0.25}
+        position={[-5, 6, -5]}
+        intensity={0.35}
         color="#ffcc88"
       />
 
-      {/* Subtle cool rim light */}
+      {/* Enhanced cool rim light for depth */}
       <directionalLight
-        position={[0, -2, -8]}
-        intensity={0.08}
+        position={[0, -3, -10]}
+        intensity={0.12}
         color="#06b6d4"
       />
 
-      {/* Factory floor overhead lights (simulated via spot-like directionals) */}
+      {/* Factory floor overhead lights — brighter for better visibility */}
       <directionalLight
-        position={[15, 15, 15]}
-        intensity={0.15}
+        position={[15, 18, 15]}
+        intensity={0.25}
         color="#ffe8c0"
+      />
+
+      {/* Additional accent light for active areas */}
+      <directionalLight
+        position={[5, 10, 5]}
+        intensity={0.2}
+        color="#10b981"
       />
 
       {/* Ground plane — factory floor */}
@@ -256,6 +265,13 @@ export default function GameCanvas({
 
       {/* Building sparkles */}
       <BuildingSparkles buildings={BUILDINGS} isMobile={isMobile} />
+
+      {/* Task particle system — floating status indicators */}
+      <TaskParticleSystem
+        workers={workers}
+        buildings={BUILDINGS}
+        isMobile={isMobile}
+      />
 
       {/* Completion burst effects */}
       <CompletionBursts workers={workers} buildings={BUILDINGS} />

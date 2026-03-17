@@ -259,3 +259,152 @@ function SpawnRingMesh({ ring }: { ring: SpawnRing }) {
     </mesh>
   );
 }
+
+// ─── TASK PARTICLE SYSTEM ────────────────────────────────────────────────────
+
+interface TaskParticle {
+  id: number;
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  color: THREE.Color;
+  life: number;
+  maxLife: number;
+  status: "running" | "queued" | "failed";
+}
+
+interface TaskParticleSystemProps {
+  workers: Worker[];
+  buildings: Building[];
+  isMobile?: boolean;
+}
+
+/**
+ * Floating particle system representing active tasks.
+ * - Green particles for running tasks
+ * - Yellow particles for queued/idle workers
+ * - Red particles for failed/error states
+ */
+export function TaskParticleSystem({
+  workers,
+  buildings,
+  isMobile,
+}: TaskParticleSystemProps) {
+  const [particles, setParticles] = useState<TaskParticle[]>([]);
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const idCounter = useRef(0);
+
+  // Spawn particles around active workers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newParticles: TaskParticle[] = [];
+
+      workers.forEach((worker) => {
+        const building = buildings.find((b) => b.id === worker.currentBuildingId);
+        if (!building) return;
+
+        // Determine particle status and color
+        let status: TaskParticle["status"] = "queued";
+        let color: THREE.Color;
+
+        if (worker.status === "working") {
+          status = "running";
+          color = new THREE.Color("#10b981"); // Green
+        } else if (building.status === "error") {
+          status = "failed";
+          color = new THREE.Color("#ef4444"); // Red
+        } else {
+          status = "queued";
+          color = new THREE.Color("#e8a019"); // Yellow
+        }
+
+        // Spawn 1-2 particles per worker
+        const particleCount = isMobile ? 1 : Math.random() > 0.5 ? 2 : 1;
+
+        for (let i = 0; i < particleCount; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 0.3 + Math.random() * 0.5;
+          const height = 0.5 + Math.random() * 1.5;
+
+          newParticles.push({
+            id: idCounter.current++,
+            position: new THREE.Vector3(
+              building.gridX + Math.cos(angle) * radius,
+              height,
+              building.gridY + Math.sin(angle) * radius
+            ),
+            velocity: new THREE.Vector3(
+              (Math.random() - 0.5) * 0.2,
+              0.3 + Math.random() * 0.4,
+              (Math.random() - 0.5) * 0.2
+            ),
+            color,
+            life: 2.0 + Math.random() * 1.0,
+            maxLife: 2.0 + Math.random() * 1.0,
+            status,
+          });
+        }
+      });
+
+      setParticles((prev) => [...prev, ...newParticles]);
+    }, isMobile ? 800 : 500); // Spawn rate
+
+    return () => clearInterval(interval);
+  }, [workers, buildings, isMobile]);
+
+  // Animate particles
+  useFrame((_, delta) => {
+    if (particles.length === 0 || !meshRef.current) return;
+
+    const tempMatrix = new THREE.Matrix4();
+    const alive: TaskParticle[] = [];
+
+    particles.forEach((p, i) => {
+      p.life -= delta;
+      if (p.life <= 0) return;
+
+      // Update position
+      p.position.add(p.velocity.clone().multiplyScalar(delta));
+
+      // Fade and shrink over lifetime
+      const lifeRatio = p.life / p.maxLife;
+      const scale = lifeRatio * 0.06;
+
+      tempMatrix.makeScale(scale, scale, scale);
+      tempMatrix.setPosition(p.position);
+      meshRef.current!.setMatrixAt(i, tempMatrix);
+      meshRef.current!.setColorAt(i, p.color);
+
+      alive.push(p);
+    });
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true;
+    }
+
+    // Clean up dead particles
+    if (alive.length !== particles.length) {
+      setParticles(alive);
+    }
+  });
+
+  const maxParticles = Math.max(particles.length, 1);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, maxParticles]}
+      frustumCulled={false}
+      visible={particles.length > 0}
+    >
+      <sphereGeometry args={[1, 8, 8]} />
+      <meshStandardMaterial
+        emissive="#ffffff"
+        emissiveIntensity={2.0}
+        toneMapped={false}
+        transparent
+        opacity={0.9}
+      />
+    </instancedMesh>
+  );
+}

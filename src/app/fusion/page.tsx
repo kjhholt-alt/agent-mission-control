@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
 import { FusionPageLoading } from "@/components/loading-states";
 import { ModelDistributionChart, CostByModelChart, ProjectActivityChart } from "@/components/charts/dashboard-charts";
+import type { NexusSession } from "@/lib/collector-types";
 
 interface GitCommit {
   repo: string;
@@ -66,6 +67,12 @@ interface FusionData {
     task_count: number;
     cost: number;
   }>;
+  rawSessions: Array<{
+    cost_usd: string;
+    last_activity: string;
+    model?: string;
+    project_name?: string;
+  }>;
 }
 
 function HealthDot({ health }: { health: string }) {
@@ -108,6 +115,7 @@ export default function FusionPage() {
   const [data, setData] = useState<FusionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [gitCommits, setGitCommits] = useState<GitCommit[]>([]);
+  const [rawSessions, setRawSessions] = useState<NexusSession[]>([]);
 
   const fetchFusionData = useCallback(async () => {
     setLoading(true);
@@ -143,6 +151,9 @@ export default function FusionPage() {
       const tasks = tasksRes.data || [];
       const agents = agentsRes.data || [];
       const deploys = deploysRes.data || [];
+
+      // Store raw sessions for charts
+      setRawSessions(sessions);
 
       // Aggregate sessions
       const todaySessions = sessions.filter((s) => s.last_activity >= todayStart);
@@ -222,6 +233,7 @@ export default function FusionPage() {
           })),
         },
         projects,
+        rawSessions: sessions,
       });
     } catch {
       // Silently handle errors
@@ -509,7 +521,7 @@ export default function FusionPage() {
                   </h2>
                 </div>
                 <div className="p-4">
-                  <ModelDistributionChart sessions={sessions} />
+                  <ModelDistributionChart sessions={rawSessions as any} />
                 </div>
               </div>
 
@@ -522,7 +534,7 @@ export default function FusionPage() {
                   </h2>
                 </div>
                 <div className="p-4">
-                  <CostByModelChart sessions={sessions} />
+                  <CostByModelChart sessions={rawSessions as any} />
                 </div>
               </div>
 
@@ -535,7 +547,7 @@ export default function FusionPage() {
                   </h2>
                 </div>
                 <div className="p-4">
-                  <ProjectActivityChart sessions={sessions} />
+                  <ProjectActivityChart sessions={rawSessions as any} />
                 </div>
               </div>
             </motion.div>

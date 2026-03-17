@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/toast";
 import type { OpsTask, OpsWorker, OpsBudget, OpsEvent } from "@/lib/ops-types";
 
 export interface OpsData {
@@ -27,6 +28,8 @@ export function useOpsData(): OpsData {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const mountedRef = useRef(true);
+  const toast = useToast();
+  const workerStatusRef = useRef<Map<string, string>>(new Map());
 
   const fetchAll = useCallback(async () => {
     const [tasksRes, workersRes, budgetRes, eventsRes] = await Promise.all([
@@ -139,9 +142,25 @@ export function useOpsData(): OpsData {
         (payload) => {
           startTransition(() => {
             if (payload.eventType === "INSERT") {
-              setWorkers((prev) => [payload.new as OpsWorker, ...prev]);
+              const newWorker = payload.new as OpsWorker;
+              setWorkers((prev) => [newWorker, ...prev]);
+              toast.info(`Worker spawned: ${newWorker.worker_name}`);
             } else if (payload.eventType === "UPDATE") {
               const w = payload.new as OpsWorker;
+              const prevStatus = workerStatusRef.current.get(w.id);
+
+              // Show toast on status change
+              if (prevStatus && prevStatus !== w.status) {
+                if (w.status === "working" || w.status === "busy") {
+                  toast.info(`${w.worker_name} started working`);
+                } else if (w.status === "idle") {
+                  toast.success(`${w.worker_name} completed work`);
+                } else if (w.status === "dead") {
+                  toast.warning(`${w.worker_name} went offline`);
+                }
+              }
+
+              workerStatusRef.current.set(w.id, w.status);
               setWorkers((prev) =>
                 prev.map((existing) =>
                   existing.id === w.id ? w : existing

@@ -243,8 +243,16 @@ export function Workbench({ taskId, onClose }: WorkbenchProps) {
 
                 {/* Tab content */}
                 <div className="flex-1 overflow-y-auto px-6 py-4">
-                  {activeTab === "overview" && (
-                    <div className="space-y-4">
+                  <AnimatePresence mode="wait">
+                    {activeTab === "overview" && (
+                      <motion.div
+                        key="overview"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="space-y-4"
+                      >
                       {/* Description/Prompt */}
                       <div>
                         <h3 className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
@@ -299,11 +307,17 @@ export function Workbench({ taskId, onClose }: WorkbenchProps) {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
 
                   {activeTab === "output" && (
-                    <div>
+                    <motion.div
+                      key="output"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      transition={{ duration: 0.15 }}
+                    >
                       {outputText ? (
                         <div className="relative">
                           <button
@@ -349,11 +363,18 @@ export function Workbench({ taskId, onClose }: WorkbenchProps) {
                           No output recorded
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   )}
 
                   {activeTab === "logs" && (
-                    <div className="space-y-1">
+                    <motion.div
+                      key="logs"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      transition={{ duration: 0.15 }}
+                      className="space-y-1"
+                    >
                       {logs.length === 0 ? (
                         <div className="text-center py-12 text-zinc-600 text-sm">
                           No log entries
@@ -385,8 +406,9 @@ export function Workbench({ taskId, onClose }: WorkbenchProps) {
                           </div>
                         ))
                       )}
-                    </div>
+                    </motion.div>
                   )}
+                  </AnimatePresence>
                 </div>
               </div>
             ) : (

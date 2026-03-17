@@ -17,6 +17,7 @@ import {
   Zap,
   RefreshCw,
   ChevronRight,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatCost, formatTokens } from "@/lib/pricing";
@@ -46,11 +47,17 @@ interface RecentTask {
   actual_cost_cents: number;
 }
 
+interface ChartTask {
+  status: string;
+  created_at: string;
+}
+
 export default function CommandCenterPage() {
   const [tasks, setTasks] = useState<TaskSummary>({ queued: 0, running: 0, completed_today: 0, failed_today: 0 });
   const [costs, setCosts] = useState<CostSummary>({ today: 0, week: 0, month: 0 });
   const [sessions, setSessions] = useState<NexusSession[]>([]);
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
+  const [chartTasks, setChartTasks] = useState<ChartTask[]>([]);
   const [achievements, setAchievements] = useState({ unlocked: 0, total: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -61,13 +68,14 @@ export default function CommandCenterPage() {
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    const [taskRes, sessionRes, recentRes, todayCostRes, weekCostRes, monthCostRes] = await Promise.all([
+    const [taskRes, sessionRes, recentRes, todayCostRes, weekCostRes, monthCostRes, chartTasksRes] = await Promise.all([
       supabase.from("swarm_tasks").select("status").gte("updated_at", todayStart),
       supabase.from("nexus_sessions").select("*").eq("status", "active").order("last_activity", { ascending: false }).limit(10),
       supabase.from("swarm_tasks").select("id,title,project,status,completed_at,actual_cost_cents").eq("status", "completed").order("completed_at", { ascending: false }).limit(15),
       supabase.from("nexus_sessions").select("cost_usd").gte("last_activity", todayStart),
       supabase.from("nexus_sessions").select("cost_usd").gte("last_activity", weekStart),
       supabase.from("nexus_sessions").select("cost_usd").gte("last_activity", monthStart),
+      supabase.from("swarm_tasks").select("status,created_at").gte("created_at", weekStart),
     ]);
 
     if (taskRes.data) {
@@ -82,6 +90,7 @@ export default function CommandCenterPage() {
 
     if (sessionRes.data) setSessions(sessionRes.data as NexusSession[]);
     if (recentRes.data) setRecentTasks(recentRes.data);
+    if (chartTasksRes.data) setChartTasks(chartTasksRes.data);
 
     setCosts({
       today: todayCostRes.data?.reduce((s, r) => s + (parseFloat(r.cost_usd) || 0), 0) || 0,
@@ -205,7 +214,7 @@ export default function CommandCenterPage() {
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Success Rate (7 Days)</span>
               </div>
               <div className="p-3">
-                <SuccessRateChart tasks={recentTasks} />
+                <SuccessRateChart tasks={chartTasks} />
               </div>
             </div>
 

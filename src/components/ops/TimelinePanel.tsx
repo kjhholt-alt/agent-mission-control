@@ -575,16 +575,36 @@ export function TimelinePanel({
 
       {/* Tab content */}
       <div className="flex-1 min-h-0 rounded-lg border border-zinc-800/40" style={{ background: "rgba(10,10,18,0.5)" }}>
-        {currentTab === "timeline" ? (
-          <TimelineTab events={events} tasks={tasks} workers={workers} />
-        ) : (
-          <DetailsTab
-            selectedTask={selectedTask}
-            selectedWorker={selectedWorker}
-            tasks={tasks}
-            onClear={onClearSelection}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          {currentTab === "timeline" ? (
+            <motion.div
+              key="timeline"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="h-full"
+            >
+              <TimelineTab events={events} tasks={tasks} workers={workers} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="details"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="h-full"
+            >
+              <DetailsTab
+                selectedTask={selectedTask}
+                selectedWorker={selectedWorker}
+                tasks={tasks}
+                onClear={onClearSelection}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

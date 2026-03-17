@@ -83,8 +83,27 @@ export function DaemonPanel() {
   // Poll daemon status
   const pollStatus = useCallback(async () => {
     const s = await getDaemonStatus();
-    if (s) setStatus(s);
-  }, []);
+    if (s) {
+      const prevStatus = prevStatusRef.current;
+      const newStatus = s.status;
+
+      // Show toast on status change
+      if (prevStatus && prevStatus !== newStatus) {
+        if (newStatus === "Running") {
+          toast.success("Daemon started successfully");
+        } else if (newStatus === "Stopped") {
+          toast.info("Daemon stopped");
+        } else if (newStatus === "Crashed") {
+          toast.error("Daemon crashed — check logs");
+        } else if (newStatus === "Starting") {
+          toast.info("Daemon starting...");
+        }
+      }
+
+      prevStatusRef.current = newStatus;
+      setStatus(s);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (!visible) return;
@@ -106,6 +125,7 @@ export function DaemonPanel() {
     const unCrash = onDaemonCrash((msg) => {
       setLogs((prev) => [...prev.slice(-99), `[CRASH] ${msg}`]);
       sendNotification("Nexus Daemon Crashed", msg);
+      toast.error(`Daemon crashed: ${msg}`);
     });
 
     return () => {

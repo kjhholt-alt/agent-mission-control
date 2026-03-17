@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Satellite, Users, Play, CheckCircle, DollarSign } from "lucide-react";
+import { Satellite, Users, Play, CheckCircle, DollarSign, Network } from "lucide-react";
+import Link from "next/link";
 import type { OpsWorker, OpsTask, OpsBudget } from "@/lib/ops-types";
 import { formatTimeAgo } from "@/lib/ops-types";
 
@@ -114,6 +115,15 @@ export function StatusRibbon({ workers, tasks, budget, connected, lastUpdated }:
             <span className="text-zinc-400">OPS CENTER</span>
           </h1>
         </div>
+        <Link
+          href="/ops/graph"
+          className="ml-4 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/20 transition-colors flex items-center gap-2 group"
+        >
+          <Network className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+          <span className="text-xs font-mono text-cyan-400 group-hover:text-cyan-300">
+            GRAPH VIEW
+          </span>
+        </Link>
       </div>
 
       {/* Center: Counters */}

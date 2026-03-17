@@ -1448,15 +1448,15 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick, i
   return (
     <>
       <group ref={groupRef}>
-        {/* Ground shadow/glow circle */}
+        {/* Ground shadow/glow circle — enhanced for active workers */}
         <mesh position={[0, -baseY + 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.4, 16]} />
+          <circleGeometry args={[worker.status === "working" ? 0.5 : 0.4, 16]} />
           <meshStandardMaterial
             color={config.color}
             emissive={config.color}
-            emissiveIntensity={0.5}
+            emissiveIntensity={worker.status === "working" ? 0.8 : 0.5}
             transparent
-            opacity={0.15}
+            opacity={worker.status === "working" ? 0.25 : 0.15}
             depthWrite={false}
           />
         </mesh>
@@ -1500,8 +1500,28 @@ export function Worker3D({ worker, buildings, allWorkers, isSelected, onClick, i
           <WorkerHoverTooltip worker={worker} config={config} />
         )}
 
-        {/* Main glow light */}
-        <pointLight color={config.color} intensity={0.6} distance={2.5} decay={2} />
+        {/* Main glow light — enhanced for active workers */}
+        <pointLight
+          color={config.color}
+          intensity={worker.status === "working" ? 1.2 : 0.6}
+          distance={worker.status === "working" ? 3.5 : 2.5}
+          decay={2}
+        />
+
+        {/* Additional pulsing glow for active workers */}
+        {worker.status === "working" && (
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[0.7, 16, 16]} />
+            <meshStandardMaterial
+              color={config.color}
+              emissive={config.color}
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.1}
+              depthWrite={false}
+            />
+          </mesh>
+        )}
 
         {/* Floating label */}
         <Html

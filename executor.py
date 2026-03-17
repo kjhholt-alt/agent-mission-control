@@ -74,6 +74,7 @@ PROJECT_DIRS = {
     "wavefront": f"{PROJECTS_ROOT}/wavefront",
     "stock-breakout-alerts": f"{PROJECTS_ROOT}/stock-breakout-alerts",
     "municipal-crm": f"{PROJECTS_ROOT}/municipal-crm",
+    "pl-engine": f"{PROJECTS_ROOT}/pl-engine",
 }
 
 # Model routing: cost_tier → claude model flag

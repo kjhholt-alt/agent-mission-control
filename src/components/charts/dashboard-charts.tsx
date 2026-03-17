@@ -56,7 +56,7 @@ export function TaskTrendChart({ tasks }: TaskTrendChartProps) {
 
 // Cost over time chart (last 7 days)
 interface CostTrendChartProps {
-  sessions: NexusSession[];
+  sessions: Array<{ cost_usd: string; last_activity: string }>;
 }
 
 export function CostTrendChart({ sessions }: CostTrendChartProps) {
@@ -96,14 +96,14 @@ export function CostTrendChart({ sessions }: CostTrendChartProps) {
       ]}
       xKey="date"
       height={250}
-      formatter={(value) => formatCost(value)}
+      formatter={(value) => formatCost(value || 0)}
     />
   );
 }
 
 // Model distribution chart
 interface ModelDistributionChartProps {
-  sessions: NexusSession[];
+  sessions: Array<{ model?: string }>;
 }
 
 export function ModelDistributionChart({ sessions }: ModelDistributionChartProps) {
@@ -131,7 +131,7 @@ export function ModelDistributionChart({ sessions }: ModelDistributionChartProps
 
 // Cost by model comparison
 interface CostByModelChartProps {
-  sessions: NexusSession[];
+  sessions: Array<{ cost_usd: string; model?: string }>;
 }
 
 export function CostByModelChart({ sessions }: CostByModelChartProps) {
@@ -160,7 +160,7 @@ export function CostByModelChart({ sessions }: CostByModelChartProps) {
       ]}
       xKey="model"
       height={250}
-      formatter={(value) => formatCost(value)}
+      formatter={(value) => formatCost(value || 0)}
       showLegend={false}
     />
   );
@@ -168,7 +168,7 @@ export function CostByModelChart({ sessions }: CostByModelChartProps) {
 
 // Project activity chart
 interface ProjectActivityChartProps {
-  sessions: NexusSession[];
+  sessions: Array<{ project_name?: string }>;
 }
 
 export function ProjectActivityChart({ sessions }: ProjectActivityChartProps) {
@@ -296,7 +296,7 @@ export function SuccessRateChart({ tasks }: SuccessRateChartProps) {
       ]}
       xKey="date"
       height={200}
-      formatter={(value) => `${value}%`}
+      formatter={(value) => `${value || 0}%`}
     />
   );
 }
