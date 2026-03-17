@@ -25,7 +25,7 @@ import requests
 
 from swarm.budget.budget_manager import BudgetManager
 from swarm.budget.cost_calculator import calculate_cost
-from swarm.config import ANTHROPIC_API_KEY, ENABLE_QUALITY_GATE, NEXUS_URL, SUPABASE_KEY, SUPABASE_URL
+from swarm.config import ANTHROPIC_API_KEY, ENABLE_QUALITY_GATE, NEXUS_URL, SUPABASE_KEY, SUPABASE_URL, HAIKU_TASK_TYPES, SONNET_TASK_TYPES
 from swarm.memory import SwarmMemory
 from swarm.retry_strategy import AdaptiveRetry
 from swarm.tasks.task_manager import TaskManager
@@ -270,6 +270,138 @@ class BaseWorker:
             logger.warning("Quality check failed: %s (passing by default)", e)
             return (True, "")  # Don't block on quality check errors
 
+    # ── Specialization (migrated from executor v3) ──────────────────────
+
+    def load_specialization(self, project: str, task_type: str) -> str:
+        """Load best practices and patterns for this project+task_type.
+
+        Queries the agent_specializations table for historical success data
+        and known best practices/common errors.
+
+        Args:
+            project: Project key
+            task_type: Task type (build, eval, etc.)
+
+        Returns:
+            Formatted context string, or empty string if none found
+        """
+        try:
+            resp = (
+                self.sb.table("agent_specializations")
+                .select("best_practices, common_errors, success_count, fail_count")
+                .eq("project", project)
+                .eq("task_type", task_type)
+                .limit(1)
+                .execute()
+            )
+            if not resp.data:
+                return ""
+
+            spec = resp.data[0]
+            parts = []
+            if spec.get("best_practices"):
+                parts.append(f"Best practices for {project}/{task_type}:\n{spec['best_practices']}")
+            if spec.get("common_errors"):
+                parts.append(f"Common errors to avoid:\n{spec['common_errors']}")
+
+            total = (spec.get("success_count") or 0) + (spec.get("fail_count") or 0)
+            if total > 0:
+                rate = round((spec.get("success_count", 0) / total) * 100)
+                parts.append(f"Historical success rate: {rate}% ({total} tasks)")
+
+            return "\n".join(parts) + "\n\n" if parts else ""
+        except Exception as e:
+            logger.debug("Failed to load specialization: %s", e)
+            return ""
+
+    def track_specialization(self, project: str, task_type: str, success: bool, duration: float):
+        """Update specialization stats after task completion.
+
+        Args:
+            project: Project key
+            task_type: Task type
+            success: Whether the task succeeded
+            duration: Duration in seconds
+        """
+        try:
+            resp = (
+                self.sb.table("agent_specializations")
+                .select("id, success_count, fail_count, avg_duration_seconds")
+                .eq("project", project)
+                .eq("task_type", task_type)
+                .limit(1)
+                .execute()
+            )
+
+            now = datetime.now(timezone.utc).isoformat()
+            field = "success_count" if success else "fail_count"
+
+            if resp.data:
+                row = resp.data[0]
+                new_count = (row.get(field) or 0) + 1
+                total = (row.get("success_count") or 0) + (row.get("fail_count") or 0) + 1
+                old_avg = row.get("avg_duration_seconds") or 0
+                new_avg = round(((old_avg * (total - 1)) + duration) / total, 1)
+
+                self.sb.table("agent_specializations").update({
+                    field: new_count,
+                    "avg_duration_seconds": new_avg,
+                    "last_updated": now,
+                }).eq("id", row["id"]).execute()
+            else:
+                self.sb.table("agent_specializations").insert({
+                    "project": project,
+                    "task_type": task_type,
+                    "success_count": 1 if success else 0,
+                    "fail_count": 0 if success else 1,
+                    "avg_duration_seconds": round(duration, 1),
+                    "last_updated": now,
+                }).execute()
+        except Exception as e:
+            logger.debug("Failed to track specialization: %s", e)
+
+    # ── Handoff (migrated from executor v3) ───────────────────────────
+
+    def handle_handoff(self, task: dict[str, Any], output: str):
+        """After completion, spawn follow-up tasks if chain_next is defined.
+
+        Reads chain_next from input_data and creates queued tasks
+        with the parent output injected into the prompt.
+
+        Args:
+            task: The completed task row
+            output: The task output text
+        """
+        input_data = task.get("input_data") or {}
+        if isinstance(input_data, str):
+            try:
+                import json
+                input_data = json.loads(input_data)
+            except Exception:
+                return
+
+        chain_next = input_data.get("chain_next")
+        if not chain_next or not isinstance(chain_next, list):
+            return
+
+        project = task.get("project", "general")
+
+        for next_step in chain_next:
+            goal = next_step.get("description", next_step.get("goal", ""))
+            if next_step.get("use_parent_output", True):
+                goal = f"Previous step output:\n\n{output[:3000]}\n\n---\n\n{goal}"
+
+            self.task_manager.create_task(
+                task_type=next_step.get("task_type", "build"),
+                title=next_step.get("title", f"[Handoff] {next_step.get('task_type', 'review')}"),
+                project=next_step.get("project", project),
+                input_data={"prompt": goal},
+                cost_tier=next_step.get("cost_tier", "cc_light"),
+                priority=next_step.get("priority", 30),
+                parent_id=task["id"],
+            )
+            logger.info("Handoff: spawned %s task from %s", next_step.get("task_type"), task["id"][:8])
+
     # ── Pull and execute ──────────────────────────────────────────────────
 
     def pull_and_execute(self) -> bool:
@@ -302,12 +434,18 @@ class BaseWorker:
             "task_started", "running", {"task_id": task["id"], "title": task["title"]}
         )
 
-        # ── Memory injection: add context from previous work ──────────
+        # ── Memory + specialization injection ─────────────────────────
         project = task.get("project", "")
         task_type = task.get("task_type")
         if project:
             context = self.memory.recall(project)
             failed_approaches = self.memory.get_failed_approaches(project, task_type)
+
+            # Load specialization (best practices, common errors)
+            spec_context = ""
+            if task_type:
+                spec_context = self.load_specialization(project, task_type)
+
             input_data = task.get("input_data", {})
             if isinstance(input_data, str):
                 import json
@@ -315,6 +453,8 @@ class BaseWorker:
 
             prompt = input_data.get("prompt", "")
             memory_prefix = ""
+            if spec_context:
+                memory_prefix += f"{spec_context}\n\n"
             if context:
                 memory_prefix += f"{context}\n\n"
             if failed_approaches:
@@ -322,6 +462,8 @@ class BaseWorker:
             if memory_prefix and prompt:
                 input_data["prompt"] = f"{memory_prefix}{prompt}"
                 task["input_data"] = input_data
+
+        task_start_time = time.time()
 
         # ── Persona injection: enhance system prompt with worker persona ──
         if self.persona:
@@ -437,6 +579,15 @@ class BaseWorker:
                     tokens_used=tokens,
                 )
 
+            # ── Track specialization stats ────────────────────────────
+            if project and task_type:
+                duration = time.time() - task_start_time
+                self.track_specialization(project, task_type, success=True, duration=duration)
+
+            # ── Handle chain_next handoffs ────────────────────────────
+            response_text = output.get("response", output.get("stdout", ""))
+            self.handle_handoff(task, response_text)
+
             self.report_to_nexus(
                 "task_completed",
                 "completed",
@@ -457,6 +608,11 @@ class BaseWorker:
                     }).eq("id", self.worker_id).execute()
             except Exception:
                 pass
+
+            # Track failure specialization
+            if project and task_type:
+                duration = time.time() - task_start_time
+                self.track_specialization(project, task_type, success=False, duration=duration)
 
             self.report_to_nexus(
                 "task_failed",

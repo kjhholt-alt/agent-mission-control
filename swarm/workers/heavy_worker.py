@@ -1,5 +1,9 @@
 """
 Heavy worker: launches Claude Code CLI as a subprocess for complex tasks.
+
+Supports git worktree isolation: when a task has use_worktree=True in input_data
+(or is part of a team), the worker creates an isolated worktree so multiple
+agents can work on the same repo simultaneously without conflicts.
 """
 
 import json
@@ -11,6 +15,7 @@ from typing import Any
 
 from swarm.auto_merge import AutoMerger
 from swarm.config import AUTO_MERGE_ENABLED, CLAUDE_CLI_PATH, HEAVY_WORKER_TASK_TIMEOUT_SECONDS, PROJECTS
+from swarm.worktree import create_worktree, commit_worktree_changes, cleanup_worktree
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.heavy")
@@ -25,10 +30,15 @@ class HeavyWorker(BaseWorker):
     def execute(self, task: dict[str, Any]) -> dict[str, Any]:
         """Execute a task by running Claude Code CLI.
 
+        If use_worktree is True in input_data, creates an isolated git worktree
+        so this agent doesn't conflict with others working on the same repo.
+
         Args:
             task: Task row from Supabase. input_data should contain:
                 - prompt: The prompt to send to Claude Code
                 - project (optional): Project key for working directory
+                - use_worktree (optional): If True, use worktree isolation
+                - team_id (optional): Team this task belongs to
 
         Returns:
             Output data with stdout, duration, and exit code
@@ -44,9 +54,22 @@ class HeavyWorker(BaseWorker):
         # Resolve working directory
         project_key = task.get("project", "")
         project_config = PROJECTS.get(project_key, {})
-        cwd = project_config.get("dir", None)
+        project_dir = project_config.get("dir", None)
+        cwd = project_dir
         if not cwd:
             cwd = input_data.get("cwd", "C:/Users/Kruz/Desktop/Projects")
+
+        # Worktree isolation: create isolated workspace if requested
+        use_worktree = input_data.get("use_worktree", False)
+        worktree_path = None
+
+        if use_worktree and project_dir:
+            worktree_path = create_worktree(project_dir, task["id"])
+            if worktree_path:
+                cwd = worktree_path
+                logger.info("Using worktree at %s for task %s", worktree_path, task["id"][:8])
+            else:
+                logger.warning("Worktree creation failed, falling back to project dir")
 
         logger.info(
             "Launching Claude Code for task %s in %s: %s",
@@ -137,13 +160,28 @@ class HeavyWorker(BaseWorker):
                 "cwd": cwd,
             }
 
+            # Worktree: commit changes and record branch info
+            if worktree_path:
+                commit_sha = commit_worktree_changes(
+                    worktree_path,
+                    task["id"],
+                    task.get("title", "agent task"),
+                    worker_name=self.worker_type,
+                )
+                output_data["worktree"] = {
+                    "path": worktree_path,
+                    "branch": f"agent/{task['id'][:8]}",
+                    "commit_sha": commit_sha,
+                    "isolated": True,
+                }
+
             # Auto-merge: check if Claude Code opened a PR
             if AUTO_MERGE_ENABLED and result.returncode == 0:
                 output_data = self._try_auto_merge(task, stdout, output_data)
 
             return output_data
 
-        except subprocess.TimeoutExpired as exc:
+        except subprocess.TimeoutExpired:
             duration_seconds = round(time.time() - start_time, 1)
             self.budget_manager.record_spend(minutes=round(duration_seconds / 60, 2))
             raise TimeoutError(
@@ -156,6 +194,12 @@ class HeavyWorker(BaseWorker):
                     os.remove(prompt_file)
             except Exception:
                 pass
+            # Clean up worktree (branch preserved for review/merge)
+            if worktree_path and project_dir:
+                try:
+                    cleanup_worktree(project_dir, worktree_path, task["id"], delete_branch=False)
+                except Exception as e:
+                    logger.warning("Worktree cleanup failed: %s", e)
 
     def _try_auto_merge(
         self, task: dict[str, Any], stdout: str, output_data: dict[str, Any]
