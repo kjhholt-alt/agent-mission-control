@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import type { Building, Worker } from "../game3d/types";
 import type { TERMINAL_THEMES } from "./terminal-constants";
 import { WORKER_ICONS } from "./terminal-constants";
@@ -27,7 +27,7 @@ const COMMANDS: Record<string, string> = {
   spawn: "spawn <CODE> <task> — Queue a task for a project",
   move: "move <AGENT> <CODE> — Reassign agent to a building",
   scan: "scan <CODE> — Quick scan of a project's vitals",
-  focus: "focus <events|flows|agents|system> — Switch right panel tab",
+  focus: "focus <events|flows|agents|system|map> — Switch right panel tab",
   alert: "alert <message> — Broadcast a custom event",
   workers: "Show worker type legend with icons",
   theme: "Cycle terminal color theme (green → amber → cyan)",
@@ -37,20 +37,151 @@ const COMMANDS: Record<string, string> = {
   budget: "Show current API spend",
 };
 
+const COMMAND_NAMES = Object.keys(COMMANDS);
+const FOCUS_TABS = ["events", "flows", "agents", "system", "map"];
+
+// Commands that take a building code as first arg
+const BUILDING_ARG_COMMANDS = ["inspect", "spawn", "scan"];
+
 export function CommandInput({ theme, buildings, workers, onCommand }: CommandInputProps) {
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [ghost, setGhost] = useState("");
+  const [tabCycleIndex, setTabCycleIndex] = useState(-1);
+  const [tabCycleMatches, setTabCycleMatches] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll and focus
+  const buildingCodes = useMemo(() => buildings.map(b => b.shortName.toLowerCase()), [buildings]);
+  const agentNames = useMemo(() => workers.map(w => w.name.toLowerCase()), [workers]);
+
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [history]);
+
+  // Compute ghost text suggestion
+  useEffect(() => {
+    if (!input) {
+      setGhost("");
+      return;
+    }
+
+    const lower = input.toLowerCase();
+    const parts = lower.split(" ");
+    const cmd = parts[0];
+
+    // Completing the command name
+    if (parts.length === 1) {
+      const match = COMMAND_NAMES.find(c => c.startsWith(lower) && c !== lower);
+      setGhost(match ? match.slice(lower.length) : "");
+      return;
+    }
+
+    // Completing args
+    if (parts.length === 2) {
+      const partial = parts[1];
+      if (BUILDING_ARG_COMMANDS.includes(cmd)) {
+        const match = buildingCodes.find(c => c.startsWith(partial) && c !== partial);
+        setGhost(match ? match.slice(partial.length) : "");
+        return;
+      }
+      if (cmd === "focus") {
+        const match = FOCUS_TABS.find(t => t.startsWith(partial) && t !== partial);
+        setGhost(match ? match.slice(partial.length) : "");
+        return;
+      }
+      if (cmd === "move") {
+        const match = agentNames.find(n => n.startsWith(partial) && n !== partial);
+        setGhost(match ? match.slice(partial.length) : "");
+        return;
+      }
+    }
+
+    // move <agent> <building> — 3rd arg is building code
+    if (parts.length === 3 && cmd === "move") {
+      const partial = parts[2];
+      const match = buildingCodes.find(c => c.startsWith(partial) && c !== partial);
+      setGhost(match ? match.slice(partial.length) : "");
+      return;
+    }
+
+    setGhost("");
+  }, [input, buildingCodes, agentNames]);
+
+  // Reset tab cycle when input changes manually
+  const handleInputChange = useCallback((newValue: string) => {
+    setInput(newValue);
+    setTabCycleIndex(-1);
+    setTabCycleMatches([]);
+  }, []);
+
+  // Tab completion
+  const handleTab = useCallback(() => {
+    const lower = input.toLowerCase();
+    const parts = lower.split(" ");
+    const cmd = parts[0];
+
+    let candidates: string[] = [];
+    let prefix = "";
+    let replaceFrom = 0;
+
+    if (parts.length === 1) {
+      // Complete command name
+      candidates = COMMAND_NAMES.filter(c => c.startsWith(lower));
+      prefix = "";
+      replaceFrom = 0;
+    } else if (parts.length === 2) {
+      const partial = parts[1];
+      prefix = cmd + " ";
+      replaceFrom = prefix.length;
+
+      if (BUILDING_ARG_COMMANDS.includes(cmd)) {
+        candidates = buildingCodes.filter(c => c.startsWith(partial));
+      } else if (cmd === "focus") {
+        candidates = FOCUS_TABS.filter(t => t.startsWith(partial));
+      } else if (cmd === "move") {
+        candidates = agentNames.filter(n => n.startsWith(partial));
+      }
+    } else if (parts.length === 3 && cmd === "move") {
+      const partial = parts[2];
+      prefix = parts.slice(0, 2).join(" ") + " ";
+      replaceFrom = prefix.length;
+      candidates = buildingCodes.filter(c => c.startsWith(partial));
+    }
+
+    if (candidates.length === 0) return;
+
+    if (candidates.length === 1) {
+      // Single match — complete it with a trailing space
+      const completed = prefix + candidates[0] + " ";
+      setInput(completed);
+      setGhost("");
+      setTabCycleIndex(-1);
+      setTabCycleMatches([]);
+      return;
+    }
+
+    // Multiple matches — cycle through them
+    let matches = tabCycleMatches;
+    let idx = tabCycleIndex;
+
+    if (matches.length === 0 || JSON.stringify(matches) !== JSON.stringify(candidates)) {
+      matches = candidates;
+      idx = 0;
+    } else {
+      idx = (idx + 1) % matches.length;
+    }
+
+    setTabCycleMatches(matches);
+    setTabCycleIndex(idx);
+    setInput(prefix + matches[idx]);
+    setGhost("");
+  }, [input, buildingCodes, agentNames, tabCycleIndex, tabCycleMatches]);
 
   const execute = useCallback((cmd: string) => {
     const trimmed = cmd.trim().toLowerCase();
@@ -275,11 +406,20 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
 
     setHistory(prev => [...prev, { input: trimmed, output, type }]);
     setInput("");
+    setGhost("");
   }, [buildings, workers, onCommand]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       execute(input);
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      handleTab();
+    } else if (e.key === "ArrowRight" && ghost) {
+      // Accept ghost suggestion
+      e.preventDefault();
+      setInput(input + ghost);
+      setGhost("");
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       if (cmdHistory.length > 0) {
@@ -311,8 +451,8 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
       >
         <span style={{ color: theme.primary }}>▸</span>
         COMMAND
-        <span className="ml-auto" style={{ color: theme.dim }}>
-          type &apos;help&apos; for commands
+        <span className="ml-auto text-[11px] font-normal tracking-normal normal-case" style={{ color: theme.dim }}>
+          Tab: autocomplete · ↑↓: history · →: accept hint
         </span>
       </div>
 
@@ -338,25 +478,37 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
         ))}
       </div>
 
-      {/* Input line */}
+      {/* Input line with ghost text */}
       <div
         className="flex items-center gap-2 px-3 py-1.5 border-t shrink-0"
         style={{ borderColor: theme.dim }}
       >
         <span style={{ color: theme.primary }}>❯</span>
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="flex-1 bg-transparent outline-none text-[14px] font-mono caret-transparent"
-          style={{ color: theme.primary }}
-          spellCheck={false}
-          autoComplete="off"
-        />
+        <div className="flex-1 relative">
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent outline-none text-[14px] font-mono caret-transparent"
+            style={{ color: theme.primary }}
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {/* Ghost suggestion overlay */}
+          {ghost && (
+            <span
+              className="absolute top-0 left-0 text-[14px] font-mono pointer-events-none"
+              style={{ color: theme.dim, opacity: 0.5 }}
+            >
+              <span style={{ visibility: "hidden" }}>{input}</span>
+              <span>{ghost}</span>
+            </span>
+          )}
+        </div>
         <span
-          className="inline-block w-[7px] h-[13px]"
+          className="inline-block w-[7px] h-[13px] shrink-0"
           style={{ backgroundColor: theme.primary, animation: "crt-cursor 1s step-end infinite" }}
         />
       </div>

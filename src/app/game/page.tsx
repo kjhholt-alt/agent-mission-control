@@ -85,23 +85,50 @@ export default function GamePage() {
   }, [cycleTheme, spawnTask, addToast]);
 
   // Keyboard shortcuts
+  const PANEL_KEYS: Record<string, RightPanel> = {
+    "1": "events", "2": "flows", "3": "agents", "4": "system", "5": "map",
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isInput = tag === "INPUT" || tag === "TEXTAREA";
+
       if (e.ctrlKey && e.key === "t") {
         e.preventDefault();
         cycleTheme();
+        return;
       }
+
+      // Ctrl+1-5 to switch right panel tabs (works even in input)
+      if (e.ctrlKey && PANEL_KEYS[e.key]) {
+        e.preventDefault();
+        setRightPanel(PANEL_KEYS[e.key]);
+        return;
+      }
+
       if (e.key === "Escape") {
-        if (selectedAgentId) {
+        if (inspectedId) {
+          setInspectedId(null);
+        } else if (selectedAgentId) {
           setSelectedAgentId(null);
         } else if (!booted) {
           setBooted(true);
         }
+        return;
+      }
+
+      // Backtick to focus command input (when not already in input)
+      if (e.key === "/" && !isInput) {
+        e.preventDefault();
+        const cmdInput = document.querySelector<HTMLInputElement>(".terminal-cmd input");
+        cmdInput?.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cycleTheme, booted, selectedAgentId]);
+  }, [cycleTheme, booted, selectedAgentId, inspectedId]);
 
   const inspectedBuilding = inspectedId ? BUILDINGS.find(b => b.id === inspectedId) : null;
 
