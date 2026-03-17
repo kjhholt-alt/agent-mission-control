@@ -6,7 +6,7 @@ import { Sparkles } from "@react-three/drei";
 import * as THREE from "three";
 import type { Building, Worker } from "./types";
 
-// ─── BUILDING SPARKLES ───────────────────────────────────────────────────────
+// ---- BUILDING SPARKLES -------------------------------------------------------
 
 interface BuildingSparklesProps {
   buildings: Building[];
@@ -14,7 +14,7 @@ interface BuildingSparklesProps {
 }
 
 /**
- * Sparkle particles around active buildings. Industrial glow effect.
+ * Sparkle particles around active buildings. Color-matched, larger, more visible.
  */
 export function BuildingSparkles({ buildings, isMobile }: BuildingSparklesProps) {
   const activeBuildings = useMemo(
@@ -22,30 +22,42 @@ export function BuildingSparkles({ buildings, isMobile }: BuildingSparklesProps)
     [buildings]
   );
 
-  const sparkleCount = isMobile ? 6 : 12;
+  const sparkleCount = isMobile ? 10 : 20;
 
   return (
     <>
       {activeBuildings.map((building) => {
         const height = building.size * 1.0;
         return (
-          <Sparkles
-            key={building.id}
-            count={sparkleCount}
-            size={1.5}
-            speed={0.3}
-            scale={[building.size * 2, height + 1, building.size * 2]}
-            position={[building.gridX, height / 2 + 0.5, building.gridY]}
-            color={building.color}
-            opacity={0.4}
-          />
+          <group key={building.id}>
+            {/* Primary sparkles -- larger and color-matched */}
+            <Sparkles
+              count={sparkleCount}
+              size={3.0}
+              speed={0.4}
+              scale={[building.size * 2.2, height + 1.5, building.size * 2.2]}
+              position={[building.gridX, height / 2 + 0.5, building.gridY]}
+              color={building.color}
+              opacity={0.6}
+            />
+            {/* Secondary sparkles -- smaller, white, add depth */}
+            <Sparkles
+              count={Math.floor(sparkleCount * 0.5)}
+              size={1.5}
+              speed={0.6}
+              scale={[building.size * 1.5, height + 0.5, building.size * 1.5]}
+              position={[building.gridX, height / 2 + 1.0, building.gridY]}
+              color="#ffffff"
+              opacity={0.3}
+            />
+          </group>
         );
       })}
     </>
   );
 }
 
-// ─── TASK COMPLETION BURST ───────────────────────────────────────────────────
+// ---- TASK COMPLETION BURST ---------------------------------------------------
 
 interface BurstParticle {
   id: number;
@@ -54,6 +66,7 @@ interface BurstParticle {
   color: THREE.Color;
   life: number;
   maxLife: number;
+  size: number;
 }
 
 interface CompletionBurstProps {
@@ -61,9 +74,15 @@ interface CompletionBurstProps {
   buildings: Building[];
 }
 
+// Color palette for burst variety
+const BURST_COLORS = [
+  "#06b6d4", "#10b981", "#e8a019", "#ef4444", "#a855f7",
+  "#3b82f6", "#f97316", "#22c55e", "#8b5cf6", "#f59e0b",
+];
+
 /**
- * When a worker completes a task (progress wraps to 0), spawn a burst
- * of 12 small spheres exploding outward, fading over 0.8s.
+ * When a worker completes a task, spawn a burst of 20 particles
+ * with color variety, gravity, and size variation.
  */
 export function CompletionBursts({ workers, buildings }: CompletionBurstProps) {
   const [bursts, setBursts] = useState<BurstParticle[]>([]);
@@ -71,33 +90,40 @@ export function CompletionBursts({ workers, buildings }: CompletionBurstProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const idCounter = useRef(0);
 
-  // Detect task completions (progress drops back to near 0)
+  // Detect task completions
   useEffect(() => {
     workers.forEach((w) => {
       const prev = prevProgress.current[w.id];
       if (prev !== undefined && prev > 50 && w.progress < 10) {
-        // Worker completed a task — spawn burst
         const building = buildings.find((b) => b.id === w.currentBuildingId);
         if (!building) return;
 
         const newParticles: BurstParticle[] = [];
-        const color = new THREE.Color(w.color);
+        const baseColor = new THREE.Color(w.color);
         const center = new THREE.Vector3(building.gridX, 0.8, building.gridY);
 
-        for (let i = 0; i < 12; i++) {
-          const angle = (i / 12) * Math.PI * 2;
-          const speed = 1.5 + Math.random() * 1.5;
+        // 20 particles with color variety
+        for (let i = 0; i < 20; i++) {
+          const angle = (i / 20) * Math.PI * 2;
+          const speed = 2.0 + Math.random() * 2.0;
+          const elevation = (Math.random() - 0.2) * speed;
+
+          // Mix between worker color and a random burst color
+          const mixColor = new THREE.Color(BURST_COLORS[i % BURST_COLORS.length]);
+          const finalColor = baseColor.clone().lerp(mixColor, 0.3);
+
           newParticles.push({
             id: idCounter.current++,
             position: center.clone(),
             velocity: new THREE.Vector3(
               Math.cos(angle) * speed,
-              (Math.random() - 0.3) * speed,
+              elevation,
               Math.sin(angle) * speed
             ),
-            color,
-            life: 0.8,
-            maxLife: 0.8,
+            color: finalColor,
+            life: 1.0 + Math.random() * 0.5,
+            maxLife: 1.0 + Math.random() * 0.5,
+            size: 0.06 + Math.random() * 0.06,
           });
         }
 
@@ -119,9 +145,10 @@ export function CompletionBursts({ workers, buildings }: CompletionBurstProps) {
       if (p.life <= 0) return;
 
       p.position.add(p.velocity.clone().multiplyScalar(delta));
-      p.velocity.y -= 2 * delta; // Gravity
+      p.velocity.y -= 3.5 * delta; // Stronger gravity for arc effect
 
-      const scale = (p.life / p.maxLife) * 0.08;
+      const lifeRatio = p.life / p.maxLife;
+      const scale = lifeRatio * p.size;
       tempMatrix.makeScale(scale, scale, scale);
       tempMatrix.setPosition(p.position);
       meshRef.current!.setMatrixAt(i, tempMatrix);
@@ -135,7 +162,6 @@ export function CompletionBursts({ workers, buildings }: CompletionBurstProps) {
       meshRef.current.instanceColor.needsUpdate = true;
     }
 
-    // Clean up dead particles
     if (alive.length !== bursts.length) {
       setBursts(alive);
     }
@@ -150,19 +176,19 @@ export function CompletionBursts({ workers, buildings }: CompletionBurstProps) {
       frustumCulled={false}
       visible={bursts.length > 0}
     >
-      <sphereGeometry args={[1, 6, 6]} />
+      <sphereGeometry args={[1, 8, 8]} />
       <meshStandardMaterial
         emissive="#ffffff"
-        emissiveIntensity={1.5}
+        emissiveIntensity={2.0}
         toneMapped={false}
         transparent
-        opacity={0.8}
+        opacity={0.9}
       />
     </instancedMesh>
   );
 }
 
-// ─── WORKER SPAWN RING ───────────────────────────────────────────────────────
+// ---- WORKER SPAWN RING -------------------------------------------------------
 
 interface SpawnRing {
   id: number;
@@ -178,8 +204,8 @@ interface SpawnRingEffectsProps {
 }
 
 /**
- * Expanding ring effect when workers reach a new building.
- * Ring expands and fades over ~1 second.
+ * Double expanding ring effect when workers reach a new building.
+ * Outer ring expands fast, inner ring expands slower -- dramatic arrival.
  */
 export function SpawnRingEffects({ workers, buildings }: SpawnRingEffectsProps) {
   const [rings, setRings] = useState<SpawnRing[]>([]);
@@ -199,7 +225,7 @@ export function SpawnRingEffects({ workers, buildings }: SpawnRingEffectsProps) 
             position: new THREE.Vector3(building.gridX, 0.05, building.gridY),
             color: w.color,
             startTime: performance.now() / 1000,
-            duration: 1.0,
+            duration: 1.2,
           },
         ]);
       }
@@ -213,7 +239,7 @@ export function SpawnRingEffects({ workers, buildings }: SpawnRingEffectsProps) 
     const timer = setTimeout(() => {
       const now = performance.now() / 1000;
       setRings((r) => r.filter((ring) => now - ring.startTime < ring.duration));
-    }, 1100);
+    }, 1400);
     return () => clearTimeout(timer);
   }, [rings]);
 
@@ -227,40 +253,74 @@ export function SpawnRingEffects({ workers, buildings }: SpawnRingEffectsProps) 
 }
 
 function SpawnRingMesh({ ring }: { ring: SpawnRing }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const outerRef = useRef<THREE.Mesh>(null);
+  const innerRef = useRef<THREE.Mesh>(null);
+  const outerMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const innerMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame(() => {
-    if (!meshRef.current || !materialRef.current) return;
     const elapsed = performance.now() / 1000 - ring.startTime;
     const progress = Math.min(elapsed / ring.duration, 1);
 
-    const scale = 0.5 + progress * 2;
-    meshRef.current.scale.set(scale, scale, 1);
-    materialRef.current.opacity = (1 - progress) * 0.6;
+    // Outer ring -- expands fast
+    if (outerRef.current && outerMatRef.current) {
+      const outerScale = 0.5 + progress * 3.0;
+      outerRef.current.scale.set(outerScale, outerScale, 1);
+      outerMatRef.current.opacity = (1 - progress) * 0.7;
+      outerMatRef.current.emissiveIntensity = (1 - progress) * 1.5;
+    }
+
+    // Inner ring -- expands slower, lags behind
+    if (innerRef.current && innerMatRef.current) {
+      const innerProgress = Math.min(progress * 1.3, 1);
+      const innerScale = 0.3 + innerProgress * 2.0;
+      innerRef.current.scale.set(innerScale, innerScale, 1);
+      innerMatRef.current.opacity = (1 - innerProgress) * 0.5;
+      innerMatRef.current.emissiveIntensity = (1 - innerProgress) * 1.2;
+    }
   });
 
   return (
-    <mesh
-      ref={meshRef}
-      position={[ring.position.x, ring.position.y, ring.position.z]}
-      rotation={[-Math.PI / 2, 0, 0]}
-    >
-      <ringGeometry args={[0.4, 0.5, 32]} />
-      <meshStandardMaterial
-        ref={materialRef}
-        color={ring.color}
-        emissive={ring.color}
-        emissiveIntensity={1}
-        transparent
-        opacity={0.6}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
+    <group position={[ring.position.x, ring.position.y, ring.position.z]}>
+      {/* Outer ring -- wider, thinner */}
+      <mesh
+        ref={outerRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <ringGeometry args={[0.45, 0.55, 32]} />
+        <meshStandardMaterial
+          ref={outerMatRef}
+          color={ring.color}
+          emissive={ring.color}
+          emissiveIntensity={1.5}
+          transparent
+          opacity={0.7}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* Inner ring -- narrower, brighter */}
+      <mesh
+        ref={innerRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <ringGeometry args={[0.3, 0.38, 32]} />
+        <meshStandardMaterial
+          ref={innerMatRef}
+          color={ring.color}
+          emissive={ring.color}
+          emissiveIntensity={1.2}
+          transparent
+          opacity={0.5}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
   );
 }
 
-// ─── TASK PARTICLE SYSTEM ────────────────────────────────────────────────────
+// ---- TASK PARTICLE SYSTEM ----------------------------------------------------
 
 interface TaskParticle {
   id: number;
@@ -270,6 +330,7 @@ interface TaskParticle {
   life: number;
   maxLife: number;
   status: "running" | "queued" | "failed";
+  size: number;
 }
 
 interface TaskParticleSystemProps {
@@ -283,6 +344,7 @@ interface TaskParticleSystemProps {
  * - Green particles for running tasks
  * - Yellow particles for queued/idle workers
  * - Red particles for failed/error states
+ * Particles are larger and more visible at default zoom.
  */
 export function TaskParticleSystem({
   workers,
@@ -308,13 +370,13 @@ export function TaskParticleSystem({
 
         if (worker.status === "working") {
           status = "running";
-          color = new THREE.Color("#10b981"); // Green
+          color = new THREE.Color("#10b981");
         } else if (building.status === "error") {
           status = "failed";
-          color = new THREE.Color("#ef4444"); // Red
+          color = new THREE.Color("#ef4444");
         } else {
           status = "queued";
-          color = new THREE.Color("#e8a019"); // Yellow
+          color = new THREE.Color("#e8a019");
         }
 
         // Spawn 1-2 particles per worker
@@ -325,6 +387,9 @@ export function TaskParticleSystem({
           const radius = 0.3 + Math.random() * 0.5;
           const height = 0.5 + Math.random() * 1.5;
 
+          // Vary size based on status
+          const baseSize = status === "failed" ? 0.12 : status === "running" ? 0.10 : 0.08;
+
           newParticles.push({
             id: idCounter.current++,
             position: new THREE.Vector3(
@@ -334,19 +399,20 @@ export function TaskParticleSystem({
             ),
             velocity: new THREE.Vector3(
               (Math.random() - 0.5) * 0.2,
-              0.3 + Math.random() * 0.4,
+              0.4 + Math.random() * 0.5,
               (Math.random() - 0.5) * 0.2
             ),
             color,
-            life: 2.0 + Math.random() * 1.0,
-            maxLife: 2.0 + Math.random() * 1.0,
+            life: 2.5 + Math.random() * 1.0,
+            maxLife: 2.5 + Math.random() * 1.0,
             status,
+            size: baseSize + Math.random() * 0.04,
           });
         }
       });
 
       setParticles((prev) => [...prev, ...newParticles]);
-    }, isMobile ? 800 : 500); // Spawn rate
+    }, isMobile ? 800 : 500);
 
     return () => clearInterval(interval);
   }, [workers, buildings, isMobile]);
@@ -365,9 +431,9 @@ export function TaskParticleSystem({
       // Update position
       p.position.add(p.velocity.clone().multiplyScalar(delta));
 
-      // Fade and shrink over lifetime
+      // Fade and shrink over lifetime -- but start larger
       const lifeRatio = p.life / p.maxLife;
-      const scale = lifeRatio * 0.06;
+      const scale = lifeRatio * p.size;
 
       tempMatrix.makeScale(scale, scale, scale);
       tempMatrix.setPosition(p.position);
@@ -400,7 +466,7 @@ export function TaskParticleSystem({
       <sphereGeometry args={[1, 8, 8]} />
       <meshStandardMaterial
         emissive="#ffffff"
-        emissiveIntensity={2.0}
+        emissiveIntensity={2.5}
         toneMapped={false}
         transparent
         opacity={0.9}
