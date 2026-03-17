@@ -35,10 +35,12 @@ const COMMANDS: Record<string, string> = {
   uptime: "Show session uptime",
   flows: "Show active data flows between projects",
   budget: "Show current API spend",
+  chat: "Open agent chat panel",
+  replay: "Open session replay stream",
 };
 
 const COMMAND_NAMES = Object.keys(COMMANDS);
-const FOCUS_TABS = ["events", "flows", "agents", "system", "map"];
+const FOCUS_TABS = ["events", "flows", "agents", "system", "map", "heat", "chat", "replay"];
 
 // Commands that take a building code as first arg
 const BUILDING_ARG_COMMANDS = ["inspect", "spawn", "scan"];
@@ -276,6 +278,18 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
         output = "  Budget info displayed in status bar below";
         break;
       }
+      case "chat": {
+        output = "  Opening agent chat panel...";
+        type = "success";
+        onCommand?.("focus:chat");
+        break;
+      }
+      case "replay": {
+        output = "  Opening session replay stream...";
+        type = "success";
+        onCommand?.("focus:replay");
+        break;
+      }
       default: {
         // inspect <shortname>
         if (trimmed.startsWith("inspect ")) {
@@ -375,7 +389,7 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
         // focus <tab>
         if (trimmed.startsWith("focus ")) {
           const tab = trimmed.slice(6).trim().toLowerCase();
-          const validTabs = ["events", "flows", "agents", "system", "map"];
+          const validTabs = ["events", "flows", "agents", "system", "map", "heat", "chat", "replay"];
           if (!validTabs.includes(tab)) {
             output = `  Unknown panel '${tab}'. Options: ${validTabs.join(", ")}`;
             type = "error";

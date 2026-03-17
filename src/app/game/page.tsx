@@ -13,6 +13,8 @@ import { AgentRoster } from "@/components/terminal/AgentRoster";
 import { SystemMonitor } from "@/components/terminal/SystemMonitor";
 import { Minimap } from "@/components/terminal/Minimap";
 import { ActivityHeatmap } from "@/components/terminal/ActivityHeatmap";
+import { AgentChat } from "@/components/terminal/AgentChat";
+import { SessionReplay } from "@/components/terminal/SessionReplay";
 import { QuickActions } from "@/components/terminal/QuickActions";
 import { CommandInput } from "@/components/terminal/CommandInput";
 import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
@@ -22,7 +24,7 @@ import { useSpawnTask } from "@/components/terminal/useSpawnTask";
 import { TerminalToast } from "@/components/terminal/TerminalToast";
 import { useToasts } from "@/components/terminal/useToasts";
 
-type RightPanel = "events" | "flows" | "agents" | "system" | "map" | "heat";
+type RightPanel = "events" | "flows" | "agents" | "system" | "map" | "heat" | "chat" | "replay";
 
 export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
@@ -88,7 +90,7 @@ export default function GamePage() {
 
   // Keyboard shortcuts
   const PANEL_KEYS: Record<string, RightPanel> = {
-    "1": "events", "2": "flows", "3": "agents", "4": "system", "5": "map", "6": "heat",
+    "1": "events", "2": "flows", "3": "agents", "4": "system", "5": "map", "6": "heat", "7": "chat", "8": "replay",
   };
 
   useEffect(() => {
@@ -183,8 +185,8 @@ export default function GamePage() {
             <div className="terminal-feed terminal-quadrant flex flex-col">
               {/* Tab switcher */}
               <div className="flex shrink-0" style={{ borderBottom: `1px solid ${theme.dim}` }}>
-                {(["events", "flows", "agents", "system", "map", "heat"] as const).map((tab) => {
-                  const label = tab === "system" ? "SYS" : tab === "heat" ? "HEAT" : tab;
+                {(["events", "flows", "agents", "system", "map", "heat", "chat", "replay"] as const).map((tab) => {
+                  const label = tab === "system" ? "SYS" : tab === "heat" ? "HEAT" : tab === "replay" ? "RPL" : tab;
                   return (
                     <button
                       key={tab}
@@ -222,6 +224,12 @@ export default function GamePage() {
                 )}
                 {rightPanel === "heat" && (
                   <ActivityHeatmap buildings={BUILDINGS} events={events} theme={theme} />
+                )}
+                {rightPanel === "chat" && (
+                  <AgentChat workers={workers} buildings={BUILDINGS} theme={theme} />
+                )}
+                {rightPanel === "replay" && (
+                  <SessionReplay theme={theme} />
                 )}
               </div>
             </div>
