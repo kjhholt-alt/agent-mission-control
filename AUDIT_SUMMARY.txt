@@ -1,0 +1,261 @@
+NEXUS PLUGIN SYSTEM AUDIT — EXECUTIVE SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATE: 2026-03-17
+STATUS: Complete ✓
+
+DOCUMENTS GENERATED:
+  1. AUDIT_PLUGIN_SYSTEM.md (773 lines, 27KB)
+     - Comprehensive architecture analysis
+     - 5 identified extension points with examples
+     - 7-phase implementation roadmap
+     - Security considerations & best practices
+
+  2. PLUGIN_QUICK_START.md (282 lines, 8.9KB)
+     - Step-by-step plugin creation guide
+     - 5 common recipe templates
+     - Troubleshooting section
+     - Best practices checklist
+
+ARCHITECTURE ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current State:
+  ✓ 26 API endpoints (public + protected)
+  ✓ Python executor v3 with parallel execution (ThreadPoolExecutor)
+  ✓ Scheduler daemon (cron-based task spawning)
+  ✓ Supabase Realtime for live updates
+  ✓ 11 data tables with Realtime enabled
+  ✓ Context library auto-loading from contexts/
+  ✓ Informal plugin patterns already in use
+
+PLUGIN EXTENSION POINTS IDENTIFIED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Layer 1: API Gateway (Next.js)
+  - /api/spawn — task creation interceptor
+  - /api/tasks — query filtering & transformation
+  - /api/workflows — workflow step validation
+  - /api/oracle — decision response formatting
+  - /api/collector/event — external telemetry ingestion
+
+Layer 2: Task Executor (Python)
+  - pre_execution — task modification & validation
+  - post_execution — result processing & notifications
+  - on_cost_tier_select — custom model routing
+  - on_context_load — dynamic context injection
+  - on_error_handler — custom retry/escalation
+  - memory_recall — shared state queries
+
+Layer 3: Scheduler (Python)
+  - pre_schedule_check — schedule filtering
+  - on_schedule_spawn — mission parameter injection
+  - cron_parser — custom schedule syntax support
+  - workflow_executor — multi-step execution
+
+Layer 4: Database Events (Supabase)
+  - swarm_tasks INSERT/UPDATE/DELETE triggers
+  - nexus_sessions analytics
+  - swarm_task_log audit export
+  - oracle_decisions logging
+  - Custom event webhooks
+
+Layer 5: UI Components (React)
+  - Dashboard widgets (custom cards)
+  - Game 3D visualizations
+  - Kanban board swim lanes
+  - Workflow step builders
+  - Activity stream formatters
+
+IMPACT RANKING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Highest Impact, Low Effort:
+  1. API Gateway task validator (validation, transformation, routing)
+  2. Executor pre_execution hook (parameter injection, cost routing)
+  3. Executor post_execution hook (notifications, uploads, exports)
+  4. Scheduler pre_schedule_check (filtering by budget, priority)
+
+Medium Impact, Medium Effort:
+  5. Database event triggers (external logging, analytics)
+  6. UI dashboard widgets (custom metrics, real-time feeds)
+  7. Oracle response formatters (custom briefing styles)
+
+Lower Priority:
+  8. Error handlers (less frequently triggered)
+  9. Event stream processors (higher security risk)
+  10. Memory recall hooks (minimal impact on core flows)
+
+IMPLEMENTATION ROADMAP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Phase 1: Foundation (Week 1-2)
+  - Create plugin_configs table in Supabase
+  - Implement plugin_loader.py (filesystem + DB)
+  - Add 3 system plugins (cost-router, budget-enforcer, discord-notifier)
+  - Write plugin manifest spec (JSON)
+
+Phase 2: API Gateway (Week 2-3)
+  - Integrate plugins into /api/spawn, /api/workflows
+  - Create /api/plugins/* management endpoints
+  - Document plugin API contract
+
+Phase 3: Executor Integration (Week 3-4)
+  - Refactor executor.py to use plugin hooks
+  - Migrate cost-router, budget-enforcer to plugins
+  - Performance testing with 5+ concurrent plugins
+
+Phase 4: Database Events (Week 4-5)
+  - Create Supabase Functions for task/session triggers
+  - Implement /api/plugins/hooks/* webhook handlers
+  - Build Datadog logger plugin
+
+Phase 5: UI Plugins (Week 5-6)
+  - Implement dashboard widget system
+  - Create 3 example widgets (cost tracker, standings, P&L)
+  - Add /api/plugins/list?type=ui endpoint
+
+Phase 6: Security & Hardening (Week 6-7)
+  - Plugin permission model (read/write/execute)
+  - Code review checklist
+  - Circuit breaker + error monitoring
+  - Audit logging
+
+Phase 7: Plugin Marketplace (Week 7-8)
+  - Create plugin registry website
+  - Build plugin installer CLI
+  - Publish "plugin development guide"
+
+SECURITY CONSIDERATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Recommended Controls:
+  ✓ Code review + manual security audit for each plugin
+  ✓ Plugin permission model (declare what they need)
+  ✓ Secrets management (env vars, not hardcoded)
+  ✓ Circuit breaker (disable after 3 failures)
+  ✓ Audit logging (execution time, errors, decision points)
+  ✓ Allowlist for UI plugin bundling (sandboxing)
+
+EXISTING "DE FACTO" PLUGINS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Already in Use (Informally):
+  - Context Library (contexts/ — ai-finance-brief, deere, etc.)
+  - Worker Types (light, cc_light, heavy, browser)
+  - Task Types (eval, scout, build, review, etc.)
+  - Oracle Behaviors (briefing, digests, reports)
+
+Action: Formalize these as plugins in Phase 1-2.
+
+REFERENCE IMPLEMENTATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5 reference plugins to build:
+
+  1. Cost Router
+     Purpose: Smart model selection based on task keywords
+     Type: executor
+     Hooks: on_cost_tier_select
+
+  2. Budget Enforcer
+     Purpose: Skip non-critical tasks if daily budget exceeded
+     Type: executor + scheduler
+     Hooks: pre_fetch_tasks
+
+  3. Discord Notifier
+     Purpose: Send task status updates to Discord
+     Type: executor
+     Hooks: post_execution
+
+  4. Datadog Logger
+     Purpose: Stream all task events to Datadog
+     Type: realtime_events + executor
+     Hooks: pre_execution, post_execution, onTaskStatusChanged
+
+  5. GitHub Integrator
+     Purpose: Auto-create PRs and issues from task results
+     Type: api_gateway
+     Hooks: onTaskApproved, onTaskCompleted
+
+IMMEDIATE ACTIONS (NEXT WEEK)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Priority 1 (Critical):
+  [ ] Create plugin_configs table in Supabase
+  [ ] Write swarm/plugin_loader.py
+  [ ] Define plugin manifest spec (JSON schema)
+
+Priority 2 (High):
+  [ ] Create plugins/cost-router example
+  [ ] Integrate plugins into executor.py
+  [ ] Write plugin development guide (PLUGIN_DEVELOPMENT.md)
+
+Priority 3 (Medium):
+  [ ] Create /api/plugins/* management endpoints
+  [ ] Build 2 additional reference plugins
+  [ ] Peer review + merge Phase 1 PRs
+
+SUCCESS METRICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After Phase 1 (Foundation):
+  ✓ 3+ plugins deployed and working
+  ✓ 0 new dependencies (use standard library)
+  ✓ <200ms overhead per plugin hook call
+  ✓ All plugins logged in audit trail
+
+After Phase 7 (Marketplace):
+  ✓ 10+ community plugins available
+  ✓ "Plugin of the Month" recognition
+  ✓ <5% adoption friction (clear docs + examples)
+  ✓ 1000+ downloads for top plugin
+
+KEY DECISIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Decision 1: Plugin Storage
+  ✓ Recommend: File-based plugins in `plugins/` + metadata in Supabase
+  - Alternative: Plugins as Supabase Functions (harder to develop)
+  - Alternative: Cloud-hosted plugins (security risk)
+
+Decision 2: Plugin Language
+  ✓ Recommend: Python for executor, TypeScript for API/UI
+  - Alternative: Single language (less flexible)
+  - Alternative: Support all languages (maintenance burden)
+
+Decision 3: Plugin Versioning
+  ✓ Recommend: Git tags (v1.0.0, v1.1.0)
+  - Alternative: Semantic versioning in plugin.json only
+  - Alternative: No versioning (causes breakage)
+
+Decision 4: Plugin Permissions
+  ✓ Recommend: Declarative permissions + code review
+  - Alternative: Full sandbox (too restrictive)
+  - Alternative: No permissions model (security risk)
+
+CONCLUSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Nexus is architecturally ready for a formal plugin system with minimal refactoring.
+
+Key Strengths:
+  - Clear separation of concerns (API, executor, scheduler, DB, UI)
+  - Existing informal plugin patterns (contexts, task types)
+  - Supabase Realtime for event-driven updates
+  - No major architectural changes required
+
+Recommended Next Step:
+  → Start Phase 1 (Foundation) this week
+  → Focus on lowest-effort, highest-impact hooks (Task Validator, Cost Router)
+  → Build 3 reference plugins to validate architecture
+  → Iterate based on developer feedback
+
+Timeline: 8 weeks to full plugin marketplace (Phase 1-7)
+
+Full audit available in:
+  - AUDIT_PLUGIN_SYSTEM.md (technical deep-dive)
+  - PLUGIN_QUICK_START.md (developer guide)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+End of Summary
