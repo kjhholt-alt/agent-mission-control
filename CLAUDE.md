@@ -23,8 +23,8 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
   - `workers/cc_light_worker.py` — Claude Code CLI worker with worktree support (strategic tasks)
   - `workers/heavy_worker.py` — Claude Code CLI worker with worktree + auto-merge (code changes)
   - `workers/browser_worker.py` — Playwright browser automation
-  - `tasks/task_manager.py` — DAG dependencies, output chaining, smart worker matching
-  - `goal_decomposer.py` — breaks goals into structured task DAGs
+  - `tasks/task_manager.py` — DAG dependencies, output chaining, failure propagation, priority inheritance
+  - `goal_decomposer.py` — breaks goals into structured task DAGs with cycle detection
   - `memory.py` — shared context bank across tasks
   - `config.py` — project registry, model routing, budget limits
 - **Scheduler v2**: `scheduler.py` — cron + workflow pipelines
@@ -65,6 +65,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/tasks/approve` | POST | API Key | Approve/reject pending tasks |
 | `/api/spawn` | POST | API Key | Create mission |
 | `/api/teams` | GET/POST | API Key | Agent team management (create, list, progress) |
+| `/api/dag` | GET | Public | DAG topology: nodes, edges, stats, critical path, bottlenecks |
 | `/api/deploy` | GET/POST | API Key | Deploy management |
 | `/api/heartbeat` | POST | Public | Agent heartbeat |
 | `/api/radiant` | GET | Public | Auto-generated quest suggestions |
