@@ -17,9 +17,11 @@ interface QuadrantGridProps {
   events: AlertEvent[];
   conveyors: ConveyorBelt[];
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
+  selectedAgentId?: string | null;
+  onAssignAgent?: (buildingId: string) => void;
 }
 
-export function QuadrantGrid({ buildings, workers, events, conveyors, theme }: QuadrantGridProps) {
+export function QuadrantGrid({ buildings, workers, events, conveyors, theme, selectedAgentId, onAssignAgent }: QuadrantGridProps) {
   const quadrants = useMemo(() => {
     return Object.entries(QUADRANT_GROUPS).map(([title, ids]) => ({
       title,
@@ -41,6 +43,8 @@ export function QuadrantGrid({ buildings, workers, events, conveyors, theme }: Q
             conveyors={conveyors}
             allBuildings={buildings}
             theme={theme}
+            selectedAgentId={selectedAgentId}
+            onAssignAgent={onAssignAgent}
           />
         </div>
       ))}

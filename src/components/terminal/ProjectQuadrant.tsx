@@ -14,6 +14,8 @@ interface ProjectQuadrantProps {
   conveyors: ConveyorBelt[];
   allBuildings: Building[];
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
+  selectedAgentId?: string | null;
+  onAssignAgent?: (buildingId: string) => void;
 }
 
 export function ProjectQuadrant({
@@ -24,6 +26,8 @@ export function ProjectQuadrant({
   conveyors,
   allBuildings,
   theme,
+  selectedAgentId,
+  onAssignAgent,
 }: ProjectQuadrantProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -96,18 +100,32 @@ export function ProjectQuadrant({
             : building.status === "error" ? "#ff3333"
             : theme.dim;
 
+          const isAssignTarget = !!selectedAgentId;
+
           return (
             <div
               key={building.id}
               className="mb-1.5 py-1 rounded-sm hover:bg-white/[0.04] transition-colors flex cursor-pointer"
-              onClick={() => setExpandedId(building.id)}
+              onClick={() => {
+                if (isAssignTarget && onAssignAgent) {
+                  onAssignAgent(building.id);
+                } else {
+                  setExpandedId(building.id);
+                }
+              }}
+              style={isAssignTarget ? {
+                border: `1px dashed ${theme.primary}`,
+                borderRadius: 3,
+                opacity: 1,
+              } : undefined}
             >
               {/* Color accent bar */}
               <div
                 className="w-[3px] shrink-0 rounded-sm mr-2"
                 style={{
-                  backgroundColor: building.status === "active" ? building.color : "transparent",
-                  opacity: building.status === "active" ? 0.6 : 0,
+                  backgroundColor: isAssignTarget ? theme.primary : building.status === "active" ? building.color : "transparent",
+                  opacity: isAssignTarget ? 0.8 : building.status === "active" ? 0.6 : 0,
+                  animation: isAssignTarget ? "crt-transit-pulse 1.2s ease-in-out infinite" : undefined,
                 }}
               />
               <div className="flex-1 min-w-0">
