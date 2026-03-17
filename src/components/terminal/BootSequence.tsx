@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { TERMINAL_THEMES } from "./terminal-constants";
 
 interface BootSequenceProps {
@@ -25,18 +25,23 @@ const BOOT_LINES = [
 export function BootSequence({ theme, onComplete }: BootSequenceProps) {
   const [visibleLines, setVisibleLines] = useState(0);
 
+  const completeFired = useRef(false);
+
   const advanceLine = useCallback(() => {
-    setVisibleLines((prev) => {
-      const next = prev + 1;
-      if (next >= BOOT_LINES.length) {
-        setTimeout(onComplete, 400);
-      }
-      return next;
-    });
-  }, [onComplete]);
+    setVisibleLines((prev) => prev + 1);
+  }, []);
+
+  // Fire onComplete once all lines are visible
+  useEffect(() => {
+    if (visibleLines >= BOOT_LINES.length && !completeFired.current) {
+      completeFired.current = true;
+      const t = setTimeout(onComplete, 400);
+      return () => clearTimeout(t);
+    }
+  }, [visibleLines, onComplete]);
 
   useEffect(() => {
-    const timers = BOOT_LINES.map((line, i) =>
+    const timers = BOOT_LINES.map((line) =>
       setTimeout(() => advanceLine(), line.delay)
     );
     return () => timers.forEach(clearTimeout);
