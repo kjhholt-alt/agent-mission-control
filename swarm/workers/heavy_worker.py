@@ -4,6 +4,7 @@ Heavy worker: launches Claude Code CLI as a subprocess for complex tasks.
 
 import json
 import logging
+import os
 import subprocess
 import time
 from typing import Any
@@ -56,17 +57,30 @@ class HeavyWorker(BaseWorker):
 
         start_time = time.time()
 
-        # Build command
-        cmd = [
-            CLAUDE_CLI_PATH,
-            "-p",
-            prompt,
-            "--dangerously-skip-permissions",
-        ]
+        # Write prompt to temp file to avoid Windows cmd.exe argument mangling
+        import tempfile
+        prompt_file = os.path.join(
+            tempfile.gettempdir(), f"swarm-prompt-{task['id'][:8]}.txt"
+        )
+        with open(prompt_file, "w", encoding="utf-8") as pf:
+            pf.write(prompt)
+
+        # Pipe prompt via temp file — raw CLI args get mangled on Windows
+        shell_cmd = (
+            f'type "{prompt_file}" | "{CLAUDE_CLI_PATH}" '
+            f'--output-format text -p - --dangerously-skip-permissions'
+        )
 
         try:
+            # Hide cmd.exe windows on Windows
+            startupinfo = None
+            if os.name == "nt":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
             result = subprocess.run(
-                cmd,
+                shell_cmd,
                 cwd=cwd,
                 capture_output=True,
                 text=True,
@@ -74,6 +88,7 @@ class HeavyWorker(BaseWorker):
                 shell=True,
                 encoding="utf-8",
                 errors="replace",
+                startupinfo=startupinfo,
             )
 
             duration_seconds = round(time.time() - start_time, 1)
@@ -93,11 +108,16 @@ class HeavyWorker(BaseWorker):
                 stderr = f"[...truncated {len(stderr) - max_output} chars...]\n" + stderr[-max_output:]
 
             if result.returncode != 0:
-                logger.warning(
-                    "Claude Code exited %d for task %s (%.0fs)",
+                error_detail = stderr[:500] or f"Exit code {result.returncode}"
+                logger.error(
+                    "Claude Code exited %d for task %s (%.0fs): %s",
                     result.returncode,
                     task["id"][:8],
                     duration_seconds,
+                    error_detail[:200],
+                )
+                raise RuntimeError(
+                    f"Claude Code failed (exit {result.returncode}): {error_detail}"
                 )
 
             logger.info(
@@ -129,6 +149,13 @@ class HeavyWorker(BaseWorker):
             raise TimeoutError(
                 f"Claude Code timed out after {HEAVY_WORKER_TASK_TIMEOUT_SECONDS}s"
             )
+        finally:
+            # Clean up temp prompt file
+            try:
+                if prompt_file and os.path.exists(prompt_file):
+                    os.remove(prompt_file)
+            except Exception:
+                pass
 
     def _try_auto_merge(
         self, task: dict[str, Any], stdout: str, output_data: dict[str, Any]
