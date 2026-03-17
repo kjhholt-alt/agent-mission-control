@@ -24,6 +24,8 @@ const COMMANDS: Record<string, string> = {
   agents: "List all agents and their current tasks",
   projects: "List all projects with status",
   inspect: "inspect <CODE> — Open detail view for a project (e.g. inspect CMD)",
+  spawn: "spawn <CODE> <task> — Queue a task for a project",
+  workers: "Show worker type legend with icons",
   theme: "Cycle terminal color theme (green → amber → cyan)",
   clear: "Clear command history",
   uptime: "Show session uptime",
@@ -100,6 +102,23 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
         type = "success";
         break;
       }
+      case "workers": {
+        const workerTypes: [string, string, string][] = [
+          ["builder",    WORKER_ICONS.builder,    "cyan"],
+          ["inspector",  WORKER_ICONS.inspector,  "yellow"],
+          ["miner",      WORKER_ICONS.miner,      "green"],
+          ["scout",      WORKER_ICONS.scout,      "purple"],
+          ["deployer",   WORKER_ICONS.deployer,   "orange"],
+          ["messenger",  WORKER_ICONS.messenger,  "blue"],
+          ["browser",    WORKER_ICONS.browser,    "sky"],
+          ["supervisor", WORKER_ICONS.supervisor, "amber"],
+        ];
+        output = workerTypes
+          .map(([name, icon, color]) => `  ${icon}  ${name.padEnd(12)} ${color}`)
+          .join("\n");
+        type = "success";
+        break;
+      }
       case "theme": {
         output = "  Theme cycled. Use [THEME] button in status bar or press Ctrl+T.";
         onCommand?.("theme");
@@ -135,6 +154,33 @@ export function CommandInput({ theme, buildings, workers, onCommand }: CommandIn
             output = `  Unknown project code '${code}'. Use 'projects' to see codes.`;
             type = "error";
           }
+          break;
+        }
+        // spawn <CODE> <task description>
+        if (trimmed.startsWith("spawn ")) {
+          const rest = trimmed.slice(6).trim();
+          const spaceIdx = rest.indexOf(" ");
+          if (spaceIdx === -1) {
+            output = "  Usage: spawn <CODE> <task description>";
+            type = "error";
+            break;
+          }
+          const code = rest.slice(0, spaceIdx).toUpperCase();
+          const task = cmd.trim().slice(6).trim().slice(spaceIdx + 1).trim();
+          const found = buildings.find(b => b.shortName.toUpperCase() === code);
+          if (!found) {
+            output = `  Unknown project code '${code}'. Use 'projects' to see codes.`;
+            type = "error";
+            break;
+          }
+          if (!task) {
+            output = "  Usage: spawn <CODE> <task description>";
+            type = "error";
+            break;
+          }
+          output = `  Spawning task on ${found.name}: "${task}"`;
+          type = "success";
+          onCommand?.(`spawn:${found.id}:${task}`);
           break;
         }
         output = `  Unknown command: '${trimmed}'. Type 'help' for available commands.`;

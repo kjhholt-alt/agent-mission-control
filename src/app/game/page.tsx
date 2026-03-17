@@ -8,16 +8,22 @@ import { BootSequence } from "@/components/terminal/BootSequence";
 import { TerminalHeader } from "@/components/terminal/TerminalHeader";
 import { QuadrantGrid } from "@/components/terminal/QuadrantGrid";
 import { DataFeed } from "@/components/terminal/DataFeed";
+import { DataFlowMap } from "@/components/terminal/DataFlowMap";
 import { CommandInput } from "@/components/terminal/CommandInput";
 import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
 import { BuildingDetail } from "@/components/terminal/BuildingDetail";
 import { useTerminalTheme } from "@/components/terminal/useTerminalTheme";
+import { useSpawnTask } from "@/components/terminal/useSpawnTask";
+
+type RightPanel = "events" | "flows";
 
 export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
   const { themeName, theme, cycleTheme } = useTerminalTheme();
+  const { spawnTask } = useSpawnTask();
   const [booted, setBooted] = useState(false);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const [rightPanel, setRightPanel] = useState<RightPanel>("events");
 
   const isConnected = !isDemo;
 
@@ -27,7 +33,16 @@ export default function GamePage() {
     if (cmd.startsWith("inspect:")) {
       setInspectedId(cmd.slice(8));
     }
-  }, [cycleTheme]);
+    if (cmd.startsWith("spawn:")) {
+      const parts = cmd.slice(6);
+      const colonIdx = parts.indexOf(":");
+      if (colonIdx > 0) {
+        const projectId = parts.slice(0, colonIdx);
+        const task = parts.slice(colonIdx + 1);
+        spawnTask(projectId, task);
+      }
+    }
+  }, [cycleTheme, spawnTask]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -86,9 +101,41 @@ export default function GamePage() {
               theme={theme}
             />
 
-            {/* Right-side event feed */}
-            <div className="terminal-feed terminal-quadrant">
-              <DataFeed events={events} theme={theme} />
+            {/* Right-side panel — tabbed between Events and Flows */}
+            <div className="terminal-feed terminal-quadrant flex flex-col">
+              {/* Tab switcher */}
+              <div className="flex shrink-0" style={{ borderBottom: `1px solid ${theme.dim}` }}>
+                <button
+                  onClick={() => setRightPanel("events")}
+                  className="flex-1 text-[12px] font-bold tracking-wider uppercase py-1 text-center cursor-pointer transition-colors"
+                  style={{
+                    color: rightPanel === "events" ? theme.primary : theme.dim,
+                    backgroundColor: rightPanel === "events" ? "rgba(255,255,255,0.03)" : "transparent",
+                    borderBottom: rightPanel === "events" ? `2px solid ${theme.primary}` : "2px solid transparent",
+                  }}
+                >
+                  EVENTS
+                </button>
+                <button
+                  onClick={() => setRightPanel("flows")}
+                  className="flex-1 text-[12px] font-bold tracking-wider uppercase py-1 text-center cursor-pointer transition-colors"
+                  style={{
+                    color: rightPanel === "flows" ? theme.primary : theme.dim,
+                    backgroundColor: rightPanel === "flows" ? "rgba(255,255,255,0.03)" : "transparent",
+                    borderBottom: rightPanel === "flows" ? `2px solid ${theme.primary}` : "2px solid transparent",
+                  }}
+                >
+                  FLOWS
+                </button>
+              </div>
+              {/* Panel content */}
+              <div className="flex-1 min-h-0">
+                {rightPanel === "events" ? (
+                  <DataFeed events={events} theme={theme} />
+                ) : (
+                  <DataFlowMap conveyors={CONVEYORS} buildings={BUILDINGS} theme={theme} />
+                )}
+              </div>
             </div>
 
             {/* Command input */}
