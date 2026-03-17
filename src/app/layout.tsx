@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AlertBanner } from "@/components/AlertBanner";
 import { ConnectionStatus } from "@/components/connection-status";
 import { MobileNav } from "@/components/MobileNav";
+import { KeyboardShortcutsProvider } from "@/components/keyboard-shortcuts-provider";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -33,6 +34,12 @@ function GlobalNav() {
           NEXUS
         </a>
         <ConnectionStatus />
+        <div className="hidden lg:flex items-center gap-1 px-2 py-0.5 bg-white/5 rounded border border-white/10 text-[9px] text-zinc-500">
+          <kbd className="px-1 bg-white/10 rounded border border-white/20">Ctrl</kbd>
+          <kbd className="px-1 bg-white/10 rounded border border-white/20">K</kbd>
+          <span>or</span>
+          <kbd className="px-1 bg-white/10 rounded border border-white/20">?</kbd>
+        </div>
       </div>
       <div className="hidden md:flex items-center gap-1">
         <a href="/" className="px-3 py-1 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-white/5 rounded transition-colors">
@@ -88,9 +95,11 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${jetbrainsMono.variable} antialiased`}>
         <TooltipProvider>
-          <GlobalNav />
-          <AlertBanner />
-          <div className="pt-10">{children}</div>
+          <KeyboardShortcutsProvider>
+            <GlobalNav />
+            <AlertBanner />
+            <div className="pt-10">{children}</div>
+          </KeyboardShortcutsProvider>
         </TooltipProvider>
       </body>
     </html>
