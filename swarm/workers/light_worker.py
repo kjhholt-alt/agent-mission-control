@@ -17,7 +17,7 @@ logger = logging.getLogger("swarm.worker.light")
 
 # Default models for light workers
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-SONNET_MODEL = "claude-haiku-4-5-20251001"
+SONNET_MODEL = "claude-sonnet-4-5-20250514"
 
 
 class LightWorker(BaseWorker):
@@ -25,7 +25,7 @@ class LightWorker(BaseWorker):
 
     def __init__(self, worker_type: str = "light"):
         super().__init__(worker_type=worker_type, tier="light")
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=300.0)
 
     def _build_prompt_with_context(self, task: dict[str, Any], prompt: str) -> str:
         """Inject project context before the task prompt if a project is specified.
