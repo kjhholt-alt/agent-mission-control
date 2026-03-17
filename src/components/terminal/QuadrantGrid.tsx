@@ -39,6 +39,7 @@ export function QuadrantGrid({ buildings, workers, events, conveyors, theme }: Q
             workers={workers}
             events={events}
             conveyors={conveyors}
+            allBuildings={buildings}
             theme={theme}
           />
         </div>

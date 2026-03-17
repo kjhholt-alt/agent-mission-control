@@ -1,9 +1,10 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Building, Worker, AlertEvent, ConveyorBelt } from "../game3d/types";
 import { WORKER_TYPE_CONFIG } from "../game3d/constants";
 import type { TERMINAL_THEMES } from "./terminal-constants";
 import { STATUS_CHARS, WORKER_ICONS } from "./terminal-constants";
+import { BuildingDetail } from "./BuildingDetail";
 
 interface ProjectQuadrantProps {
   title: string;
@@ -11,6 +12,7 @@ interface ProjectQuadrantProps {
   workers: Worker[];
   events: AlertEvent[];
   conveyors: ConveyorBelt[];
+  allBuildings: Building[];
   theme: (typeof TERMINAL_THEMES)[keyof typeof TERMINAL_THEMES];
 }
 
@@ -20,8 +22,11 @@ export function ProjectQuadrant({
   workers,
   events,
   conveyors,
+  allBuildings,
   theme,
 }: ProjectQuadrantProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   // Map workers to their current buildings
   const workersByBuilding = useMemo(() => {
     const map: Record<string, Worker[]> = {};
@@ -46,8 +51,22 @@ export function ProjectQuadrant({
     return conveyors.filter(c => c.active && (ids.has(c.fromBuildingId) || ids.has(c.toBuildingId)));
   }, [buildings, conveyors]);
 
+  const expandedBuilding = expandedId ? buildings.find(b => b.id === expandedId) : null;
+
   return (
-    <div className="terminal-quadrant flex flex-col h-full">
+    <div className="terminal-quadrant flex flex-col h-full relative">
+      {/* Expanded building detail overlay */}
+      {expandedBuilding && (
+        <BuildingDetail
+          building={expandedBuilding}
+          workers={workers}
+          conveyors={conveyors}
+          allBuildings={allBuildings}
+          theme={theme}
+          onClose={() => setExpandedId(null)}
+        />
+      )}
+
       {/* Quadrant header */}
       <div
         className="flex items-center gap-2 px-3 py-1 border-b text-[13px] font-bold tracking-[0.15em] uppercase shrink-0"
@@ -80,7 +99,8 @@ export function ProjectQuadrant({
           return (
             <div
               key={building.id}
-              className="mb-1.5 py-1 rounded-sm hover:bg-white/[0.02] transition-colors flex"
+              className="mb-1.5 py-1 rounded-sm hover:bg-white/[0.04] transition-colors flex cursor-pointer"
+              onClick={() => setExpandedId(building.id)}
             >
               {/* Color accent bar */}
               <div
@@ -114,49 +134,49 @@ export function ProjectQuadrant({
                 <div className="flex items-center gap-3 text-[12px] mt-0.5 pl-4" style={{ color: theme.dim }}>
                   <span>tests:{building.stats.tests}</span>
                   <span>deploys:{building.stats.deploys}</span>
-                {bWorkers.length > 0 && (
-                  <span style={{ color: theme.secondary }}>
-                    agents:{bWorkers.length}
-                  </span>
-                )}
-              </div>
-
-              {/* Workers assigned */}
-              {bWorkers.length > 0 && (
-                <div className="flex flex-wrap gap-x-3 gap-y-0 mt-0.5 pl-4">
-                  {bWorkers.map(w => {
-                    const icon = WORKER_ICONS[w.type] || "?";
-                    const workerColor = WORKER_TYPE_CONFIG[w.type]?.color || theme.primary;
-                    return (
-                      <div key={w.id} className="flex items-center gap-1 text-[12px]">
-                        <span style={{ color: workerColor }}>{icon}</span>
-                        <span style={{ color: theme.secondary }}>{w.name}</span>
-                        {w.status === "working" && (
-                          <>
-                            <span className="tabular-nums" style={{ color: theme.dim }}>
-                              {w.progress}%
-                            </span>
-                            {/* ASCII progress bar */}
-                            <span style={{ color: theme.dim }}>
-                              [
-                              <span style={{ color: workerColor }}>
-                                {"█".repeat(Math.floor(w.progress / 10))}
-                              </span>
-                              {"░".repeat(10 - Math.floor(w.progress / 10))}
-                              ]
-                            </span>
-                          </>
-                        )}
-                        {w.status === "moving" && (
-                          <span style={{ color: theme.dim }} className="text-[11px]">
-                            → {w.task.slice(0, 20)}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {bWorkers.length > 0 && (
+                    <span style={{ color: theme.secondary }}>
+                      agents:{bWorkers.length}
+                    </span>
+                  )}
                 </div>
-              )}
+
+                {/* Workers assigned */}
+                {bWorkers.length > 0 && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-0 mt-0.5 pl-4">
+                    {bWorkers.map(w => {
+                      const icon = WORKER_ICONS[w.type] || "?";
+                      const workerColor = WORKER_TYPE_CONFIG[w.type]?.color || theme.primary;
+                      return (
+                        <div key={w.id} className="flex items-center gap-1 text-[12px]">
+                          <span style={{ color: workerColor }}>{icon}</span>
+                          <span style={{ color: theme.secondary }}>{w.name}</span>
+                          {w.status === "working" && (
+                            <>
+                              <span className="tabular-nums" style={{ color: theme.dim }}>
+                                {w.progress}%
+                              </span>
+                              {/* ASCII progress bar */}
+                              <span style={{ color: theme.dim }}>
+                                [
+                                <span style={{ color: workerColor }}>
+                                  {"█".repeat(Math.floor(w.progress / 10))}
+                                </span>
+                                {"░".repeat(10 - Math.floor(w.progress / 10))}
+                                ]
+                              </span>
+                            </>
+                          )}
+                          {w.status === "moving" && (
+                            <span style={{ color: theme.dim }} className="text-[11px]">
+                              → {w.task.slice(0, 20)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -167,7 +187,7 @@ export function ProjectQuadrant({
       {relevantEvents.length > 0 && (
         <div className="shrink-0 border-t px-3 py-0.5" style={{ borderColor: theme.dim }}>
           {relevantEvents.slice(-1).map(e => (
-            <div key={e.id} className="text-[12px] truncate" style={{ color: theme.dim }}>
+            <div key={e.id} className="text-[11px] truncate" style={{ color: theme.dim }}>
               <span className="tabular-nums">{e.time}</span>{" "}
               <span style={{ color: e.type === "error" ? "#ff3333" : e.type === "success" ? "#00ff41" : theme.dim }}>
                 {e.message}
