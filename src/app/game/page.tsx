@@ -12,6 +12,8 @@ import { DataFlowMap } from "@/components/terminal/DataFlowMap";
 import { AgentRoster } from "@/components/terminal/AgentRoster";
 import { SystemMonitor } from "@/components/terminal/SystemMonitor";
 import { Minimap } from "@/components/terminal/Minimap";
+import { ActivityHeatmap } from "@/components/terminal/ActivityHeatmap";
+import { QuickActions } from "@/components/terminal/QuickActions";
 import { CommandInput } from "@/components/terminal/CommandInput";
 import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
 import { BuildingDetail } from "@/components/terminal/BuildingDetail";
@@ -20,7 +22,7 @@ import { useSpawnTask } from "@/components/terminal/useSpawnTask";
 import { TerminalToast } from "@/components/terminal/TerminalToast";
 import { useToasts } from "@/components/terminal/useToasts";
 
-type RightPanel = "events" | "flows" | "agents" | "system" | "map";
+type RightPanel = "events" | "flows" | "agents" | "system" | "map" | "heat";
 
 export default function GamePage() {
   const { workers, events, budget, isDemo } = useGameData();
@@ -85,23 +87,50 @@ export default function GamePage() {
   }, [cycleTheme, spawnTask, addToast]);
 
   // Keyboard shortcuts
+  const PANEL_KEYS: Record<string, RightPanel> = {
+    "1": "events", "2": "flows", "3": "agents", "4": "system", "5": "map", "6": "heat",
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isInput = tag === "INPUT" || tag === "TEXTAREA";
+
       if (e.ctrlKey && e.key === "t") {
         e.preventDefault();
         cycleTheme();
+        return;
       }
+
+      // Ctrl+1-5 to switch right panel tabs (works even in input)
+      if (e.ctrlKey && PANEL_KEYS[e.key]) {
+        e.preventDefault();
+        setRightPanel(PANEL_KEYS[e.key]);
+        return;
+      }
+
       if (e.key === "Escape") {
-        if (selectedAgentId) {
+        if (inspectedId) {
+          setInspectedId(null);
+        } else if (selectedAgentId) {
           setSelectedAgentId(null);
         } else if (!booted) {
           setBooted(true);
         }
+        return;
+      }
+
+      // Backtick to focus command input (when not already in input)
+      if (e.key === "/" && !isInput) {
+        e.preventDefault();
+        const cmdInput = document.querySelector<HTMLInputElement>(".terminal-cmd input");
+        cmdInput?.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cycleTheme, booted, selectedAgentId]);
+  }, [cycleTheme, booted, selectedAgentId, inspectedId]);
 
   const inspectedBuilding = inspectedId ? BUILDINGS.find(b => b.id === inspectedId) : null;
 
@@ -154,20 +183,23 @@ export default function GamePage() {
             <div className="terminal-feed terminal-quadrant flex flex-col">
               {/* Tab switcher */}
               <div className="flex shrink-0" style={{ borderBottom: `1px solid ${theme.dim}` }}>
-                {(["events", "flows", "agents", "system", "map"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setRightPanel(tab)}
-                    className="flex-1 text-[10px] font-bold tracking-wider uppercase py-1 text-center cursor-pointer transition-colors"
-                    style={{
-                      color: rightPanel === tab ? theme.primary : theme.dim,
-                      backgroundColor: rightPanel === tab ? "rgba(255,255,255,0.03)" : "transparent",
-                      borderBottom: rightPanel === tab ? `2px solid ${theme.primary}` : "2px solid transparent",
-                    }}
-                  >
-                    {tab === "system" ? "SYS" : tab}
-                  </button>
-                ))}
+                {(["events", "flows", "agents", "system", "map", "heat"] as const).map((tab) => {
+                  const label = tab === "system" ? "SYS" : tab === "heat" ? "HEAT" : tab;
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setRightPanel(tab)}
+                      className="flex-1 text-[9px] font-bold tracking-wider uppercase py-1 text-center cursor-pointer transition-colors"
+                      style={{
+                        color: rightPanel === tab ? theme.primary : theme.dim,
+                        backgroundColor: rightPanel === tab ? "rgba(255,255,255,0.03)" : "transparent",
+                        borderBottom: rightPanel === tab ? `2px solid ${theme.primary}` : "2px solid transparent",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
               {/* Panel content */}
               <div className="flex-1 min-h-0">
@@ -188,17 +220,28 @@ export default function GamePage() {
                 {rightPanel === "map" && (
                   <Minimap buildings={BUILDINGS} workers={workers} conveyors={CONVEYORS} theme={theme} />
                 )}
+                {rightPanel === "heat" && (
+                  <ActivityHeatmap buildings={BUILDINGS} events={events} theme={theme} />
+                )}
               </div>
             </div>
 
-            {/* Command input */}
-            <div className="terminal-cmd terminal-quadrant">
-              <CommandInput
-                theme={theme}
+            {/* Command input with quick actions bar */}
+            <div className="terminal-cmd terminal-quadrant flex flex-col">
+              <QuickActions
                 buildings={BUILDINGS}
                 workers={workers}
+                theme={theme}
                 onCommand={handleCommand}
               />
+              <div className="flex-1 min-h-0">
+                <CommandInput
+                  theme={theme}
+                  buildings={BUILDINGS}
+                  workers={workers}
+                  onCommand={handleCommand}
+                />
+              </div>
             </div>
 
             {/* Bottom status bar */}
