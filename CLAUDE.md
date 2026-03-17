@@ -23,9 +23,9 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
   - `workers/cc_light_worker.py` — Claude Code CLI worker with worktree support (strategic tasks)
   - `workers/heavy_worker.py` — Claude Code CLI worker with worktree + auto-merge (code changes)
   - `workers/browser_worker.py` — Playwright browser automation
-  - `tasks/task_manager.py` — DAG dependencies, output chaining, failure propagation, priority inheritance
+  - `tasks/task_manager.py` — DAG dependencies, output chaining, failure propagation, priority inheritance, affinity-based assignment
   - `goal_decomposer.py` — breaks goals into structured task DAGs with cycle detection
-  - `memory.py` — shared context bank across tasks
+  - `memory.py` — shared context bank with relevance scoring, cross-project learning
   - `config.py` — project registry, model routing, budget limits
 - **Scheduler v2**: `scheduler.py` — cron + workflow pipelines
 - **Context Library**: `contexts/` — auto-loaded markdown files
@@ -78,7 +78,7 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
 | `/api/workflows` | POST | API Key | Execute workflow pipeline |
 | `/api/git-activity` | GET | Public | Recent GitHub commits across repos |
 | `/api/today` | GET | Public | Aggregated daily dashboard data |
-| `/api/patterns` | GET | Public | Task success/fail patterns + specializations |
+| `/api/patterns` | GET | Public | Task patterns, worker rankings, failure hotspots, cross-project trends |
 | `/api/memory` | GET | Public | Shared agent memory query |
 | `/api/alerts` | GET | Public | Real-time anomaly detection |
 | `/api/export` | GET | Public | CSV/JSON report export |

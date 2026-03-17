@@ -195,11 +195,15 @@ class TaskManager:
     def _pick_best_task(
         self, candidates: list[dict[str, Any]], worker_type: Optional[str] = None
     ) -> dict[str, Any]:
-        """Pick the best task from candidates based on worker type matching.
+        """Pick the best task from candidates using multi-factor affinity scoring.
 
-        If worker_type is provided and matches a known preference list,
-        tasks whose task_type matches are preferred. Falls back to the
-        first candidate (highest priority) if no type match is found.
+        Scores each candidate task by:
+        - Worker type preference match (+5)
+        - Historical success rate on this project+task_type (+3 for >80%, +1 for >50%)
+        - Priority (higher priority = higher score, up to +3)
+        - Retry avoidance: tasks with 0 retries preferred (+1)
+
+        Falls back to highest priority if no worker_type or no affinity data.
 
         Args:
             candidates: List of queued task rows, already sorted by priority
@@ -208,26 +212,82 @@ class TaskManager:
         Returns:
             The best matching task row
         """
-        from swarm.config import WORKER_TYPE_PREFERENCES
-
-        if not worker_type or worker_type not in WORKER_TYPE_PREFERENCES:
+        if not worker_type:
             return candidates[0]
 
-        preferred_types = WORKER_TYPE_PREFERENCES[worker_type]
+        from swarm.config import WORKER_TYPE_PREFERENCES
 
-        # Look for a type-matched task
+        preferred_types = WORKER_TYPE_PREFERENCES.get(worker_type, [])
+
+        # Load affinity data: success rates per project+task_type
+        affinity_cache = self._load_affinity_cache()
+
+        scored: list[tuple[float, dict[str, Any]]] = []
         for task in candidates:
-            if task.get("task_type") in preferred_types:
-                logger.debug(
-                    "Smart match: worker_type=%s matched task_type=%s for task %s",
-                    worker_type,
-                    task["task_type"],
-                    task["id"][:8],
-                )
-                return task
+            score = 0.0
 
-        # No match found, fall back to highest priority
-        return candidates[0]
+            # Worker type preference match (+5)
+            if task.get("task_type") in preferred_types:
+                score += 5.0
+
+            # Historical success rate on this project+task_type (+3 max)
+            affinity_key = f"{task.get('project', '')}/{task.get('task_type', '')}"
+            if affinity_key in affinity_cache:
+                rate = affinity_cache[affinity_key]
+                if rate > 80:
+                    score += 3.0
+                elif rate > 50:
+                    score += 1.0
+                elif rate < 20:
+                    score -= 1.0  # Avoid tasks we historically fail at
+
+            # Priority bonus (priority 1 = +3, priority 50 = ~0)
+            priority = task.get("priority", 50)
+            score += max(0, (50 - priority) / 16.0)
+
+            # Retry avoidance: prefer fresh tasks
+            if (task.get("retry_count") or 0) == 0:
+                score += 1.0
+
+            scored.append((score, task))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        best_score, best_task = scored[0]
+        if best_score > 0 and best_task["id"] != candidates[0]["id"]:
+            logger.debug(
+                "Affinity match: worker_type=%s picked task %s (score=%.1f) over default %s",
+                worker_type,
+                best_task["id"][:8],
+                best_score,
+                candidates[0]["id"][:8],
+            )
+
+        return best_task
+
+    def _load_affinity_cache(self) -> dict[str, float]:
+        """Load success rate cache from agent_specializations table.
+
+        Returns:
+            Dict mapping "project/task_type" to success rate percentage (0-100)
+        """
+        try:
+            resp = (
+                self.sb.table("agent_specializations")
+                .select("project, task_type, success_count, fail_count")
+                .execute()
+            )
+            cache: dict[str, float] = {}
+            for row in resp.data or []:
+                total = (row.get("success_count") or 0) + (row.get("fail_count") or 0)
+                if total >= 3:  # Need at least 3 data points
+                    rate = ((row.get("success_count") or 0) / total) * 100
+                    key = f"{row.get('project', '')}/{row.get('task_type', '')}"
+                    cache[key] = rate
+            return cache
+        except Exception as e:
+            logger.debug("Failed to load affinity cache: %s", e)
+            return {}
 
     # ── Auto-complete meta tasks ─────────────────────────────────────────
 

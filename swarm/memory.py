@@ -115,6 +115,148 @@ class SwarmMemory:
 
         return "\n".join(lines)
 
+    def recall_relevant(
+        self,
+        project: str,
+        task_type: Optional[str] = None,
+        keywords: Optional[list[str]] = None,
+        limit: int = 5,
+    ) -> str:
+        """Recall memories ranked by relevance to the current task.
+
+        Scores each memory by: task_type match (+3), keyword overlap (+1 each),
+        recency bonus (+2 if <1h, +1 if <6h). Returns the top-scoring results.
+
+        Args:
+            project: Project key
+            task_type: Current task type for matching
+            keywords: Keywords from the current task prompt
+            limit: Max results to return
+
+        Returns:
+            Formatted context string, or empty string
+        """
+        # Fetch a larger pool to score from
+        pool = self._query_recent(project, limit=20)
+        if not pool:
+            return ""
+
+        scored: list[tuple[float, dict[str, Any]]] = []
+        now_ts = datetime.now(timezone.utc).timestamp()
+
+        for r in pool:
+            score = 0.0
+
+            # Task type match
+            r_type = r.get("task_type", "")
+            if task_type and r_type == task_type:
+                score += 3.0
+
+            # Keyword overlap
+            if keywords:
+                title = (r.get("task_title") or r.get("title", "")).lower()
+                summary = (r.get("output_summary") or "").lower()
+                text = f"{title} {summary}"
+                for kw in keywords:
+                    if kw.lower() in text:
+                        score += 1.0
+
+            # Recency bonus
+            ts_str = r.get("created_at") or r.get("completed_at")
+            if ts_str:
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+                    age_hours = (now_ts - ts) / 3600
+                    if age_hours < 1:
+                        score += 2.0
+                    elif age_hours < 6:
+                        score += 1.0
+                except (ValueError, TypeError):
+                    pass
+
+            scored.append((score, r))
+
+        # Sort by score descending, take top N
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = [r for _, r in scored[:limit] if _ > 0]
+
+        if not top:
+            # Fall back to pure recency if no relevance signal
+            top = pool[:limit]
+
+        lines = ["Relevant context from previous work:"]
+        for r in top:
+            title = r.get("task_title") or r.get("title", "Unknown")
+            summary = r.get("output_summary") or self._extract_summary(r)
+            age = self._format_age(r.get("created_at") or r.get("completed_at"))
+            lines.append(f"  - [{age}] {title}: {summary}")
+
+        return "\n".join(lines)
+
+    def recall_cross_project(
+        self,
+        task_type: str,
+        exclude_project: str = "",
+        limit: int = 3,
+    ) -> str:
+        """Recall successful patterns from other projects for the same task type.
+
+        Useful for cross-pollinating learnings — e.g., build patterns that work
+        in pl-engine might help in nexus.
+
+        Args:
+            task_type: Task type to search for (e.g. "build", "eval")
+            exclude_project: Project to exclude (the current one)
+            limit: Max results
+
+        Returns:
+            Formatted context string, or empty string
+        """
+        if not self._has_memory_table():
+            return ""
+
+        try:
+            query = (
+                self.sb.table(MEMORY_TABLE)
+                .select("project, task_title, task_type, output_summary, created_at")
+                .eq("task_type", task_type)
+                .order("created_at", desc=True)
+                .limit(limit * 3)  # Fetch extra to filter
+            )
+            if exclude_project:
+                query = query.neq("project", exclude_project)
+
+            resp = query.execute()
+            if not resp.data:
+                return ""
+
+            # Deduplicate by project — one insight per project
+            seen_projects: set[str] = set()
+            results: list[dict[str, Any]] = []
+            for r in resp.data:
+                proj = r.get("project", "")
+                if proj not in seen_projects:
+                    seen_projects.add(proj)
+                    results.append(r)
+                if len(results) >= limit:
+                    break
+
+            if not results:
+                return ""
+
+            lines = [f"Patterns from other projects ({task_type} tasks):"]
+            for r in results:
+                proj = r.get("project", "?")
+                title = r.get("task_title", "Unknown")
+                summary = r.get("output_summary", "")[:150]
+                lines.append(f"  - [{proj}] {title}: {summary}")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.debug("Cross-project recall failed: %s", e)
+            return ""
+
     def _query_recent(self, project: str, limit: int) -> list[dict[str, Any]]:
         """Query recent completed work for a project."""
         # Try dedicated memory table first
@@ -122,7 +264,7 @@ class SwarmMemory:
             try:
                 resp = (
                     self.sb.table(MEMORY_TABLE)
-                    .select("task_title, output_summary, created_at")
+                    .select("task_title, task_type, output_summary, created_at")
                     .eq("project", project)
                     .order("created_at", desc=True)
                     .limit(limit)
@@ -137,7 +279,7 @@ class SwarmMemory:
         try:
             resp = (
                 self.sb.table(TASKS_TABLE)
-                .select("title, output_data, completed_at")
+                .select("title, task_type, output_data, completed_at")
                 .eq("project", project)
                 .eq("status", "completed")
                 .order("completed_at", desc=True)
