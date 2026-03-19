@@ -485,11 +485,12 @@ class TestConfig:
             assert rates["input"] > 0
             assert rates["output"] > 0
 
-    def test_model_routing_maps_to_known_models(self):
+    def test_model_routing_all_cli(self):
+        """All tiers should route through CLI (free on Max plan)."""
         from swarm.config import MODEL_ROUTING
 
-        for tier, model in MODEL_ROUTING.items():
-            assert model.startswith("claude-"), f"MODEL_ROUTING['{tier}'] doesn't look like a Claude model"
+        for tier, target in MODEL_ROUTING.items():
+            assert target == "cli", f"MODEL_ROUTING['{tier}'] should be 'cli', got '{target}'"
 
     def test_projects_have_required_fields(self):
         from swarm.config import PROJECTS
@@ -498,10 +499,11 @@ class TestConfig:
             assert "dir" in config, f"PROJECTS['{name}'] missing 'dir'"
             assert "type" in config, f"PROJECTS['{name}'] missing 'type'"
 
-    def test_budget_defaults_positive(self):
+    def test_budget_defaults_zero(self):
+        """Budget should be $0 since all workers use CLI now."""
         from swarm.config import BUDGET_DEFAULTS
 
-        assert BUDGET_DEFAULTS["daily_api_budget_cents"] > 0
+        assert BUDGET_DEFAULTS["daily_api_budget_cents"] == 0
 
     def test_haiku_and_sonnet_types_disjoint(self):
         from swarm.config import HAIKU_TASK_TYPES, SONNET_TASK_TYPES

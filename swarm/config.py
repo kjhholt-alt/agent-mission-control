@@ -15,7 +15,8 @@ SUPABASE_KEY = os.environ.get(
     "SUPABASE_KEY",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0dnRhb3JnaXR5Y3pyZGhoenF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MzY4MTEsImV4cCI6MjA4NjUxMjgxMX0.A2uG-yVQ1HSV9-zlNDAztHHVw25g1cQ43180y3TfwGk",
 )
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+# ANTHROPIC_API_KEY no longer needed — all workers use Claude Code CLI (free on Max plan)
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")  # Kept for backward compat only
 NEXUS_URL = os.environ.get(
     "NEXUS_URL",
     os.environ.get("MISSION_CONTROL_URL", "https://nexus.buildkit.store"),
@@ -60,26 +61,30 @@ PROJECTS = {
 BLOCKED_PROJECTS = ["MoneyPrinter", "moneyprinter", "moneyprinter-hud"]
 
 # ── Budget defaults ───────────────────────────────────────────────────────────
+# All workers now use Claude Code CLI (free on Max plan). Budget is kept for
+# observability but no real API spend should occur.
 BUDGET_DEFAULTS = {
-    "daily_api_budget_cents": 500,  # $5/day
-    # CC minutes removed — not a real metric  # 8 hours
+    "daily_api_budget_cents": 0,  # $0/day — everything routes through CLI now
 }
 
 # ── Worker limits ─────────────────────────────────────────────────────────────
+# All workers now use Claude Code CLI. Light workers have shorter timeouts.
 WORKER_LIMITS = {
-    "light_max": 15,       # Haiku API workers (bulk tasks, quality gate)
-    "cc_light_max": 5,     # Claude Code light workers (eval, scout, planning)
-    "heavy_max": 5,        # Claude Code heavy workers (code writing, PRs)
+    "light_max": 8,        # Claude Code CLI workers (fast tasks, 2min timeout)
+    "cc_light_max": 5,     # Claude Code CLI workers (eval, scout, planning, 5min timeout)
+    "heavy_max": 5,        # Claude Code CLI workers (code writing, PRs, 30min timeout)
     "browser_max": 3,      # Playwright browser workers (scraping, screenshots)
 }
 
 # ── Model costs (cents per 1K tokens) ────────────────────────────────────────
+# Kept for historical tracking. All workers now use CLI (cost = 0).
 MODEL_COSTS = {
     "claude-haiku-4-5-20251001": {"input": 0.025, "output": 0.125},
     "claude-sonnet-4-5-20250514": {"input": 0.3, "output": 1.5},
 }
 
 # ── Quality gate ──────────────────────────────────────────────────────────────
+# Now uses free heuristic checks (output length, error detection) instead of Haiku API
 ENABLE_QUALITY_GATE = True
 
 # ── Worker type matching ─────────────────────────────────────────────────────
@@ -101,18 +106,17 @@ AUTO_MERGE_ENABLED = True
 AUTO_MERGE_MAX_FILES_CHANGED = 10
 AUTO_MERGE_MIN_QUALITY_SCORE = 7
 
-# ── Model routing (migrated from executor v3) ──────────────────────────
-# Maps cost_tier → Claude model flag for API-based workers
+# ── Model routing ─────────────────────────────────────────────────────
+# All tiers now route through Claude Code CLI (Opus on Max plan). No API spend.
 MODEL_ROUTING = {
-    "haiku": "claude-haiku-4-5",
-    "sonnet": "claude-sonnet-4-5",
-    "light": "claude-haiku-4-5",
-    # cc_light and heavy use Claude Code CLI (default Opus on Max plan)
+    "light": "cli",      # Was Haiku API, now Claude Code CLI
+    "cc_light": "cli",   # Claude Code CLI (unchanged)
+    "heavy": "cli",      # Claude Code CLI (unchanged)
+    "browser": "cli",    # Was Haiku API for summaries, now CLI
 }
 
-# Task types routed to Haiku (trivial, fast operations)
+# Task type sets kept for routing logic (light vs cc_light vs heavy timeout)
 HAIKU_TASK_TYPES = {"eval", "check", "health", "status", "ping"}
-# Task types routed to Sonnet minimum (real work)
 SONNET_TASK_TYPES = {
     "build", "scout", "builder", "implement", "fix", "refactor",
     "review", "analyze", "plan", "research", "audit", "inspector", "miner",

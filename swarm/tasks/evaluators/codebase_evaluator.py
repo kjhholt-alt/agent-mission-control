@@ -1,16 +1,18 @@
 """
 Codebase evaluator: analyzes a project and suggests improvement tasks.
+
+Uses Claude Code CLI (free on Max plan) instead of direct API calls.
 """
 
 import json
 import logging
 import os
 import subprocess
+import tempfile
+import time
 from typing import Any
 
-import anthropic
-
-from swarm.config import ANTHROPIC_API_KEY, PROJECTS
+from swarm.config import CLAUDE_CLI_PATH, PROJECTS
 
 logger = logging.getLogger("swarm.evaluator")
 
@@ -46,9 +48,6 @@ Guidelines:
 class CodebaseEvaluator:
     """Evaluates a project codebase and suggests improvement tasks."""
 
-    def __init__(self):
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
     def evaluate(self, project_key: str) -> dict[str, Any]:
         """Evaluate a project and return structured assessment.
 
@@ -70,27 +69,61 @@ class CodebaseEvaluator:
         # Gather codebase context
         context = self._gather_context(project_dir, config["type"])
 
-        prompt = f"""Evaluate this {config['type']} project: {project_key}
+        prompt = f"""{EVAL_SYSTEM}
+
+Evaluate this {config['type']} project: {project_key}
 
 Directory: {project_dir}
 
 {context}
 
-Provide your assessment as JSON."""
+Provide your assessment as JSON. Return ONLY valid JSON, no markdown fences."""
 
         logger.info("Evaluating project: %s", project_key)
 
-        response = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
-            system=EVAL_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
+        # Use Claude Code CLI (free on Max plan)
+        prompt_file = os.path.join(
+            tempfile.gettempdir(), f"swarm-eval-{project_key}-{int(time.time())}.txt"
+        )
+        with open(prompt_file, "w", encoding="utf-8") as pf:
+            pf.write(prompt)
+
+        shell_cmd = (
+            f'type "{prompt_file}" | "{CLAUDE_CLI_PATH}" '
+            f'--output-format text -p -'
         )
 
-        response_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                response_text += block.text
+        try:
+            startupinfo = None
+            if os.name == "nt":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
+            result = subprocess.run(
+                shell_cmd,
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                timeout=180,  # 3 minute timeout
+                shell=True,
+                encoding="utf-8",
+                errors="replace",
+                startupinfo=startupinfo,
+            )
+
+            response_text = result.stdout or ""
+        except subprocess.TimeoutExpired:
+            response_text = ""
+            logger.error("Codebase evaluation timed out for %s", project_key)
+        except Exception as e:
+            response_text = ""
+            logger.error("Codebase evaluation failed for %s: %s", project_key, e)
+        finally:
+            try:
+                os.remove(prompt_file)
+            except Exception:
+                pass
 
         try:
             text = response_text.strip()
@@ -99,6 +132,13 @@ Provide your assessment as JSON."""
                 text = "\n".join(
                     lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
                 )
+
+            # Try to extract JSON object from response
+            import re
+            json_match = re.search(r"\{[\s\S]*\}", text)
+            if json_match:
+                text = json_match.group(0)
+
             assessment = json.loads(text)
         except json.JSONDecodeError as e:
             logger.error("Failed to parse evaluation response: %s", e)
@@ -160,7 +200,6 @@ Provide your assessment as JSON."""
         try:
             ext_counts: dict[str, int] = {}
             for root, dirs, files in os.walk(project_dir):
-                # Skip common non-source dirs
                 dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".next", "dist", "build", "venv", ".venv"}]
                 for f in files:
                     ext = os.path.splitext(f)[1].lower()

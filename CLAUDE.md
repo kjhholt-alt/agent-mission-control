@@ -19,10 +19,10 @@ AI agent swarm platform with real-time factory visualization. Monitors, spawns, 
   - `teams.py` — multi-agent team coordination with shared goals
   - `worktree.py` — git worktree isolation for parallel agent work
   - `workers/base.py` — base worker with memory, persona, quality gate, specialization tracking, chain_next handoffs
-  - `workers/light_worker.py` — Haiku API worker (fast, cheap tasks)
-  - `workers/cc_light_worker.py` — Claude Code CLI worker with worktree support (strategic tasks)
-  - `workers/heavy_worker.py` — Claude Code CLI worker with worktree + auto-merge (code changes)
-  - `workers/browser_worker.py` — Playwright browser automation
+  - `workers/light_worker.py` — Claude Code CLI worker (fast tasks, 2min timeout)
+  - `workers/cc_light_worker.py` — Claude Code CLI worker with worktree support (strategic tasks, 5min timeout)
+  - `workers/heavy_worker.py` — Claude Code CLI worker with worktree + auto-merge (code changes, 30min timeout)
+  - `workers/browser_worker.py` — Playwright browser automation (CLI for summaries)
   - `tasks/task_manager.py` — DAG dependencies, output chaining, failure propagation, priority inheritance, affinity-based assignment
   - `goal_decomposer.py` — breaks goals into structured task DAGs with cycle detection
   - `memory.py` — shared context bank with relevance scoring, cross-project learning

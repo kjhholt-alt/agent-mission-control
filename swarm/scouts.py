@@ -13,11 +13,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-import anthropic
 import requests
 
 from swarm.config import (
-    ANTHROPIC_API_KEY,
     BLOCKED_PROJECTS,
     CLAUDE_CLI_PATH,
     DISCORD_WEBHOOK_URL,
@@ -94,11 +92,9 @@ class ScoutAgent:
 
     def __init__(
         self,
-        anthropic_client: Optional[anthropic.Anthropic] = None,
         task_manager: Optional[TaskManager] = None,
         memory: Optional[SwarmMemory] = None,
     ):
-        self.client = anthropic_client or anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self.task_manager = task_manager or TaskManager()
         self.memory = memory or SwarmMemory()
         self.last_run: float = 0

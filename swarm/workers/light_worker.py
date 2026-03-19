@@ -1,47 +1,41 @@
 """
-Light worker: uses Anthropic Python SDK to call Claude API directly.
+Light worker: uses Claude Code CLI instead of direct API calls.
+
+Previously used Anthropic Python SDK (Haiku) which cost real money.
+Now routes through Claude Code CLI — free on Max plan, and smarter (Opus).
 """
 
 import json
 import logging
+import os
+import re
+import subprocess
+import tempfile
+import time
 from typing import Any
 
-import anthropic
-
-from swarm.budget.cost_calculator import calculate_cost
-from swarm.config import ANTHROPIC_API_KEY, BLOCKED_PROJECTS, PROJECTS
+from swarm.config import BLOCKED_PROJECTS, CLAUDE_CLI_PATH, PROJECTS
 from swarm.context import gather_project_context
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.light")
 
-# Default models for light workers
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-SONNET_MODEL = "claude-sonnet-4-5-20250514"
+# 2 minute timeout for light tasks (fast analysis, evals, checks)
+LIGHT_TASK_TIMEOUT_SECONDS = 120
 
 
 class LightWorker(BaseWorker):
-    """Worker that calls Claude API directly for fast, cheap tasks."""
+    """Worker that uses Claude Code CLI for fast tasks. Free on Max plan."""
 
     def __init__(self, worker_type: str = "light"):
         super().__init__(worker_type=worker_type, tier="light")
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=300.0)
 
     def _build_prompt_with_context(self, task: dict[str, Any], prompt: str) -> str:
-        """Inject project context before the task prompt if a project is specified.
-
-        Args:
-            task: Task row from Supabase
-            prompt: Original task prompt
-
-        Returns:
-            Prompt with project context prepended, or original prompt
-        """
+        """Inject project context before the task prompt if a project is specified."""
         project_key = task.get("project", "")
         if not project_key:
             return prompt
 
-        # Don't inject context for blocked projects
         if project_key in BLOCKED_PROJECTS:
             logger.debug("Skipping context for blocked project: %s", project_key)
             return prompt
@@ -70,17 +64,14 @@ class LightWorker(BaseWorker):
         return f"{context}\n\n{prompt}"
 
     def execute(self, task: dict[str, Any]) -> dict[str, Any]:
-        """Execute a task by calling the Claude API.
+        """Execute a task via Claude Code CLI (free on Max plan).
 
         Args:
             task: Task row from Supabase. input_data should contain:
                 - prompt: The prompt to send
-                - model (optional): Model override
-                - max_tokens (optional): Max tokens override
-                - system (optional): System prompt
 
         Returns:
-            Output data with response, model, and cost info
+            Output data with response and duration
         """
         input_data = task.get("input_data", {})
         if isinstance(input_data, str):
@@ -90,61 +81,110 @@ class LightWorker(BaseWorker):
         if not prompt:
             raise ValueError("Task input_data must contain a 'prompt' field")
 
+        # Validate task ID format (prevents shell injection)
+        if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', task["id"]):
+            raise ValueError(f"Invalid task ID format: {task['id'][:40]}")
+
         # Inject project context before the prompt
         prompt = self._build_prompt_with_context(task, prompt)
 
-        # Select model based on task type
-        model = input_data.get("model", DEFAULT_MODEL)
-        if task.get("task_type") in ("meta", "eval"):
-            model = input_data.get("model", SONNET_MODEL)
+        # Add system context to prompt
+        system_prompt = input_data.get("system", "")
+        if system_prompt:
+            prompt = f"{system_prompt}\n\n{prompt}"
 
-        max_tokens = input_data.get("max_tokens", 4096)
-        system_prompt = input_data.get("system", "You are an autonomous agent worker in a swarm system. Complete the task precisely and return structured output.")
+        # Resolve working directory
+        project_key = task.get("project", "")
+        project_config = PROJECTS.get(project_key, {})
+        cwd = project_config.get("dir", "C:/Users/Kruz/Desktop/Projects")
 
         logger.info(
-            "Calling %s for task %s: %s",
-            model,
+            "Launching Claude Code (light) for task %s in %s: %s",
             task["id"][:8],
+            cwd,
             task["title"],
         )
 
-        response = self.client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
+        start_time = time.time()
+
+        # Write prompt to temp file to avoid Windows cmd.exe argument mangling
+        prompt_file = os.path.join(
+            tempfile.gettempdir(), f"swarm-prompt-light-{task['id']}.txt"
+        )
+        with open(prompt_file, "w", encoding="utf-8") as pf:
+            pf.write(prompt)
+
+        shell_cmd = (
+            f'type "{prompt_file}" | "{CLAUDE_CLI_PATH}" '
+            f'--output-format text -p -'
         )
 
-        # Extract response text
-        response_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                response_text += block.text
+        try:
+            startupinfo = None
+            if os.name == "nt":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
 
-        # Calculate cost
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
-        cost_cents = calculate_cost(model, input_tokens, output_tokens)
+            result = subprocess.run(
+                shell_cmd,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=LIGHT_TASK_TIMEOUT_SECONDS,
+                shell=True,
+                encoding="utf-8",
+                errors="replace",
+                startupinfo=startupinfo,
+            )
 
-        # Record spend
-        self.budget_manager.record_spend(
-            cents=cost_cents,
-            tokens=input_tokens + output_tokens,
-        )
+            duration_seconds = round(time.time() - start_time, 1)
 
-        logger.info(
-            "Task %s: %d in / %d out tokens, $%.4f",
-            task["id"][:8],
-            input_tokens,
-            output_tokens,
-            cost_cents / 100,
-        )
+            stdout = result.stdout or ""
+            stderr = result.stderr or ""
 
-        return {
-            "response": response_text,
-            "model": model,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "cost_cents": int(round(cost_cents)),
-            "stop_reason": response.stop_reason,
-        }
+            # Truncate large outputs
+            max_output = 10000
+            if len(stdout) > max_output:
+                stdout = f"[...truncated {len(stdout) - max_output} chars...]\n" + stdout[-max_output:]
+
+            if result.returncode != 0:
+                error_detail = stderr[:500] or f"Exit code {result.returncode}"
+                logger.error(
+                    "Claude Code (light) exited %d for task %s (%.0fs): %s",
+                    result.returncode,
+                    task["id"][:8],
+                    duration_seconds,
+                    error_detail[:200],
+                )
+                raise RuntimeError(
+                    f"Claude Code failed (exit {result.returncode}): {error_detail}"
+                )
+
+            logger.info(
+                "Task %s completed in %.1fs via light (CLI)",
+                task["id"][:8],
+                duration_seconds,
+            )
+
+            return {
+                "response": stdout,
+                "stdout": stdout,
+                "stderr": stderr,
+                "exit_code": result.returncode,
+                "duration_seconds": duration_seconds,
+                "cost_cents": 0,  # Free on Max plan
+                "tier": "light",
+            }
+
+        except subprocess.TimeoutExpired:
+            duration_seconds = round(time.time() - start_time, 1)
+            raise TimeoutError(
+                f"Claude Code (light) timed out after {LIGHT_TASK_TIMEOUT_SECONDS}s"
+            )
+        finally:
+            try:
+                if prompt_file and os.path.exists(prompt_file):
+                    os.remove(prompt_file)
+            except Exception:
+                pass

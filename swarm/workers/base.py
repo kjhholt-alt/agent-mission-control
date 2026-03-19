@@ -20,12 +20,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import anthropic
 import requests
 
 from swarm.budget.budget_manager import BudgetManager
-from swarm.budget.cost_calculator import calculate_cost
-from swarm.config import ANTHROPIC_API_KEY, ENABLE_QUALITY_GATE, NEXUS_URL, SUPABASE_KEY, SUPABASE_URL, HAIKU_TASK_TYPES, SONNET_TASK_TYPES
+from swarm.config import ENABLE_QUALITY_GATE, NEXUS_URL, SUPABASE_KEY, SUPABASE_URL
 from swarm.memory import SwarmMemory
 from swarm.retry_strategy import AdaptiveRetry
 from swarm.tasks.task_manager import TaskManager
@@ -252,10 +250,10 @@ class BaseWorker:
     # ── Quality gate ─────────────────────────────────────────────────────
 
     def quality_check(self, task_title: str, output: str) -> tuple[bool, str]:
-        """Run a quick quality check on task output using Haiku.
+        """Run a free heuristic quality check on task output.
 
-        Calls Haiku to rate the output 1-10 for actionability and specificity.
-        Returns (True, "") if score >= 5, or (False, reason) if score < 5.
+        Checks output length, structure, and relevance markers.
+        No API calls — completely free.
 
         Args:
             task_title: Title of the completed task
@@ -267,53 +265,24 @@ class BaseWorker:
         if not ENABLE_QUALITY_GATE:
             return (True, "")
 
-        # Truncate output to avoid huge quality check calls
-        check_output = output[:2000] if len(output) > 2000 else output
+        # Heuristic checks (free, no API calls)
+        stripped = output.strip()
 
-        try:
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=10,
-                system="You rate task outputs. Reply with ONLY a single number 1-10.",
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Rate this output 1-10 for actionability and specificity. "
-                        f"Task: {task_title}. Output: {check_output}. "
-                        f"Reply with just the number."
-                    ),
-                }],
-            )
+        # Too short = likely garbage
+        if len(stripped) < 50:
+            logger.info("Quality gate: output too short (%d chars) for '%s'", len(stripped), task_title[:40])
+            return (False, f"Output too short ({len(stripped)} chars)")
 
-            response_text = ""
-            for block in response.content:
-                if hasattr(block, "text"):
-                    response_text += block.text
+        # Error-only output = likely failed
+        error_markers = ["error:", "traceback", "exception", "failed to", "could not"]
+        lower = stripped.lower()
+        if any(marker in lower for marker in error_markers) and len(stripped) < 200:
+            logger.info("Quality gate: output appears to be only an error for '%s'", task_title[:40])
+            return (False, "Output appears to be only an error message")
 
-            # Record the quality check cost
-            qc_cost = calculate_cost(
-                "claude-haiku-4-5-20251001",
-                response.usage.input_tokens,
-                response.usage.output_tokens,
-            )
-            self.budget_manager.record_spend(cents=qc_cost)
-
-            # Parse score
-            match = re.search(r"\d+", response_text.strip())
-            if match:
-                score = int(match.group())
-                logger.info("Quality check score: %d/10 for task '%s'", score, task_title[:40])
-                if score < 5:
-                    return (False, f"Low quality output (score: {score}/10)")
-                return (True, "")
-            else:
-                logger.warning("Quality check returned unparseable response: %s", response_text)
-                return (True, "")  # Pass on parse failure to avoid blocking
-
-        except Exception as e:
-            logger.warning("Quality check failed: %s (passing by default)", e)
-            return (True, "")  # Don't block on quality check errors
+        # Passed
+        logger.debug("Quality gate passed for '%s' (%d chars)", task_title[:40], len(stripped))
+        return (True, "")
 
     # ── Specialization (migrated from executor v3) ──────────────────────
 

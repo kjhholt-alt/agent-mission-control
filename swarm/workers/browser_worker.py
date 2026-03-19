@@ -20,10 +20,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
-import anthropic
-
-from swarm.budget.cost_calculator import calculate_cost
-from swarm.config import ANTHROPIC_API_KEY
+from swarm.config import CLAUDE_CLI_PATH
 from swarm.workers.base import BaseWorker
 
 logger = logging.getLogger("swarm.worker.browser")
@@ -117,7 +114,6 @@ class BrowserWorker(BaseWorker):
 
     def __init__(self):
         super().__init__(worker_type="browser", tier="browser")
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         _ensure_playwright_installed()
 
     def execute(self, task: dict[str, Any]) -> dict[str, Any]:
@@ -485,58 +481,74 @@ class BrowserWorker(BaseWorker):
             finally:
                 browser.close()
 
-        # Truncate for Haiku
+        # Truncate content for analysis
         content_for_ai = content[:5000] if len(content) > 5000 else content
 
-        # Summarize with Haiku
+        # Build analysis prompt
         prompt = input_data.get("prompt", "")
-        system = (
+        analysis_prompt = (
             "You are a competitive analyst. Summarize what this company/site offers. "
             "Include: what they do, key features, pricing (if found), target audience, "
-            "strengths, and weaknesses. Be concise."
-        )
-        user_msg = (
+            "strengths, and weaknesses. Be concise.\n\n"
             f"Analyze this competitor website.\n\n"
             f"URL: {url}\nTitle: {title}\n"
             f"Meta description: {meta_desc}\n\n"
             f"Page content:\n{content_for_ai}\n\n"
         )
         if pricing_text:
-            user_msg += f"Pricing section:\n{pricing_text}\n\n"
+            analysis_prompt += f"Pricing section:\n{pricing_text}\n\n"
         if prompt:
-            user_msg += f"Additional instructions: {prompt}\n"
+            analysis_prompt += f"Additional instructions: {prompt}\n"
 
-        response = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            system=system,
-            messages=[{"role": "user", "content": user_msg}],
+        # Use Claude Code CLI (free on Max plan) instead of direct API
+        import subprocess
+        import tempfile
+
+        prompt_file = os.path.join(
+            tempfile.gettempdir(), f"swarm-browser-research-{int(time.time())}.txt"
+        )
+        with open(prompt_file, "w", encoding="utf-8") as pf:
+            pf.write(analysis_prompt)
+
+        shell_cmd = (
+            f'type "{prompt_file}" | "{CLAUDE_CLI_PATH}" '
+            f'--output-format text -p -'
         )
 
-        response_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                response_text += block.text
+        try:
+            startupinfo = None
+            if os.name == "nt":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
 
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
-        cost_cents = calculate_cost(
-            "claude-haiku-4-5-20251001", input_tokens, output_tokens
-        )
-
-        from swarm.budget.budget_manager import BudgetManager
-
-        BudgetManager().record_spend(cents=cost_cents, tokens=input_tokens + output_tokens)
+            result = subprocess.run(
+                shell_cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                shell=True,
+                encoding="utf-8",
+                errors="replace",
+                startupinfo=startupinfo,
+            )
+            response_text = result.stdout or ""
+        except subprocess.TimeoutExpired:
+            response_text = f"Analysis timed out for {url}"
+        except Exception as e:
+            response_text = f"Analysis failed: {e}"
+        finally:
+            try:
+                os.remove(prompt_file)
+            except Exception:
+                pass
 
         return {
             "response": response_text,
             "title": title,
             "meta_description": meta_desc,
             "pricing_found": bool(pricing_text),
-            "model": "claude-haiku-4-5-20251001",
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "cost_cents": int(round(cost_cents)),
+            "cost_cents": 0,  # Free on Max plan
         }
 
     # ── Action: Check Deploy ──────────────────────────────────────────────

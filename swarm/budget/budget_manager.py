@@ -59,11 +59,11 @@ class BudgetManager:
         return resp.data[0]
 
     def can_spend(self, tier: str) -> bool:
-        """Check whether the swarm is within budget for a given cost tier."""
-        if tier in ("heavy", "cc_light"):
-            return True  # Claude Code is unlimited on Max plan
-        row = self._get_today()
-        return row["api_spent_cents"] < row["daily_api_budget_cents"]
+        """Check whether the swarm is within budget for a given cost tier.
+
+        All tiers now use Claude Code CLI (free on Max plan), so this always returns True.
+        """
+        return True  # All workers use CLI now — no API spend
 
     def record_spend(self, cents: float = 0, tokens: int = 0, minutes: float = 0):
         """Record API spend for today using atomic increment. Minutes param ignored (CC is unlimited)."""
