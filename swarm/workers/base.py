@@ -24,6 +24,7 @@ import requests
 
 from swarm.budget.budget_manager import BudgetManager
 from swarm.config import ENABLE_QUALITY_GATE, NEXUS_URL, SUPABASE_KEY, SUPABASE_URL
+from swarm.discord_reporter import report_task_complete, report_task_failed, report_task_spawned
 from swarm.memory import SwarmMemory
 from swarm.retry_strategy import AdaptiveRetry
 from swarm.tasks.task_manager import TaskManager
@@ -629,6 +630,17 @@ class BaseWorker:
                 "completed",
                 {"task_id": task["id"], "title": task["title"]},
             )
+            # Report to The Terminal Discord
+            try:
+                summary = (output.get("response", "") or "")[:300]
+                report_task_complete(
+                    task_title=task.get("title", "Untitled"),
+                    project=project or "general",
+                    output_summary=summary or "Task completed successfully",
+                    has_code_changes="diff" in summary.lower() or "commit" in summary.lower(),
+                )
+            except Exception as e:
+                logger.debug("Discord report failed (non-critical): %s", e)
             logger.info("Task %s completed successfully", task["id"][:8])
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
@@ -655,6 +667,15 @@ class BaseWorker:
                 "failed",
                 {"task_id": task["id"], "error": error_msg},
             )
+            # Report failure to The Terminal Discord
+            try:
+                report_task_failed(
+                    task_title=task.get("title", "Untitled"),
+                    error=error_msg,
+                    project=project or "general",
+                )
+            except Exception as e:
+                logger.debug("Discord failure report failed (non-critical): %s", e)
             logger.error("Task %s failed: %s", task["id"][:8], error_msg)
         finally:
             self.sb.table(self.WORKERS_TABLE).update(
